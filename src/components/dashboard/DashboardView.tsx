@@ -31,9 +31,6 @@ function localDateISO(d = new Date()) {
 function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
   const v: GlobalFilterValues = {};
   const today = localDateISO();
-  const monthAgo = new Date();
-  monthAgo.setDate(monthAgo.getDate() - 29);
-  const monthAgoStr = localDateISO(monthAgo);
 
   for (const f of defs) {
     if (f.defaultValue !== undefined && f.defaultValue !== null) {
@@ -46,11 +43,30 @@ function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
       continue;
     }
     if (f.type === 'daterange') {
-      v[f.key] = monthAgoStr;
+      v[f.key] = today;
       if (f.endKey) v[f.endKey] = today;
+    } else if (f.type === 'date' || f.type === 'datetime') {
+      v[f.key] = today;
     }
   }
   return v;
+}
+
+function getStoredFilterValues(dashboardId: string, defs: GlobalFilterDef[]): GlobalFilterValues {
+  const defaults = defaultFilterValues(defs);
+  if (typeof window === 'undefined') return defaults;
+  try {
+    const raw = localStorage.getItem(`bi_filter_${dashboardId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        return { ...defaults, ...parsed };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return defaults;
 }
 
 export function DashboardView({ initial, editable }: Props) {
@@ -64,8 +80,17 @@ export function DashboardView({ initial, editable }: Props) {
 
   const filterDefs = dashboard.globalFilters || [];
   const [filterValues, setFilterValues] = useState<GlobalFilterValues>(() =>
-    defaultFilterValues(initial.globalFilters || [])
+    getStoredFilterValues(initial.id, initial.globalFilters || [])
   );
+
+  function handleFilterValuesChange(nextValues: GlobalFilterValues) {
+    setFilterValues(nextValues);
+    try {
+      localStorage.setItem(`bi_filter_${dashboard.id}`, JSON.stringify(nextValues));
+    } catch {
+      /* ignore */
+    }
+  }
 
   // when filter defs change (e.g. suggested), seed missing defaults
   const effectiveFilterValues = useMemo(() => {
@@ -210,7 +235,7 @@ export function DashboardView({ initial, editable }: Props) {
                 : []
           }
           values={effectiveFilterValues}
-          onChange={setFilterValues}
+          onChange={handleFilterValuesChange}
         />
       )}
 

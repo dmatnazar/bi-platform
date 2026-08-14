@@ -75,6 +75,44 @@ export function DashboardCanvas({
     );
   }
 
+  const isMobile = width < 768;
+
+  if (isMobile && !editable) {
+    return (
+      <div ref={containerRef} className="w-full space-y-4">
+        {dashboard.widgets.map((widget) => {
+          const minHeight =
+            widget.type === 'kpi'
+              ? '140px'
+              : widget.type === 'table'
+                ? '380px'
+                : '300px';
+
+          return (
+            <div
+              key={widget.id}
+              className="rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden flex flex-col shadow-sm w-full"
+              style={{ minHeight }}
+            >
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-800/80 shrink-0 bg-slate-950/40">
+                <h4 className="text-sm font-medium text-slate-200 flex-1 truncate">
+                  {widget.title}
+                </h4>
+              </div>
+              <div className="flex-1 min-h-0 p-3 sm:p-4">
+                <LiveWidget
+                  widget={widget}
+                  editable={false}
+                  globalFilters={globalFilters}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div ref={containerRef} className="w-full">
       <GridLayout

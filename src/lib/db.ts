@@ -173,7 +173,9 @@ export async function listDashboards(companyId?: string, ownerId?: string): Prom
 /** Bosses (admin+) see all company dashboards; viewers only assigned / owned / public */
 export async function listDashboardsVisibleTo(user: {
   id: string;
+  username?: string;
   companyId: string;
+  companySlug?: string;
   role: string;
   isSuperAdmin?: boolean;
 }): Promise<Dashboard[]> {
@@ -184,30 +186,76 @@ export async function listDashboardsVisibleTo(user: {
     user.role === 'super_admin' ||
     user.role === 'admin' ||
     user.role === 'editor';
+
+  const userIds = [
+    user.id,
+    user.id?.toLowerCase(),
+    user.username,
+    user.username?.toLowerCase(),
+  ].filter(Boolean) as string[];
+
   if (user.isSuperAdmin || user.role === 'super_admin') {
     // all
   } else {
-    list = list.filter((d) => d.companyId === user.companyId);
+    list = list.filter((d) => {
+      if (!d.companyId) return true;
+      if (d.companyId === user.companyId) return true;
+      if (user.companySlug && d.companyId === user.companySlug) return true;
+      return false;
+    });
   }
+
   if (!isBoss) {
-    list = list.filter(
-      (d) =>
-        d.isPublic ||
-        d.ownerId === user.id ||
-        (d.sharedWith || []).includes(user.id)
-    );
+    list = list.filter((d) => {
+      if (d.isPublic) return true;
+      if (d.ownerId && userIds.includes(d.ownerId.toLowerCase())) return true;
+      if (Array.isArray(d.sharedWith) && d.sharedWith.length > 0) {
+        const swLower = d.sharedWith.map((s) => String(s).toLowerCase().trim());
+        if (userIds.some((u) => swLower.includes(u.toLowerCase().trim()))) return true;
+      }
+      return false;
+    });
   }
-  return list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  return list.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
 export function userCanViewDashboard(
-  user: { id: string; companyId: string; role: string; isSuperAdmin?: boolean },
+  user: {
+    id: string;
+    username?: string;
+    companyId: string;
+    companySlug?: string;
+    role: string;
+    isSuperAdmin?: boolean;
+  },
   d: Dashboard
 ): boolean {
   if (user.isSuperAdmin || user.role === 'super_admin') return true;
-  if (d.companyId !== user.companyId) return false;
+
+  const companyMatches =
+    !d.companyId ||
+    d.companyId === user.companyId ||
+    (user.companySlug && d.companyId === user.companySlug);
+  if (!companyMatches) return false;
+
   if (user.role === 'admin' || user.role === 'editor') return true;
-  return d.isPublic || d.ownerId === user.id || (d.sharedWith || []).includes(user.id);
+
+  const userIds = [
+    user.id,
+    user.id?.toLowerCase(),
+    user.username,
+    user.username?.toLowerCase(),
+  ].filter(Boolean) as string[];
+
+  if (d.isPublic) return true;
+  if (d.ownerId && userIds.includes(d.ownerId.toLowerCase())) return true;
+  if (Array.isArray(d.sharedWith) && d.sharedWith.length > 0) {
+    const swLower = d.sharedWith.map((s) => String(s).toLowerCase().trim());
+    if (userIds.some((u) => swLower.includes(u.toLowerCase().trim()))) return true;
+  }
+
+  return false;
 }
 
 export async function getDashboard(id: string): Promise<Dashboard | undefined> {

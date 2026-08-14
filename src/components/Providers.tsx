@@ -2,6 +2,7 @@
 
 import { ToastHost } from '@/components/ui/Toast';
 import { ConfirmDialogHost } from '@/components/ui/ConfirmDialog';
+import { SessionWatcher } from '@/components/auth/SessionWatcher';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -9,6 +10,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {children}
       <ToastHost />
       <ConfirmDialogHost />
+      <SessionWatcher />
     </>
   );
 }
