@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getSettings, getStaffByUsername, getCompanyById } from './db';
 import type { SessionUser, StaffRole } from './types';
 
@@ -58,10 +58,31 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
 
 export async function setSessionCookie(token: string) {
   const jar = await cookies();
+
+  // Awtomatiki protocol kesgitlemesi (HTTP-de secure=false bolmaly, bolmasa brauzer cookie-ni ret edýär):
+  let isSecure = false;
+  if (process.env.FORCE_SECURE_COOKIE === '1') {
+    isSecure = true;
+  } else if (process.env.FORCE_INSECURE_COOKIE === '1') {
+    isSecure = false;
+  } else {
+    try {
+      const reqHeaders = await headers();
+      const proto = reqHeaders.get('x-forwarded-proto');
+      const origin = reqHeaders.get('origin');
+      const referer = reqHeaders.get('referer');
+
+      if (proto === 'https' || origin?.startsWith('https:') || referer?.startsWith('https:')) {
+        isSecure = true;
+      }
+    } catch {
+      isSecure = process.env.NODE_ENV === 'production';
+    }
+  }
+
   jar.set(COOKIE_NAME, token, {
     httpOnly: true,
-    // localhost HTTP-de secure=false bolmaly, bolmasa cookie ýazylmaýar
-    secure: process.env.NODE_ENV === 'production' && process.env.FORCE_INSECURE_COOKIE !== '1',
+    secure: isSecure,
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 7,
@@ -71,6 +92,13 @@ export async function setSessionCookie(token: string) {
 export async function clearSessionCookie() {
   const jar = await cookies();
   jar.delete(COOKIE_NAME);
+  jar.set(COOKIE_NAME, '', {
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 0,
+  });
 }
 
 export async function getSession(): Promise<SessionUser | null> {
