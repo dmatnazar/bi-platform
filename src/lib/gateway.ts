@@ -348,3 +348,27 @@ export async function deleteStaffOnGateway(payload: {
 }) {
   return gatewayFetch('POST', '/api/admin/staff-delete', payload);
 }
+
+// ── Device Management API helpers ──────────────────────────────────────
+
+export async function listDevicesOnGateway(): Promise<any> {
+  return gatewayFetch('GET', '/api/admin/devices');
+}
+
+export async function approveDeviceOnGateway(deviceId: string, tenantSlugs: string[], name?: string): Promise<any> {
+  return gatewayFetch('POST', `/api/admin/devices/${deviceId}/approve`, { tenantSlugs, name });
+}
+
+export async function updateDeviceStatusOnGateway(
+  deviceId: string,
+  status: 'pending' | 'approved' | 'blocked',
+  tenantSlug?: string,
+  name?: string
+): Promise<any> {
+  return gatewayFetch('PATCH', `/api/admin/devices/${deviceId}/status`, { status, tenantSlug, name });
+}
+
+export async function deleteDeviceOnGateway(deviceId: string): Promise<any> {
+  return gatewayFetch('DELETE', `/api/admin/devices/${deviceId}`);
+}
+

@@ -182,10 +182,9 @@ export async function listDashboardsVisibleTo(user: {
   const data = await getData();
   let list = data.dashboards || [];
   const isBoss =
-    user.isSuperAdmin ||
-    user.role === 'super_admin' ||
     user.role === 'admin' ||
-    user.role === 'editor';
+    user.role === 'editor' ||
+    user.role === 'manager';
 
   const userIds = [
     user.id,
@@ -194,8 +193,8 @@ export async function listDashboardsVisibleTo(user: {
     user.username?.toLowerCase(),
   ].filter(Boolean) as string[];
 
-  if (user.isSuperAdmin || user.role === 'super_admin') {
-    // all
+  if (user.role === 'admin') {
+    // admin sees all dashboards
   } else {
     list = list.filter((d) => {
       if (!d.companyId) return true;
@@ -231,7 +230,7 @@ export function userCanViewDashboard(
   },
   d: Dashboard
 ): boolean {
-  if (user.isSuperAdmin || user.role === 'super_admin') return true;
+  if (user.role === 'admin') return true;
 
   const companyMatches =
     !d.companyId ||

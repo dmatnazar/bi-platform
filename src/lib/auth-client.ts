@@ -1,32 +1,49 @@
 import type { SessionUser, StaffRole } from './types';
 
 /**
- * 3 effective roles in BI:
- * - viewer: diňe dashboard görýär
- * - admin: öz kompaniýasynda ähli dolandyryş (Electron editor/admin)
- * - super_admin: ähli firmalar
+ * BI Platform 4 rol ulgamy:
+ * - viewer : Diňe öz kärhanasynda dashboard görüp bilýär
+ * - editor : Öz kärhanasynda dashboard + maglumatlary redaktirläp bilýär (staff däl)
+ * - manager: Öz kärhanasynda dashboard + maglumatlar + işgärleri dolandyryp bilýär
+ * - admin  : Ähli dolandyryş (devices, apis, staff, settings, companies)
  */
 
+/** Dashboard döretmek / redaktirlemek */
 export function canEditDashboard(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'editor' || role === 'manager';
 }
 
+/** Kärhana sazlamalaryny, enjamlaryny, API-laryny dolandyrmak */
 export function canManageCompany(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'editor' || role === 'manager';
 }
 
+/** Işgär (staff) dolandyrmak */
 export function canManageStaff(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'manager';
 }
 
-export function isSuperAdmin(user: SessionUser): boolean {
-  return user.isSuperAdmin || user.role === 'super_admin';
+/** Admin rol — ähli sistema giriş */
+export function isAdmin(user: SessionUser): boolean {
+  return user.role === 'admin';
 }
 
+/** Manager rol — öz kärhanasyny dolandyrmak */
+export function isManager(user: SessionUser): boolean {
+  return user.role === 'manager';
+}
+
+/** Diňe dashboard görmek üçin çäklendirilen rol */
 export function isViewerOnly(role: StaffRole): boolean {
   return role === 'viewer';
 }
 
+/** Goldaw ýüzlenmelerini dolandyrmak */
 export function canHandleSupport(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'editor' || role === 'manager';
+}
+
+// Backward compat — isSuperAdmin diňe admin üçin
+export function isSuperAdmin(user: SessionUser): boolean {
+  return user.role === 'admin';
 }

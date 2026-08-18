@@ -59,7 +59,6 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
 export async function setSessionCookie(token: string) {
   const jar = await cookies();
 
-  // Awtomatiki protocol kesgitlemesi (HTTP-de secure=false bolmaly, bolmasa brauzer cookie-ni ret edýär):
   let isSecure = false;
   if (process.env.FORCE_SECURE_COOKIE === '1') {
     isSecure = true;
@@ -114,7 +113,7 @@ export async function loginWithCredentials(
 ): Promise<{ ok: true; user: SessionUser; token: string } | { ok: false; error: string }> {
   const staff = await getStaffByUsername(username);
   if (!staff || !staff.active) {
-    return { ok: false, error: 'Ulanyjy tapyimady ýa-da işlemeýär' };
+    return { ok: false, error: 'Ulanyjy tapylmady ýa-da işlemeýär' };
   }
 
   const valid = await verifyPassword(password, staff.passwordHash);
@@ -132,32 +131,41 @@ export async function loginWithCredentials(
     companyId: staff.companyId,
     companySlug: company?.slug,
     companyName: company?.name,
-    isSuperAdmin: Boolean(
-      staff.isSuperAdmin || staff.role === 'super_admin' || staff.role === 'admin'
-    ),
+    isSuperAdmin: staff.role === 'admin',
   };
 
   const token = await createSessionToken(user);
   return { ok: true, user, token };
 }
 
+// ── Role helper functions ──────────────────────────────────────────────────
+// 4 roles: viewer | editor | manager | admin
+// admin   = full system access (all companies + settings + staff)
+// manager = own company data + staff management
+// editor  = own company data management (no staff)
+// viewer  = dashboards only
+
 export function canEditDashboard(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'editor' || role === 'manager';
 }
 
 export function canManageStaff(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'manager';
 }
 
 export function canManageCompany(role: StaffRole): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'admin' || role === 'editor' || role === 'manager';
 }
 
+/** Platform-level super admin */
 export function isSuperAdmin(user: SessionUser): boolean {
-  // Electron "admin" = platform super; mapped to super_admin on login
-  return (
-    user.isSuperAdmin ||
-    user.role === 'super_admin' ||
-    user.role === 'admin'
-  );
+  return user.role === 'admin' || Boolean(user.isSuperAdmin);
+}
+
+export function isAdmin(user: SessionUser): boolean {
+  return user.role === 'admin';
+}
+
+export function isManager(role: StaffRole): boolean {
+  return role === 'manager';
 }

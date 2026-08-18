@@ -12,15 +12,17 @@ const schema = z.object({
 });
 
 /**
- * Electron roles: admin | editor | viewer
- * - admin  → platform super admin (ähli kompaniýalar)
- * - editor → company admin
- * - viewer → viewer
+ * Electron → BI Platform rol mapping (4 rol):
+ * - admin / super_admin → admin  (hemme zada giriş)
+ * - manager             → manager (öз kärhana staff + data)
+ * - editor              → editor (maglumatlary redaktirle, staff däl)
+ * - viewer              → viewer (diňe dashboard)
  */
 function mapRole(role: string): StaffRole {
   const r = String(role || '').toLowerCase();
-  if (r === 'super_admin' || r === 'admin') return 'super_admin';
-  if (r === 'editor') return 'admin';
+  if (r === 'super_admin' || r === 'admin') return 'admin';
+  if (r === 'manager') return 'manager';
+  if (r === 'editor') return 'editor';
   return 'viewer';
 }
 
@@ -51,11 +53,7 @@ export async function POST(req: NextRequest) {
           companyId: local.companyId,
           companySlug: company?.slug,
           companyName: company?.name,
-          isSuperAdmin: Boolean(
-            local.isSuperAdmin ||
-              local.role === 'super_admin' ||
-              local.role === 'admin'
-          ),
+          isSuperAdmin: local.role === 'admin',
         };
         const token = await createSessionToken(user);
         await setSessionCookie(token);
@@ -132,7 +130,7 @@ export async function POST(req: NextRequest) {
         companyId: remote.data.tenantId || remote.data.tenantSlug,
         companySlug: remote.data.tenantSlug,
         companyName: remote.data.tenantName,
-        isSuperAdmin: role === 'super_admin',
+        isSuperAdmin: role === 'admin',
       };
 
       const token = await createSessionToken(user);

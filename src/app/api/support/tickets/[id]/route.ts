@@ -12,7 +12,7 @@ import { z } from 'zod';
 type Ctx = { params: Promise<{ id: string }> };
 
 function isAdminRole(role: string) {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'editor';
 }
 
 function canAccess(

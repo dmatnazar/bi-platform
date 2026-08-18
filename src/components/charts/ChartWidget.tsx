@@ -506,7 +506,7 @@ function TableWidgetBody({
       </div>
 
       {/* Mobile compact cards */}
-      <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5">
+      <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5 touch-manipulation">
         {sorted.length === 0 ? (
           <p className="text-center text-slate-500 text-xs py-8">
             {search || activeColFilterCount ? 'Filter boýunça netije ýok' : 'Maglumat ýok'}
@@ -516,23 +516,23 @@ function TableWidgetBody({
             <div
               key={i}
               className={cn(
-                'rounded-lg border border-slate-800/80 bg-slate-900/50 px-2.5 py-2 space-y-0.5',
+                'rounded-lg border border-slate-800/80 bg-slate-900/50 px-2.5 py-1.5 space-y-0.5',
                 dd?.enabled && 'active:bg-indigo-500/10'
               )}
               onClick={() => {
                 if (dd?.enabled) openDrillDown(row);
               }}
             >
-              {visibleCols.slice(0, 6).map((c, j) => (
+              {visibleCols.slice(0, 4).map((c, j) => (
                 <div key={c} className="flex justify-between gap-2 text-[11px] leading-snug">
-                  <span className="text-slate-500 shrink-0 max-w-[40%] truncate">{c}</span>
+                  <span className="text-slate-500 shrink-0 max-w-[35%] truncate">{c}</span>
                   <span className={cn('text-right truncate text-slate-200', j === 0 && 'font-medium text-white')}>
                     {String(row[c] ?? '—')}
                   </span>
                 </div>
               ))}
-              {visibleCols.length > 6 && (
-                <p className="text-[10px] text-slate-600">+{visibleCols.length - 6} sütün</p>
+              {visibleCols.length > 4 && (
+                <p className="text-[10px] text-slate-600">+{visibleCols.length - 4} sütün</p>
               )}
             </div>
           ))

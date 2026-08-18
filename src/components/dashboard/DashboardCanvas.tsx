@@ -77,16 +77,81 @@ export function DashboardCanvas({
 
   const isMobile = width < 768;
 
+  if (isMobile && editable) {
+    return (
+      <div ref={containerRef} className="w-full space-y-4">
+        {dashboard.widgets.map((widget) => {
+          const minHeight =
+            widget.type === 'kpi'
+              ? '120px'
+              : widget.type === 'table'
+                ? '300px'
+                : '220px';
+
+          return (
+            <div
+              key={widget.id}
+              className={cn(
+                'rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden flex flex-col shadow-sm w-full',
+                editable && 'hover:border-slate-700'
+              )}
+              style={{ minHeight }}
+            >
+              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-800/80 shrink-0 bg-slate-950/40">
+                <button
+                  type="button"
+                  className="drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-1 rounded-lg touch-manipulation"
+                  style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <GripVertical className="h-5 w-5" />
+                </button>
+                <h4 className="text-sm font-medium text-slate-200 flex-1 truncate">{widget.title}</h4>
+                <div className="flex items-center gap-0.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => onConfigureWidget?.(widget.id)}
+                    className="p-2 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 touch-manipulation"
+                    style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Sazla"
+                  >
+                    <Settings2 className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeWidget(widget.id)}
+                    className="p-2 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 touch-manipulation"
+                    style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                    title="Poz"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex-1 min-h-0 p-3">
+                <LiveWidget
+                  widget={widget}
+                  editable={editable}
+                  onConfigure={() => onConfigureWidget?.(widget.id)}
+                  globalFilters={globalFilters}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (isMobile && !editable) {
     return (
       <div ref={containerRef} className="w-full space-y-4">
         {dashboard.widgets.map((widget) => {
           const minHeight =
             widget.type === 'kpi'
-              ? '140px'
+              ? '120px'
               : widget.type === 'table'
-                ? '380px'
-                : '300px';
+                ? '300px'
+                : '220px';
 
           return (
             <div
@@ -140,7 +205,8 @@ export function DashboardCanvas({
               {editable && (
                 <button
                   type="button"
-                  className="drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5"
+                  className="drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 touch-manipulation"
+                  style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
                   <GripVertical className="h-4 w-4" />
                 </button>
@@ -151,7 +217,8 @@ export function DashboardCanvas({
                   <button
                     type="button"
                     onClick={() => onConfigureWidget?.(widget.id)}
-                    className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10"
+                    className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 touch-manipulation"
+                    style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Sazla"
                   >
                     <Settings2 className="h-3.5 w-3.5" />
@@ -159,7 +226,8 @@ export function DashboardCanvas({
                   <button
                     type="button"
                     onClick={() => removeWidget(widget.id)}
-                    className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
+                    className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 touch-manipulation"
+                    style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                     title="Poz"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

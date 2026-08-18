@@ -3,7 +3,7 @@ import { getSession, isSuperAdmin } from '@/lib/auth';
 import { countUnreadSupport } from '@/lib/db';
 
 function isAdminRole(role: string) {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'editor';
 }
 
 export async function GET() {

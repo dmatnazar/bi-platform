@@ -1,6 +1,31 @@
-export type StaffRole = 'super_admin' | 'admin' | 'editor' | 'viewer';
+export type StaffRole = 'viewer' | 'editor' | 'manager' | 'admin';
 
 export type RegistrationStatus = 'pending' | 'approved' | 'rejected';
+
+export type DeviceStatus = 'pending' | 'approved' | 'blocked';
+
+export interface Device {
+  id: string;
+  token: string;
+  name: string;
+  hostname: string;
+  osPlatform: string;
+  osRelease: string;
+  ramGb: number;
+  cpuModel: string;
+  macAddress?: string;
+  ipAddress?: string;
+  tenantId?: string;
+  tenantSlug?: string;
+  companyName?: string;
+  companySlugs?: string[];
+  companyNames?: string[];
+  status: DeviceStatus;
+  appVersion: string;
+  lastSeenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Company {
   id: string;
@@ -275,7 +300,7 @@ export interface SupportMessage {
   authorId: string;
   authorName: string;
   authorRole: StaffRole;
-  /** true if author is admin/super_admin/editor acting as support */
+  /** true if author is admin/manager/editor acting as support */
   isStaffReply: boolean;
   body: string;
   createdAt: string;
@@ -334,6 +359,8 @@ export interface DbSchema {
     gatewayAdminSecret?: string;
     /** catalog / sync poll interval seconds (0 = manual only) */
     catalogSyncIntervalSec?: number;
+    /** hashed password for quick gateway settings panel (default: admin1001) */
+    uiAdminPasswordHash?: string;
   };
 }
 

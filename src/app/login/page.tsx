@@ -195,7 +195,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-xs text-slate-600 mt-6">
-          Demo: <span className="text-slate-400">admin / admin123</span>
+          Demo: <span className="text-slate-400">login: Demo Parol: 123456</span>
         </p>
       </div>
     </div>

@@ -13,6 +13,7 @@ import {
   Network,
   Settings,
   UserCircle,
+  Server,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -37,6 +38,9 @@ export function Sidebar({ user }: Props) {
             : []),
           ...(isSuperAdmin(user)
             ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
+            : []),
+          ...(canManageCompany(user.role)
+            ? [{ href: '/admin/devices', label: 'Enjamlar', icon: Server }]
             : []),
           ...(canManageCompany(user.role)
             ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }]
