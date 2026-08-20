@@ -98,7 +98,7 @@ export default function CompaniesPage() {
       .then((r) => r.json())
       .then((d) => {
         const u = d.user;
-        setIsSuper(!!(u?.isSuperAdmin || u?.role === 'admin'));
+        setIsSuper(!!(u?.isSuperAdmin || u?.role === 'super_admin'));
       })
       .catch(() => {});
   }, []);

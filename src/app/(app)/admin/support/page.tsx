@@ -5,7 +5,7 @@ import { SupportChat } from '@/components/support/SupportChat';
 export default async function AdminSupportPage() {
   const user = await getSession();
   if (!user) redirect('/login');
-  if (!canEditDashboard(user.role)) {
+  if (!canEditDashboard(user.role) && user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'editor') {
     redirect('/support');
   }
 

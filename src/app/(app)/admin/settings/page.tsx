@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { Server, RefreshCw, ShieldCheck, Eye, EyeOff, Info, Lock, KeyRound } from 'lucide-react';
+import { Server, RefreshCw, ShieldCheck, Eye, EyeOff, Info } from 'lucide-react';
 
 const SYNC_OPTIONS = [
   { value: '0', label: 'Diňe el bilen' },
@@ -22,15 +22,9 @@ export default function SettingsPage() {
   const [syncSec, setSyncSec] = useState('0');
   const [online, setOnline] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<'gateway' | 'sync' | 'password' | null>(null);
+  const [saving, setSaving] = useState<'gateway' | 'sync' | null>(null);
   const [msg, setMsg] = useState('');
-  const [msgType, setMsgType] = useState<'ok' | 'err'>('ok');
   const [version, setVersion] = useState('1.0.0');
-
-  // UI password change
-  const [newUiPass, setNewUiPass] = useState('');
-  const [confirmUiPass, setConfirmUiPass] = useState('');
-  const [showNewPass, setShowNewPass] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -39,6 +33,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (res.ok) {
         setGatewayUrl(data.settings.gatewayUrl || '');
+        // Real secret returned for authorized admins — eye toggle can show it
         setSecret(data.settings.gatewayAdminSecret || '');
         setSyncSec(String(data.settings.catalogSyncIntervalSec ?? 0));
         setOnline(!!data.gatewayOnline);
@@ -53,14 +48,9 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  function showMsg(text: string, type: 'ok' | 'err' = 'ok') {
-    setMsg(text);
-    setMsgType(type);
-    setTimeout(() => setMsg(''), 4000);
-  }
-
   async function saveGateway() {
     setSaving('gateway');
+    setMsg('');
     try {
       const body: Record<string, string> = { gatewayUrl };
       if (secret && secret !== '••••••••') body.gatewayAdminSecret = secret;
@@ -71,10 +61,11 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      showMsg('✓ Gateway sazlamalary saklandy');
+      setMsg('Gateway sazlamalary saklandy');
+      // Keep typed secret visible after save; refresh other fields
       await load();
     } catch (e) {
-      showMsg(String(e), 'err');
+      setMsg(String(e));
     } finally {
       setSaving(null);
     }
@@ -82,6 +73,7 @@ export default function SettingsPage() {
 
   async function saveSync() {
     setSaving('sync');
+    setMsg('');
     try {
       const res = await fetch('/api/settings', {
         method: 'PUT',
@@ -90,32 +82,9 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      showMsg('✓ Sync sazlamasy saklandy');
+      setMsg('Sync özüni alyş saklandy');
     } catch (e) {
-      showMsg(String(e), 'err');
-    } finally {
-      setSaving(null);
-    }
-  }
-
-  async function saveUiPassword() {
-    if (!newUiPass) return showMsg('Täze parol gerek', 'err');
-    if (newUiPass.length < 4) return showMsg('Parol azyndan 4 harp bolmaly', 'err');
-    if (newUiPass !== confirmUiPass) return showMsg('Parollar gabat gelmeýär', 'err');
-    setSaving('password');
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ uiAdminPassword: newUiPass }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      showMsg('✓ Giriş paroly üýtgedildi');
-      setNewUiPass('');
-      setConfirmUiPass('');
-    } catch (e) {
-      showMsg(String(e), 'err');
+      setMsg(String(e));
     } finally {
       setSaving(null);
     }
@@ -135,21 +104,16 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-white">Sazlamalar</h1>
         <p className="text-sm text-slate-400 mt-1">
-          VPS Gateway baglanyşygy we sync — BI Platform v{version}
+          VPS Gateway baglanyşygy we sync — Electron Settings bilen meňzeş · BI Platform v{version}
         </p>
       </div>
 
       {msg && (
-        <div className={`text-sm rounded-xl px-3 py-2 border ${
-          msgType === 'ok'
-            ? 'text-emerald-300 bg-emerald-950/40 border-emerald-800/60'
-            : 'text-rose-300 bg-rose-950/40 border-rose-800/60'
-        }`}>
+        <div className="text-sm text-slate-200 bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-2">
           {msg}
         </div>
       )}
 
-      {/* VPS Gateway Section */}
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -208,7 +172,6 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Sync Section */}
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
         <h2 className="text-sm font-semibold text-white flex items-center gap-2">
           <RefreshCw className="h-4 w-4 text-indigo-400" />
@@ -226,58 +189,6 @@ export default function SettingsPage() {
         </p>
         <Button size="sm" loading={saving === 'sync'} onClick={saveSync}>
           Sync sakla
-        </Button>
-      </section>
-
-      {/* UI Gateway Panel Password */}
-      <section className="rounded-2xl border border-amber-900/40 bg-amber-950/10 p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Lock className="h-4 w-4 text-amber-400" />
-          Gateway Giriş Paroly
-        </h2>
-        <p className="text-[12px] text-slate-400 leading-relaxed">
-          Ýokardaky ⚙ düwmä basylanda soralýan parol. Default:{' '}
-          <span className="text-amber-300 font-mono">admin1001</span>.
-          Üýtgetmek üçin täze paroly giriziň.
-        </p>
-
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-400">Täze parol</label>
-            <div className="relative">
-              <input
-                type={showNewPass ? 'text' : 'password'}
-                value={newUiPass}
-                onChange={(e) => setNewUiPass(e.target.value)}
-                placeholder="Azyndan 4 harp..."
-                className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-amber-500/40"
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPass((v) => !v)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"
-              >
-                {showNewPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-          <Input
-            label="Paroly tassyklaň"
-            type="password"
-            value={confirmUiPass}
-            onChange={(e) => setConfirmUiPass(e.target.value)}
-            placeholder="Gaýtadan giriziň..."
-          />
-        </div>
-
-        <Button
-          size="sm"
-          loading={saving === 'password'}
-          onClick={saveUiPassword}
-          className="bg-amber-600 hover:bg-amber-500 text-white"
-        >
-          <KeyRound className="h-3.5 w-3.5" />
-          Paroly üýtget
         </Button>
       </section>
     </div>

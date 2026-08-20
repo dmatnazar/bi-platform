@@ -8,7 +8,7 @@ import type { SupportCategory, SupportTicket, SupportMessage } from '@/lib/types
 import { z } from 'zod';
 
 function isAdminRole(role: string) {
-  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'editor';
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
 }
 
 export async function GET(req: NextRequest) {

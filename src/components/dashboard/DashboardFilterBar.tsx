@@ -5,7 +5,7 @@ import type { GlobalFilterDef, GlobalFilterValues } from '@/lib/types';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -270,8 +270,6 @@ export function DashboardFilterBar({
     return n;
   }, [filters, values]);
 
-  const [isExpanded, setIsExpanded] = useState(false);
-
   function setKey(key: string, val: string | number | boolean | null | undefined) {
     onChange({ ...values, [key]: val });
   }
@@ -332,50 +330,22 @@ export function DashboardFilterBar({
         </div>
 
         {filters.some((f) => f.type === 'daterange') && (
-          <div className="flex flex-wrap md:flex-nowrap gap-1.5 ml-auto overflow-x-auto md:overflow-x-visible pb-1 md:pb-0 -mx-1 px-1 md:mx-0 md:px-0">
+          <div className="flex flex-wrap gap-1.5 ml-auto">
             {PRESETS.map((p) => (
               <button
                 key={p.label}
                 type="button"
                 onClick={() => applyPreset(p)}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors whitespace-nowrap touch-manipulation"
-                style={{ minHeight: '36px' }}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors"
               >
                 {p.label}
               </button>
             ))}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={() => setIsExpanded((v) => !v)}
-          className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 touch-manipulation ml-auto"
-          style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-          aria-label={isExpanded ? 'Filterleri ýap' : 'Filterleri aç'}
-        >
-          {isExpanded ? (
-            <ChevronUp className="h-5 w-5" />
-          ) : (
-            <ChevronDown className="h-5 w-5" />
-          )}
-          {activeCount > 0 && !isExpanded && (
-            <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-indigo-500 text-[10px] font-bold text-white flex items-center justify-center">
-              {activeCount}
-            </span>
-          )}
-        </button>
       </div>
 
-      <div
-        className={cn(
-          'grid transition-all duration-300 ease-in-out',
-          isExpanded ? 'grid-rows-[1fr] opacity-100' : 'md:grid-rows-[1fr] grid-rows-[0fr] opacity-100 md:opacity-100'
-        )}
-      >
-        <div className={cn('overflow-hidden', isExpanded ? '' : 'md:overflow-visible')}>
-          <div className={cn('space-y-3', !isExpanded && 'md:block')}>
-            <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         {filters.map((f) => {
           if (f.type === 'daterange') {
             return (
@@ -550,9 +520,6 @@ export function DashboardFilterBar({
             </Button>
           )}
         </div>
-      </div>
-      </div>
-      </div>
       </div>
     </div>
   );

@@ -510,10 +510,7 @@ export function DashboardListClient({ initial, canEdit }: Props) {
                 <button
                   type="button"
                   className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
-                  onClick={() => {
-                    const allIds = staffOpts.flatMap((s) => [s.id, s.username]);
-                    setSelectedShare(Array.from(new Set(allIds)));
-                  }}
+                  onClick={() => setSelectedShare(staffOpts.map((s) => s.id))}
                 >
                   Hemmesini saýla
                 </button>
@@ -530,41 +527,25 @@ export function DashboardListClient({ initial, canEdit }: Props) {
               {staffOpts.length === 0 ? (
                 <p className="text-sm text-slate-500 p-2">Işgär sanawy boş ýa-da ýüklenmedi</p>
               ) : (
-                staffOpts.map((s) => {
-                  const isChecked =
-                    selectedShare.includes(s.id) ||
-                    selectedShare.includes(s.username) ||
-                    selectedShare.some((x) => x.toLowerCase() === s.username.toLowerCase());
-                  return (
-                    <label
-                      key={s.id}
-                      className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-800/60 cursor-pointer text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          setSelectedShare((prev) => {
-                            if (e.target.checked) {
-                              return Array.from(new Set([...prev, s.id, s.username]));
-                            } else {
-                              return prev.filter(
-                                (x) =>
-                                  x !== s.id &&
-                                  x.toLowerCase() !== s.username.toLowerCase()
-                              );
-                            }
-                          });
-                        }}
-                        className="rounded border-slate-600"
-                      />
-                      <span className="text-slate-200 flex-1 truncate">{s.fullName}</span>
-                      <span className="text-[10px] text-slate-500">
-                        @{s.username} · {s.role}
-                      </span>
-                    </label>
-                  );
-                })
+                staffOpts.map((s) => (
+                  <label
+                    key={s.id}
+                    className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-800/60 cursor-pointer text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedShare.includes(s.id)}
+                      onChange={(e) => {
+                        setSelectedShare((prev) =>
+                          e.target.checked ? [...prev, s.id] : prev.filter((x) => x !== s.id)
+                        );
+                      }}
+                      className="rounded border-slate-600"
+                    />
+                    <span className="text-slate-200 flex-1 truncate">{s.fullName}</span>
+                    <span className="text-[10px] text-slate-500">@{s.username} · {s.role}</span>
+                  </label>
+                ))
               )}
             </div>
             <div className="flex gap-2 justify-end">

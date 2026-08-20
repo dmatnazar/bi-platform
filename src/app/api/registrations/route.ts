@@ -35,7 +35,7 @@ const actionSchema = z.object({
   id: z.string().min(1),
   action: z.enum(['approve', 'reject']),
   note: z.string().optional(),
-  role: z.enum(['admin', 'editor', 'manager', 'viewer']).optional(),
+  role: z.enum(['admin', 'editor', 'viewer']).optional(),
 });
 
 export async function POST(req: NextRequest) {

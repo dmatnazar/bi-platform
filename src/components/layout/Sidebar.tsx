@@ -39,7 +39,7 @@ export function Sidebar({ user }: Props) {
           ...(isSuperAdmin(user)
             ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
             : []),
-          ...(canManageCompany(user.role)
+          ...(isSuperAdmin(user) || canManageCompany(user.role)
             ? [{ href: '/admin/devices', label: 'Enjamlar', icon: Server }]
             : []),
           ...(canManageCompany(user.role)

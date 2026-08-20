@@ -349,26 +349,32 @@ export async function deleteStaffOnGateway(payload: {
   return gatewayFetch('POST', '/api/admin/staff-delete', payload);
 }
 
-// ── Device Management API helpers ──────────────────────────────────────
 
-export async function listDevicesOnGateway(): Promise<any> {
+// ── Devices (Electron agents) ────────────────────────────────────────────
+
+export async function listDevicesOnGateway() {
   return gatewayFetch('GET', '/api/admin/devices');
 }
 
-export async function approveDeviceOnGateway(deviceId: string, tenantSlugs: string[], name?: string): Promise<any> {
-  return gatewayFetch('POST', `/api/admin/devices/${deviceId}/approve`, { tenantSlugs, name });
+export async function approveDeviceOnGateway(
+  id: string,
+  payload: { tenantSlugs?: string[]; tenantSlug?: string; name?: string }
+) {
+  return gatewayFetch('POST', `/api/admin/devices/${encodeURIComponent(id)}/approve`, payload);
 }
 
 export async function updateDeviceStatusOnGateway(
-  deviceId: string,
-  status: 'pending' | 'approved' | 'blocked',
-  tenantSlug?: string,
-  name?: string
-): Promise<any> {
-  return gatewayFetch('PATCH', `/api/admin/devices/${deviceId}/status`, { status, tenantSlug, name });
+  id: string,
+  payload: {
+    status: 'pending' | 'approved' | 'blocked';
+    tenantSlug?: string;
+    tenantSlugs?: string[];
+    name?: string;
+  }
+) {
+  return gatewayFetch('PATCH', `/api/admin/devices/${encodeURIComponent(id)}/status`, payload);
 }
 
-export async function deleteDeviceOnGateway(deviceId: string): Promise<any> {
-  return gatewayFetch('DELETE', `/api/admin/devices/${deviceId}`);
+export async function deleteDeviceOnGateway(id: string) {
+  return gatewayFetch('DELETE', `/api/admin/devices/${encodeURIComponent(id)}`);
 }
-

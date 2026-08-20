@@ -16,8 +16,7 @@ import { DashboardFilterBar, GlobalFiltersEditor } from './DashboardFilterBar';
 import { Button } from '@/components/ui/Button';
 import { generateId } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
-import { ArrowLeft, Save, Pencil, Eye, Plus, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ArrowLeft, Save, Pencil, Eye } from 'lucide-react';
 import Link from 'next/link';
 
 interface Props {
@@ -32,9 +31,13 @@ function localDateISO(d = new Date()) {
 function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
   const v: GlobalFilterValues = {};
   const today = localDateISO();
+  const monthAgo = new Date();
+  monthAgo.setDate(monthAgo.getDate() - 29);
+  const monthAgoStr = localDateISO(monthAgo);
 
   for (const f of defs) {
     if (f.defaultValue !== undefined && f.defaultValue !== null) {
+      // Strip accidental time portion from defaults
       const raw = f.defaultValue;
       v[f.key] =
         typeof raw === 'string' && /\d{4}-\d{2}-\d{2}/.test(raw)
@@ -43,30 +46,11 @@ function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
       continue;
     }
     if (f.type === 'daterange') {
-      v[f.key] = today;
+      v[f.key] = monthAgoStr;
       if (f.endKey) v[f.endKey] = today;
-    } else if (f.type === 'date' || f.type === 'datetime') {
-      v[f.key] = today;
     }
   }
   return v;
-}
-
-function getStoredFilterValues(dashboardId: string, defs: GlobalFilterDef[]): GlobalFilterValues {
-  const defaults = defaultFilterValues(defs);
-  if (typeof window === 'undefined') return defaults;
-  try {
-    const raw = localStorage.getItem(`bi_filter_${dashboardId}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') {
-        return { ...defaults, ...parsed };
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return defaults;
 }
 
 export function DashboardView({ initial, editable }: Props) {
@@ -77,22 +61,13 @@ export function DashboardView({ initial, editable }: Props) {
   const [name, setName] = useState(initial.name);
   const [dirty, setDirty] = useState(false);
   const [configId, setConfigId] = useState<string | null>(null);
-  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
 
   const filterDefs = dashboard.globalFilters || [];
   const [filterValues, setFilterValues] = useState<GlobalFilterValues>(() =>
-    getStoredFilterValues(initial.id, initial.globalFilters || [])
+    defaultFilterValues(initial.globalFilters || [])
   );
 
-  function handleFilterValuesChange(nextValues: GlobalFilterValues) {
-    setFilterValues(nextValues);
-    try {
-      localStorage.setItem(`bi_filter_${dashboard.id}`, JSON.stringify(nextValues));
-    } catch {
-      /* ignore */
-    }
-  }
-
+  // when filter defs change (e.g. suggested), seed missing defaults
   const effectiveFilterValues = useMemo(() => {
     const base = { ...filterValues };
     for (const f of filterDefs) {
@@ -160,7 +135,6 @@ export function DashboardView({ initial, editable }: Props) {
         setDashboard(data.dashboard);
         setDirty(false);
         setEditMode(false);
-        setMobilePanelOpen(false);
         router.refresh();
       }
     } finally {
@@ -225,6 +199,7 @@ export function DashboardView({ initial, editable }: Props) {
         )}
       </div>
 
+      {/* Global filter bar — always visible when filters exist or in edit mode */}
       {(filterDefs.length > 0 || editMode) && (
         <DashboardFilterBar
           filters={
@@ -235,7 +210,7 @@ export function DashboardView({ initial, editable }: Props) {
                 : []
           }
           values={effectiveFilterValues}
-          onChange={handleFilterValuesChange}
+          onChange={setFilterValues}
         />
       )}
 
@@ -250,142 +225,31 @@ export function DashboardView({ initial, editable }: Props) {
           />
         </div>
         {editMode && (
-          <>
-            <aside className="hidden lg:block lg:w-80 shrink-0 space-y-4 h-fit sticky top-4">
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-                <WidgetPalette onAdd={addWidget} />
-              </div>
+          <aside className="lg:w-80 shrink-0 space-y-4 h-fit sticky top-4">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+              <WidgetPalette onAdd={addWidget} />
+            </div>
 
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
-                <GlobalFiltersEditor
-                  filters={filterDefs}
-                  onChange={updateGlobalFilters}
-                />
-              </div>
-
-              {configId && dashboard.widgets.find((w) => w.id === configId) && (
-                <WidgetConfigPanel
-                  widget={dashboard.widgets.find((w) => w.id === configId)!}
-                  onChange={(w) => {
-                    updateWidgets(dashboard.widgets.map((x) => (x.id === w.id ? w : x)));
-                  }}
-                  onClose={() => setConfigId(null)}
-                  globalFilters={filterDefs}
-                  onSuggestGlobalFilters={updateGlobalFilters}
-                />
-              )}
-            </aside>
-
-            <MobileEditPanel
-              open={mobilePanelOpen}
-              onClose={() => setMobilePanelOpen(false)}
-              onAddWidget={addWidget}
-              filters={filterDefs}
-              onUpdateGlobalFilters={updateGlobalFilters}
-              configId={configId}
-              widget={dashboard.widgets.find((w) => w.id === configId) || null}
-              onUpdateWidgets={updateWidgets}
-              onCloseConfig={() => setConfigId(null)}
-              globalFilters={filterDefs}
-              onSuggestGlobalFilters={updateGlobalFilters}
-            />
-          </>
-        )}
-      </div>
-
-      {editMode && (
-        <button
-          type="button"
-          onClick={() => setMobilePanelOpen((v) => !v)}
-          className={cn(
-            'lg:hidden fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center touch-manipulation',
-            'bg-indigo-600 hover:bg-indigo-500 text-white transition-all duration-200',
-            mobilePanelOpen && 'rotate-45 bg-slate-700 hover:bg-slate-600'
-          )}
-          aria-label={mobilePanelOpen ? 'Paneli ýap' : 'Paneli aç'}
-        >
-          <Plus className="h-6 w-6" />
-        </button>
-      )}
-
-      {mobilePanelOpen && (
-        <div
-          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity"
-          onClick={() => setMobilePanelOpen(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function MobileEditPanel({
-  open,
-  onClose,
-  onAddWidget,
-  filters,
-  onUpdateGlobalFilters,
-  configId,
-  widget,
-  onUpdateWidgets,
-  onCloseConfig,
-  globalFilters,
-  onSuggestGlobalFilters,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onAddWidget: (type: WidgetType) => void;
-  filters: GlobalFilterDef[];
-  onUpdateGlobalFilters: (filters: GlobalFilterDef[]) => void;
-  configId: string | null;
-  widget: DashboardWidget | null;
-  onUpdateWidgets: (widgets: DashboardWidget[]) => void;
-  onCloseConfig: () => void;
-  globalFilters: GlobalFilterDef[];
-  onSuggestGlobalFilters: (filters: GlobalFilterDef[]) => void;
-}) {
-  return (
-    <div
-      className={cn(
-        'lg:hidden fixed inset-x-0 bottom-0 z-50 transform transition-transform duration-300 ease-out',
-        open ? 'translate-y-0' : 'translate-y-full'
-      )}
-    >
-      <div className="mx-4 mb-4 max-h-[75dvh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl flex flex-col">
-        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-800">
-          <span className="text-sm font-semibold text-white">Redaktor</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 touch-manipulation"
-            style={{ minWidth: '44px', minHeight: '44px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="p-4 space-y-4">
-          <div>
-            <p className="text-xs font-medium text-slate-400 mb-2">Widget goş</p>
-            <WidgetPalette onAdd={onAddWidget} />
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-400 mb-2">Global filterler</p>
-            <GlobalFiltersEditor filters={filters} onChange={onUpdateGlobalFilters} />
-          </div>
-          {configId && widget && (
-            <div>
-              <p className="text-xs font-medium text-slate-400 mb-2">Widget sazlamalary</p>
-              <WidgetConfigPanel
-                widget={widget}
-                onChange={(w) => {
-                  onUpdateWidgets([w]);
-                }}
-                onClose={onCloseConfig}
-                globalFilters={globalFilters}
-                onSuggestGlobalFilters={onSuggestGlobalFilters}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+              <GlobalFiltersEditor
+                filters={filterDefs}
+                onChange={updateGlobalFilters}
               />
             </div>
-          )}
-        </div>
+
+            {configId && dashboard.widgets.find((w) => w.id === configId) && (
+              <WidgetConfigPanel
+                widget={dashboard.widgets.find((w) => w.id === configId)!}
+                onChange={(w) => {
+                  updateWidgets(dashboard.widgets.map((x) => (x.id === w.id ? w : x)));
+                }}
+                onClose={() => setConfigId(null)}
+                globalFilters={filterDefs}
+                onSuggestGlobalFilters={updateGlobalFilters}
+              />
+            )}
+          </aside>
+        )}
       </div>
     </div>
   );

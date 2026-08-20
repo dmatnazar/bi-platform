@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { getSession, isSuperAdmin } from '@/lib/auth';
 import { getSettings } from '@/lib/db';
 import { z } from 'zod';
 
@@ -44,6 +44,23 @@ function normalizeOutgoingParams(
   return out;
 }
 
+async function checkAgentOnline(
+  base: string,
+  tenantSlug: string
+): Promise<{ online: boolean; detail?: string }> {
+  try {
+    const res = await fetch(`${base}/api/v1/${encodeURIComponent(tenantSlug)}/status/agent`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return { online: false, detail: `agent-status HTTP ${res.status}` };
+    const data = await res.json().catch(() => ({}));
+    return { online: Boolean(data?.agentOnline || data?.online), detail: data?.message };
+  } catch (e: any) {
+    return { online: false, detail: e?.message || 'agent-status unreachable' };
+  }
+}
+
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
@@ -55,6 +72,21 @@ export async function POST(req: NextRequest) {
   }
 
   const { tenantSlug, path, method, dbKey, params: rawParams } = parsed.data;
+
+  // ── Tenant isolation: non-super users may only query their own company ──
+  if (!isSuperAdmin(user)) {
+    const allowed = user.companySlug;
+    if (!allowed || allowed !== tenantSlug) {
+      return NextResponse.json(
+        {
+          error: 'Bu kompaniýanyň maglumatyna rugsat ýok',
+          detail: `Siziň firmanyňyz: ${allowed || '—'}, sorag: ${tenantSlug}`,
+        },
+        { status: 403 }
+      );
+    }
+  }
+
   const params = normalizeOutgoingParams(rawParams);
   const settings = await getSettings();
   const base = (settings.gatewayUrl || process.env.GATEWAY_URL || 'http://localhost:4000').replace(
@@ -90,6 +122,26 @@ export async function POST(req: NextRequest) {
     });
     const data = await res.json().catch(() => ([]));
     if (!res.ok) {
+      // Enrich 503 (agent offline / private DB) with live agent status
+      if (res.status === 503) {
+        const agent = await checkAgentOnline(base, tenantSlug);
+        return NextResponse.json(
+          {
+            error:
+              data?.error ||
+              'Ýerli Electron Agent birikdirilmedik — hasabat üçin enjamda Electron işleýän bolmaly',
+            detail: data?.detail || data,
+            hint:
+              data?.hint ||
+              `«${tenantSlug}» kompaniýasynyň kompýuterinde Electron programmasyny açyň. Settings → Gateway URL VPS adresine degişli bolmaly. Device BI-da tassyklanan we firma baglanan bolmaly.`,
+            tenantSlug,
+            agentOnline: agent.online,
+            agentDetail: agent.detail,
+            status: 503,
+          },
+          { status: 503 }
+        );
+      }
       return NextResponse.json(
         { error: data?.error || 'API säwlik', detail: data, status: res.status },
         { status: res.status }
@@ -105,8 +157,20 @@ export async function POST(req: NextRequest) {
       url: url.toString(),
       _debugParams: data?._debugParams || params,
       _bound: data?._bound,
+      _via: data?._via,
     });
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 502 });
+    const agent = await checkAgentOnline(base, tenantSlug);
+    return NextResponse.json(
+      {
+        error: String(err),
+        hint: agent.online
+          ? 'Gateway-e ýetip bolmady, ýöne agent online görünýär — URL / network barlaň'
+          : `Electron agent offline («${tenantSlug}»). Firma kompýuterinde Electron işleýärmi we Gateway URL dogrymy?`,
+        agentOnline: agent.online,
+        tenantSlug,
+      },
+      { status: 502 }
+    );
   }
 }

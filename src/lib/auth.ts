@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
-import { cookies, headers } from 'next/headers';
+import { cookies } from 'next/headers';
 import { getSettings, getStaffByUsername, getCompanyById } from './db';
 import type { SessionUser, StaffRole } from './types';
 
@@ -58,30 +58,10 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
 
 export async function setSessionCookie(token: string) {
   const jar = await cookies();
-
-  let isSecure = false;
-  if (process.env.FORCE_SECURE_COOKIE === '1') {
-    isSecure = true;
-  } else if (process.env.FORCE_INSECURE_COOKIE === '1') {
-    isSecure = false;
-  } else {
-    try {
-      const reqHeaders = await headers();
-      const proto = reqHeaders.get('x-forwarded-proto');
-      const origin = reqHeaders.get('origin');
-      const referer = reqHeaders.get('referer');
-
-      if (proto === 'https' || origin?.startsWith('https:') || referer?.startsWith('https:')) {
-        isSecure = true;
-      }
-    } catch {
-      isSecure = process.env.NODE_ENV === 'production';
-    }
-  }
-
   jar.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: isSecure,
+    // localhost HTTP-de secure=false bolmaly, bolmasa cookie ýazylmaýar
+    secure: process.env.NODE_ENV === 'production' && process.env.FORCE_INSECURE_COOKIE !== '1',
     sameSite: 'lax',
     path: '/',
     maxAge: 60 * 60 * 24 * 7,
@@ -91,13 +71,6 @@ export async function setSessionCookie(token: string) {
 export async function clearSessionCookie() {
   const jar = await cookies();
   jar.delete(COOKIE_NAME);
-  jar.set(COOKIE_NAME, '', {
-    httpOnly: true,
-    secure: false,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-  });
 }
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -113,7 +86,7 @@ export async function loginWithCredentials(
 ): Promise<{ ok: true; user: SessionUser; token: string } | { ok: false; error: string }> {
   const staff = await getStaffByUsername(username);
   if (!staff || !staff.active) {
-    return { ok: false, error: 'Ulanyjy tapylmady ýa-da işlemeýär' };
+    return { ok: false, error: 'Ulanyjy tapyimady ýa-da işlemeýär' };
   }
 
   const valid = await verifyPassword(password, staff.passwordHash);
@@ -131,41 +104,32 @@ export async function loginWithCredentials(
     companyId: staff.companyId,
     companySlug: company?.slug,
     companyName: company?.name,
-    isSuperAdmin: staff.role === 'admin',
+    isSuperAdmin: Boolean(
+      staff.isSuperAdmin || staff.role === 'super_admin' || staff.role === 'admin'
+    ),
   };
 
   const token = await createSessionToken(user);
   return { ok: true, user, token };
 }
 
-// ── Role helper functions ──────────────────────────────────────────────────
-// 4 roles: viewer | editor | manager | admin
-// admin   = full system access (all companies + settings + staff)
-// manager = own company data + staff management
-// editor  = own company data management (no staff)
-// viewer  = dashboards only
-
 export function canEditDashboard(role: StaffRole): boolean {
-  return role === 'admin' || role === 'editor' || role === 'manager';
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
 }
 
 export function canManageStaff(role: StaffRole): boolean {
-  return role === 'admin' || role === 'manager';
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
 }
 
 export function canManageCompany(role: StaffRole): boolean {
-  return role === 'admin' || role === 'editor' || role === 'manager';
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
 }
 
-/** Platform-level super admin */
 export function isSuperAdmin(user: SessionUser): boolean {
-  return user.role === 'admin' || Boolean(user.isSuperAdmin);
-}
-
-export function isAdmin(user: SessionUser): boolean {
-  return user.role === 'admin';
-}
-
-export function isManager(role: StaffRole): boolean {
-  return role === 'manager';
+  // Electron "admin" = platform super; mapped to super_admin on login
+  return (
+    user.isSuperAdmin ||
+    user.role === 'super_admin' ||
+    user.role === 'admin'
+  );
 }
