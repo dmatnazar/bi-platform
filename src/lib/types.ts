@@ -200,6 +200,12 @@ export interface DashboardWidget {
     suffix?: string;
     /** Horizontal bar chart */
     horizontal?: boolean;
+    /** Table: columns hidden by user (persisted) */
+    hiddenColumns?: string[];
+    /** Table: column order (persisted) */
+    columnOrder?: string[];
+    /** Compact mobile-friendly density */
+    dense?: boolean;
   };
 }
 

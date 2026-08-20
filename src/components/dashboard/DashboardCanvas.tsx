@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -26,6 +26,15 @@ export function DashboardCanvas({
   cols = 12,
   globalFilters = {},
 }: Props) {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener?.('change', apply);
+    return () => mq.removeEventListener?.('change', apply);
+  }, []);
+
   const [width, setWidth] = useState(1200);
 
   const containerRef = useCallback((node: HTMLDivElement | null) => {
@@ -81,9 +90,9 @@ export function DashboardCanvas({
         className="layout"
         layout={layout}
         cols={cols}
-        rowHeight={48}
+        rowHeight={isMobile ? 36 : 48}
         width={width}
-        margin={[12, 12]}
+        margin={isMobile ? [6, 6] : [12, 12]}
         containerPadding={[0, 0]}
         isDraggable={editable}
         isResizable={editable}
@@ -94,11 +103,11 @@ export function DashboardCanvas({
           <div
             key={widget.id}
             className={cn(
-              'rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden flex flex-col shadow-sm',
+              'rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden flex flex-col shadow-sm',
               editable && 'hover:border-slate-700'
             )}
           >
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 border-b border-slate-800/80 shrink-0">
               {editable && (
                 <button
                   type="button"
@@ -107,7 +116,7 @@ export function DashboardCanvas({
                   <GripVertical className="h-4 w-4" />
                 </button>
               )}
-              <h4 className="text-sm font-medium text-slate-200 flex-1 truncate">{widget.title}</h4>
+              <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 truncate">{widget.title}</h4>
               {editable && (
                 <div className="flex items-center gap-0.5 shrink-0">
                   <button
@@ -129,7 +138,7 @@ export function DashboardCanvas({
                 </div>
               )}
             </div>
-            <div className="flex-1 min-h-0 p-3">
+            <div className="flex-1 min-h-0 p-1.5 sm:p-3">
               <LiveWidget
                 widget={widget}
                 editable={editable}

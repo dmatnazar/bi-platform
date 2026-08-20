@@ -105,9 +105,32 @@ function TableWidgetBody({
     return allKeys;
   }, [widget.dataSource?.columns, allKeys]);
 
-  const [colOrder, setColOrder] = useState<string[]>(dataKeys);
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    const saved = widget.config?.columnOrder;
+    if (saved?.length) {
+      const kept = saved.filter((c) => dataKeys.includes(c));
+      const missing = dataKeys.filter((c) => !kept.includes(c));
+      return [...kept, ...missing];
+    }
+    return dataKeys;
+  });
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
+    const fromCfg = widget.config?.hiddenColumns || [];
+    try {
+      const ls = localStorage.getItem(`bi-table-hidden:${widget.id}`);
+      if (ls) return new Set(JSON.parse(ls) as string[]);
+    } catch { /* */ }
+    return new Set(fromCfg);
+  });
   const [showColPicker, setShowColPicker] = useState(false);
+
+  const persistHiddenCols = (next: Set<string>) => {
+    setHiddenCols(next);
+    try {
+      localStorage.setItem(`bi-table-hidden:${widget.id}`, JSON.stringify([...next]));
+    } catch { /* */ }
+  };
+
   const [search, setSearch] = useState('');
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const [showColFilters, setShowColFilters] = useState(false);
@@ -369,14 +392,14 @@ function TableWidgetBody({
                     <button
                       type="button"
                       className="flex-1 text-[10px] py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
-                      onClick={() => setHiddenCols(new Set())}
+                      onClick={() => persistHiddenCols(new Set())}
                     >
                       Hemmesi
                     </button>
                     <button
                       type="button"
                       className="flex-1 text-[10px] py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
-                      onClick={() => setHiddenCols(new Set(colOrder))}
+                      onClick={() => persistHiddenCols(new Set(colOrder))}
                     >
                       Hiçisi
                     </button>
@@ -390,12 +413,10 @@ function TableWidgetBody({
                         type="checkbox"
                         checked={!hiddenCols.has(c)}
                         onChange={(e) => {
-                          setHiddenCols((prev) => {
-                            const next = new Set(prev);
-                            if (e.target.checked) next.delete(c);
-                            else next.add(c);
-                            return next;
-                          });
+                          const next = new Set(hiddenCols);
+                          if (e.target.checked) next.delete(c);
+                          else next.add(c);
+                          persistHiddenCols(next);
                         }}
                         className="rounded border-slate-600"
                       />
@@ -827,7 +848,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
     const kpiColor = widget.config?.color || '#ffffff';
     return (
       <div className={cn('h-full flex flex-col justify-center px-1', className)}>
-        <p className="text-3xl sm:text-4xl font-bold tracking-tight" style={{ color: kpiColor }}>
+        <p className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight" style={{ color: kpiColor }}>
           {prefix}{display}{suffix && !widget.config?.suffix && widget.config?.unit ? '' : ''}
           {widget.config?.suffix ? suffix : ''}
         </p>
