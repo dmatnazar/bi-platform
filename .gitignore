@@ -35,3 +35,4 @@ next-env.d.ts
 # local data
 /data/*.json
 !/data/.gitkeep
+bi-platform.zip
