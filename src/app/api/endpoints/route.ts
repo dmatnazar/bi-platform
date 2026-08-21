@@ -10,6 +10,13 @@ const schema = z.object({
   pathTemplate: z.string().min(1),
   method: z.string().min(1),
   dbKey: z.string().optional(),
+  sqlQuery: z.string().optional(),
+  paramsSchema: z.any().optional(),
+  responseSchema: z.any().optional(),
+  cacheTtlSec: z.number().optional(),
+  authRequired: z.boolean().optional(),
+  connectionId: z.string().optional(),
+  databaseName: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -22,11 +29,15 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json();
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: 'nädogry' }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: 'nädogry', details: parsed.error.flatten() }, { status: 400 });
 
   const res = await updateEndpointOnGateway(parsed.data);
   if (!res.ok) {
-    return NextResponse.json({ error: res.data?.error || 'şowsuz' }, { status: 502 });
+    const status = res.data?.error === 'duplicate' ? 409 : 502;
+    return NextResponse.json(
+      { error: res.data?.message || res.data?.error || 'şowsuz', details: res.data },
+      { status }
+    );
   }
   return NextResponse.json({ ok: true, endpoint: res.data?.endpoint });
 }

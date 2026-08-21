@@ -340,7 +340,30 @@ export interface DbSchema {
     gatewayAdminSecret?: string;
     /** catalog / sync poll interval seconds (0 = manual only) */
     catalogSyncIntervalSec?: number;
+    /** Gmail / SMTP for forgot-password */
+    mail?: {
+      enabled?: boolean;
+      host?: string;
+      port?: number;
+      secure?: boolean;
+      user?: string;
+      pass?: string;
+      fromName?: string;
+      fromEmail?: string;
+    };
   };
+  /** One-time password reset tokens */
+  passwordResetTokens?: PasswordResetToken[];
+}
+
+export interface PasswordResetToken {
+  token: string;
+  username: string;
+  staffId: string;
+  email: string;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
 }
 
 /** Resolve final API params from widget + global filters */

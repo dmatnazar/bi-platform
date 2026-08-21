@@ -11,6 +11,7 @@ import {
   Cpu,
   HardDrive,
   Globe,
+  Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
@@ -53,6 +54,68 @@ export default function DevicesPage() {
   const [acting, setActing] = useState<string | null>(null);
   const [approveId, setApproveId] = useState<string | null>(null);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+
+  const [settingsDevice, setSettingsDevice] = useState<Device | null>(null);
+  const [settingsForm, setSettingsForm] = useState({
+    autostart: false,
+    startMinimized: false,
+    autoSync: true,
+    syncIntervalMin: 5,
+  });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
+  async function openFirmaSazlamalary(d: Device) {
+    setSettingsDevice(d);
+    setSettingsForm({
+      autostart: false,
+      startMinimized: false,
+      autoSync: true,
+      syncIntervalMin: 5,
+    });
+    try {
+      const res = await fetch(
+        `/api/device-settings?deviceId=${encodeURIComponent(d.id)}&tenantSlug=${encodeURIComponent(d.tenantSlug || '')}`
+      );
+      const data = await res.json();
+      const row = (data.settings || [])[0];
+      if (row?.settings) {
+        setSettingsForm((f) => ({
+          ...f,
+          autostart: Boolean(row.settings.autostart),
+          startMinimized: Boolean(row.settings.startMinimized),
+          autoSync: row.settings.autoSync !== false,
+          syncIntervalMin: Number(row.settings.syncIntervalMin) || 5,
+        }));
+      }
+    } catch {
+      /* defaults */
+    }
+  }
+
+  async function saveFirmaSazlamalary() {
+    if (!settingsDevice) return;
+    setSettingsSaving(true);
+    try {
+      const res = await fetch('/api/device-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deviceId: settingsDevice.id,
+          tenantSlug: settingsDevice.tenantSlug || '',
+          settings: settingsForm,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Saklamak şowsuz', data.error);
+        return;
+      }
+      toastSuccess('Firma sazlamalary saklandy', 'VPS + Electron sync');
+      setSettingsDevice(null);
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -312,6 +375,15 @@ export default function DevicesPage() {
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      title="Firma Sazlamalary"
+                      onClick={() => openFirmaSazlamalary(d)}
+                      disabled={acting === d.id}
+                    >
+                      <Settings className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -366,6 +438,69 @@ export default function DevicesPage() {
                 onClick={() => void submitApprove()}
               >
                 Tassykla
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settingsDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setSettingsDevice(null)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4">
+            <h3 className="text-lg font-semibold text-white text-center">Firma Sazlamalary</h3>
+            <p className="text-xs text-slate-400 text-center">
+              {settingsDevice.name || settingsDevice.hostname || settingsDevice.id}
+            </p>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Autostart</span>
+              <input
+                type="checkbox"
+                checked={settingsForm.autostart}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, autostart: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-600"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Minimized start</span>
+              <input
+                type="checkbox"
+                checked={settingsForm.startMinimized}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, startMinimized: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-600"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Auto sync</span>
+              <input
+                type="checkbox"
+                checked={settingsForm.autoSync}
+                onChange={(e) => setSettingsForm((f) => ({ ...f, autoSync: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-600"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Sync interval (min)</span>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={settingsForm.syncIntervalMin}
+                onChange={(e) =>
+                  setSettingsForm((f) => ({
+                    ...f,
+                    syncIntervalMin: Math.max(1, Number(e.target.value) || 5),
+                  }))
+                }
+                className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
+              />
+            </label>
+            <div className="flex gap-2 pt-2">
+              <Button className="flex-1" loading={settingsSaving} onClick={saveFirmaSazlamalary}>
+                Ýatda sakla
+              </Button>
+              <Button variant="ghost" onClick={() => setSettingsDevice(null)}>
+                Ýatyr
               </Button>
             </div>
           </div>

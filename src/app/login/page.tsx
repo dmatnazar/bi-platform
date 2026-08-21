@@ -182,6 +182,15 @@ export default function LoginPage() {
             </button>
           </div>
 
+          <div className="flex justify-end -mt-2">
+            <Link
+              href="/forgot-password"
+              className="text-xs text-indigo-400 hover:text-indigo-300"
+            >
+              Paroly ýatdan çykardyňyzmy?
+            </Link>
+          </div>
+
           <Button type="submit" className="w-full" loading={loading} size="lg">
             {loading ? 'Garaşyň...' : 'Girmek'}
           </Button>

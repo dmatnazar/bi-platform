@@ -26,6 +26,11 @@ interface Company {
   contactPhone?: string;
   contactEmail?: string;
   notes?: string;
+  staffCount?: number;
+  endpointCount?: number;
+  connectionCount?: number;
+  deviceCount?: number;
+  updatedAt?: string;
 }
 
 const emptyForm = {
@@ -305,7 +310,40 @@ export default function CompaniesPage() {
         accessor: (r) => r.slug,
         cell: (r) => <span className="font-mono text-xs text-slate-400">{r.slug}</span>,
       },
+      
       {
+        id: 'staffCount',
+        header: 'Işgär',
+        accessor: (r) => r.staffCount ?? 0,
+        cell: (r) => (
+          <span className="text-sm tabular-nums text-slate-300">{r.staffCount ?? 0}</span>
+        ),
+      },
+      {
+        id: 'endpointCount',
+        header: 'API',
+        accessor: (r) => r.endpointCount ?? 0,
+        cell: (r) => (
+          <span className="text-sm tabular-nums text-emerald-400">{r.endpointCount ?? 0}</span>
+        ),
+      },
+      {
+        id: 'connectionCount',
+        header: 'DB',
+        accessor: (r) => r.connectionCount ?? 0,
+        cell: (r) => (
+          <span className="text-sm tabular-nums text-sky-400">{r.connectionCount ?? 0}</span>
+        ),
+      },
+      {
+        id: 'deviceCount',
+        header: 'Device',
+        accessor: (r) => r.deviceCount ?? 0,
+        cell: (r) => (
+          <span className="text-sm tabular-nums text-amber-400">{r.deviceCount ?? 0}</span>
+        ),
+      },
+{
         id: 'active',
         header: 'Status',
         accessor: (r) => (r.isActive === false ? 0 : 1),

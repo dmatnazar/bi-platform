@@ -17,6 +17,10 @@ interface Endpoint {
   method: string;
   pathTemplate: string;
   dbKey?: string;
+  sqlQuery?: string;
+  paramsSchema?: unknown;
+  cacheTtlSec?: number;
+  authRequired?: boolean;
 }
 
 interface Tenant {
@@ -71,13 +75,24 @@ export default function ApisPage() {
   const [editName, setEditName] = useState('');
   const [editPath, setEditPath] = useState('');
   const [editMethod, setEditMethod] = useState('GET');
+  const [editSql, setEditSql] = useState('');
   const [saving, setSaving] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [execResult, setExecResult] = useState<{
+    ok?: boolean;
+    rows?: unknown[];
+    rowCount?: number;
+    elapsedMs?: number;
+    error?: string;
+  } | null>(null);
 
   function openEdit(e: Endpoint) {
     setEditEp(e);
     setEditName(e.name);
     setEditPath(e.pathTemplate);
     setEditMethod(e.method);
+    setEditSql(e.sqlQuery || '');
+    setExecResult(null);
   }
 
   async function saveEdit() {
@@ -94,14 +109,15 @@ export default function ApisPage() {
           pathTemplate: editPath,
           method: editMethod,
           dbKey: editEp.dbKey || 'primary',
+          sqlQuery: editSql,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak şowsuz', data.error);
+        toastError('Saklamak şowsuz', data.error || data.message);
         return;
       }
-      toastSuccess('API üýtgedildi', 'VPS-e ýazyldy');
+      toastSuccess('API üýtgedildi', 'VPS-e ýazyldy (SQL bilen)');
       setEditEp(null);
       await load(true);
     } finally {
@@ -109,7 +125,45 @@ export default function ApisPage() {
     }
   }
 
-  async function copyUrl(e: Endpoint) {
+  async function executeSql() {
+    if (!editEp || !editSql.trim()) {
+      toastError('SQL boş', 'Query ýazyň');
+      return;
+    }
+    setExecuting(true);
+    setExecResult(null);
+    try {
+      const res = await fetch('/api/admin-test-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: editEp.tenantSlug,
+          sqlQuery: editSql,
+          dbKey: editEp.dbKey || 'primary',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setExecResult({ ok: false, error: data.error || 'şowsuz' });
+        toastError('Execute şowsuz', data.error);
+        return;
+      }
+      setExecResult({
+        ok: true,
+        rows: data.rows || [],
+        rowCount: data.rowCount ?? (data.rows?.length || 0),
+        elapsedMs: data.elapsedMs,
+      });
+      toastSuccess('Execute OK', `${data.rowCount ?? data.rows?.length ?? 0} setir`);
+    } catch (e: any) {
+      setExecResult({ ok: false, error: String(e) });
+      toastError('Execute şowsuz', String(e));
+    } finally {
+      setExecuting(false);
+    }
+  }
+
+    async function copyUrl(e: Endpoint) {
     await navigator.clipboard.writeText(fullUrl(e));
     setCopied(e.id);
     toastSuccess('URL göçürildi');
@@ -241,7 +295,7 @@ export default function ApisPage() {
       {editEp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60" onClick={() => setEditEp(null)} />
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4">
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4">
             <h3 className="text-lg font-semibold text-white text-center">API üýtget</h3>
             <Input label="Ady" value={editName} onChange={(e) => setEditName(e.target.value)} />
             <Select
@@ -269,11 +323,41 @@ export default function ApisPage() {
                 dbKey: editEp.dbKey || 'primary',
               })}
             </p>
-            <div className="flex gap-2">
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400">SQL Query (VPS-de saklanýar)</label>
+              <textarea
+                className="w-full min-h-[160px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-mono text-emerald-300 outline-none focus:ring-1 focus:ring-indigo-500/50"
+                value={editSql}
+                onChange={(e) => setEditSql(e.target.value)}
+                spellCheck={false}
+                placeholder="SELECT ..."
+              />
+            </div>
+            {execResult && (
+              <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 max-h-48 overflow-auto">
+                {execResult.ok ? (
+                  <>
+                    <p className="text-[11px] text-emerald-400 mb-2">
+                      {execResult.rowCount ?? 0} setir
+                      {execResult.elapsedMs != null ? ` · ${execResult.elapsedMs}ms` : ''}
+                    </p>
+                    <pre className="text-[10px] font-mono text-slate-300 whitespace-pre-wrap break-all">
+                      {JSON.stringify(execResult.rows?.slice?.(0, 20) ?? execResult.rows, null, 2)}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="text-[11px] text-rose-400">{execResult.error}</p>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
               <Button className="flex-1" loading={saving} onClick={saveEdit}>
                 Ýatda sakla · Sync
               </Button>
-              <Button variant="ghost" onClick={() => setEditEp(null)}>
+              <Button variant="secondary" loading={executing} onClick={executeSql}>
+                Execute
+              </Button>
+              <Button variant="ghost" onClick={() => { setEditEp(null); setExecResult(null); }}>
                 Ýatyr
               </Button>
             </div>

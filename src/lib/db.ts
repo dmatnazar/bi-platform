@@ -330,3 +330,50 @@ export async function countUnreadSupport(opts: {
   return list.reduce((s, t) => s + (t.unreadForUser || 0), 0);
 }
 
+
+// ── Password reset tokens ────────────────────────────────────
+
+export async function createPasswordResetToken(input: {
+  token: string;
+  username: string;
+  staffId: string;
+  email: string;
+  expiresAt: string;
+}): Promise<void> {
+  const data = await getData();
+  if (!data.passwordResetTokens) data.passwordResetTokens = [];
+  // Invalidate previous unused tokens for same user
+  data.passwordResetTokens = data.passwordResetTokens.filter(
+    (t) => t.username.toLowerCase() !== input.username.toLowerCase() || t.usedAt
+  );
+  data.passwordResetTokens.push({
+    ...input,
+    createdAt: new Date().toISOString(),
+  });
+  // prune expired
+  const now = Date.now();
+  data.passwordResetTokens = data.passwordResetTokens.filter(
+    (t) => t.usedAt || Date.parse(t.expiresAt) > now - 86400000
+  );
+  writeDb(data);
+}
+
+export async function getPasswordResetToken(token: string) {
+  const data = await getData();
+  return (data.passwordResetTokens || []).find((t) => t.token === token);
+}
+
+export async function markPasswordResetUsed(token: string): Promise<void> {
+  const data = await getData();
+  if (!data.passwordResetTokens) return;
+  const idx = data.passwordResetTokens.findIndex((t) => t.token === token);
+  if (idx < 0) return;
+  data.passwordResetTokens[idx].usedAt = new Date().toISOString();
+  writeDb(data);
+}
+
+export async function getStaffByEmail(email: string) {
+  const data = await getData();
+  const e = email.toLowerCase().trim();
+  return data.staff.find((s) => (s.email || '').toLowerCase() === e && s.active);
+}

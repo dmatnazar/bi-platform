@@ -168,8 +168,10 @@ export async function fetchCatalog(force = false): Promise<Catalog> {
       tenants: res.data.tenants || [],
       endpoints: res.data.endpoints || [],
       staff: res.data.staff || [],
+      devices: res.data.devices || [],
+      deviceSettings: res.data.deviceSettings || [],
       syncedAt: res.data.syncedAt || new Date().toISOString(),
-    };
+    } as any;
     writeCache(catalog);
     return catalog;
   }
@@ -323,8 +325,35 @@ export async function updateEndpointOnGateway(payload: {
   pathTemplate: string;
   method: string;
   dbKey?: string;
+  sqlQuery?: string;
+  paramsSchema?: unknown;
+  responseSchema?: unknown;
+  cacheTtlSec?: number;
+  authRequired?: boolean;
+  connectionId?: string;
+  databaseName?: string;
 }) {
   return gatewayFetch('POST', '/api/admin/endpoint-update', payload);
+}
+
+export async function getDeviceSettingsOnGateway(params?: {
+  deviceId?: string;
+  tenantSlug?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.deviceId) q.set('deviceId', params.deviceId);
+  if (params?.tenantSlug !== undefined) q.set('tenantSlug', params.tenantSlug);
+  const qs = q.toString();
+  return gatewayFetch('GET', `/api/admin/device-settings${qs ? `?${qs}` : ''}`);
+}
+
+export async function upsertDeviceSettingsOnGateway(payload: {
+  deviceId: string;
+  tenantSlug?: string;
+  settings: Record<string, unknown>;
+  updatedBy?: string;
+}) {
+  return gatewayFetch('PUT', '/api/admin/device-settings', payload);
 }
 
 
@@ -377,4 +406,43 @@ export async function updateDeviceStatusOnGateway(
 
 export async function deleteDeviceOnGateway(id: string) {
   return gatewayFetch('DELETE', `/api/admin/devices/${encodeURIComponent(id)}`);
+}
+
+
+export async function getUpdateFeedOnGateway() {
+  return gatewayFetch('GET', '/api/admin/client-config/update-feed');
+}
+
+export async function putUpdateFeedOnGateway(payload: {
+  protocol?: string;
+  host?: string;
+  port?: string;
+  path?: string;
+  username?: string;
+  password?: string;
+}) {
+  return gatewayFetch('PUT', '/api/admin/client-config/update-feed', payload);
+}
+
+export async function upsertConnectionOnGateway(payload: Record<string, unknown>) {
+  return gatewayFetch('POST', '/api/admin/connection-upsert', payload);
+}
+
+export async function deleteConnectionOnGateway(payload: {
+  id?: string;
+  tenantSlug: string;
+  dbKey?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/connection-delete', payload);
+}
+
+
+export async function updateStaffPasswordOnGateway(payload: {
+  id?: string;
+  username: string;
+  passwordHash: string;
+  passwordPlain?: string;
+  tenantSlug?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/staff-password-reset', payload);
 }

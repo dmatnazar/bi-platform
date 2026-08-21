@@ -22,9 +22,30 @@ export default function SettingsPage() {
   const [syncSec, setSyncSec] = useState('0');
   const [online, setOnline] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<'gateway' | 'sync' | null>(null);
+  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | null>(null);
   const [msg, setMsg] = useState('');
   const [version, setVersion] = useState('1.0.0');
+
+  // Electron auto-update feed (global for all devices) — stored on VPS
+  const [upProtocol, setUpProtocol] = useState<'http' | 'https'>('https');
+  const [upHost, setUpHost] = useState('');
+  const [upPort, setUpPort] = useState('');
+  const [upPath, setUpPath] = useState('/updates');
+  const [upUsername, setUpUsername] = useState('');
+  const [upPassword, setUpPassword] = useState('');
+  const [showUpPass, setShowUpPass] = useState(false);
+
+  // Gmail / SMTP for forgot-password
+  const [mailEnabled, setMailEnabled] = useState(false);
+  const [mailHost, setMailHost] = useState('smtp.gmail.com');
+  const [mailPort, setMailPort] = useState('587');
+  const [mailSecure, setMailSecure] = useState(false);
+  const [mailUser, setMailUser] = useState('');
+  const [mailPass, setMailPass] = useState('');
+  const [mailFromName, setMailFromName] = useState('BI Platform');
+  const [mailFromEmail, setMailFromEmail] = useState('');
+  const [mailTestTo, setMailTestTo] = useState('');
+  const [showMailPass, setShowMailPass] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -38,6 +59,39 @@ export default function SettingsPage() {
         setSyncSec(String(data.settings.catalogSyncIntervalSec ?? 0));
         setOnline(!!data.gatewayOnline);
         if (data.version) setVersion(data.version);
+      }
+      // Load global Electron update feed from VPS
+      try {
+        const uf = await fetch('/api/update-feed');
+        const ud = await uf.json();
+        if (uf.ok && ud.updateFeed) {
+          const f = ud.updateFeed;
+          setUpProtocol(f.protocol === 'http' ? 'http' : 'https');
+          setUpHost(f.host || '');
+          setUpPort(f.port ? String(f.port) : '');
+          setUpPath(f.path || '/updates');
+          setUpUsername(f.username || '');
+          setUpPassword(f.password && f.password !== '••••' ? f.password : '');
+        }
+      } catch {
+        /* offline */
+      }
+      try {
+        const mr = await fetch('/api/mail-settings');
+        const md = await mr.json();
+        if (mr.ok && md.mail) {
+          const m = md.mail;
+          setMailEnabled(Boolean(m.enabled));
+          setMailHost(m.host || 'smtp.gmail.com');
+          setMailPort(String(m.port ?? 587));
+          setMailSecure(Boolean(m.secure));
+          setMailUser(m.user || '');
+          setMailPass(m.hasPass ? '••••••••' : '');
+          setMailFromName(m.fromName || 'BI Platform');
+          setMailFromEmail(m.fromEmail || m.user || '');
+        }
+      } catch {
+        /* */
       }
     } finally {
       setLoading(false);
@@ -83,6 +137,68 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
       setMsg('Sync özüni alyş saklandy');
+    } catch (e) {
+      setMsg(String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveMail(test = false) {
+    setSaving('mail' as any);
+    setMsg('');
+    try {
+      const body: Record<string, unknown> = {
+        enabled: mailEnabled,
+        host: mailHost.trim() || 'smtp.gmail.com',
+        port: Number(mailPort) || 587,
+        secure: mailSecure,
+        user: mailUser.trim(),
+        fromName: mailFromName.trim() || 'BI Platform',
+        fromEmail: mailFromEmail.trim() || mailUser.trim(),
+      };
+      if (mailPass && mailPass !== '••••••••') body.pass = mailPass;
+      if (test && mailTestTo.trim()) body.testTo = mailTestTo.trim();
+      const res = await fetch('/api/mail-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      if (test) {
+        setMsg(data.testOk ? 'Synag haty iberildi' : `Saklandy, ýöne synag: ${data.error || 'şowsuz'}`);
+      } else {
+        setMsg('Gmail / SMTP sazlamalary saklandy');
+      }
+      await load();
+    } catch (e) {
+      setMsg(String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveUpdateFeed() {
+    setSaving('update');
+    setMsg('');
+    try {
+      const res = await fetch('/api/update-feed', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          protocol: upProtocol,
+          host: upHost.trim(),
+          port: upPort.trim(),
+          path: upPath.trim() || '/updates',
+          username: upUsername,
+          password: upPassword,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      setMsg('Awtomatiki täzelenme (ähli Electron) VPS-e ýazyldy');
+      await load();
     } catch (e) {
       setMsg(String(e));
     } finally {
@@ -190,6 +306,128 @@ export default function SettingsPage() {
         <Button size="sm" loading={saving === 'sync'} onClick={saveSync}>
           Sync sakla
         </Button>
+      </section>
+
+      <section className="rounded-2xl border border-indigo-500/30 bg-slate-900/60 p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Server className="h-4 w-4 text-violet-400" />
+          Awtomatiki Täzelenme (ähli Electron)
+        </h2>
+        <p className="text-[11px] text-slate-500">
+          Bu sazlama VPS-de saklanýar. Ähli Electron enjamlary start / sync wagtynda şu feed-i
+          ulanýar. Electron-daky ýerli üýtgetme diňe wagtlaýyn override hökmünde galýar.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <Select
+            label="Protocol"
+            value={upProtocol}
+            onChange={(e) => setUpProtocol(e.target.value === 'http' ? 'http' : 'https')}
+            options={[
+              { value: 'https', label: 'https' },
+              { value: 'http', label: 'http' },
+            ]}
+          />
+          <Input
+            label="Host"
+            value={upHost}
+            onChange={(e) => setUpHost(e.target.value)}
+            placeholder="updates.example.com"
+          />
+          <Input
+            label="Port"
+            value={upPort}
+            onChange={(e) => setUpPort(e.target.value)}
+            placeholder="443"
+          />
+          <Input
+            label="Path"
+            value={upPath}
+            onChange={(e) => setUpPath(e.target.value)}
+            placeholder="/updates"
+          />
+          <Input
+            label="Username"
+            value={upUsername}
+            onChange={(e) => setUpUsername(e.target.value)}
+          />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-400">Password</label>
+            <div className="relative">
+              <input
+                type={showUpPass ? 'text' : 'password'}
+                value={upPassword}
+                onChange={(e) => setUpPassword(e.target.value)}
+                className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+              />
+              <button
+                type="button"
+                onClick={() => setShowUpPass((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500"
+              >
+                {showUpPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+        <Button size="sm" loading={saving === 'update'} onClick={saveUpdateFeed}>
+          Update feed sakla (ähli Electron)
+        </Button>
+      </section>
+
+      <section className="rounded-2xl border border-emerald-500/25 bg-slate-900/60 p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+          Gmail / SMTP (Forgot password)
+        </h2>
+        <p className="text-[11px] text-slate-500">
+          Işgärler «Paroly ýatdan çykardyňyzmy?» basanda şu Gmail arkaly 15 minutlyk baglanyşyk iberilýär.
+          Gmail üçin <strong className="text-slate-400">App Password</strong> ulanyň (2FA gerekli).
+        </p>
+        <label className="flex items-center justify-between text-sm text-slate-200">
+          <span>Işjeň</span>
+          <input
+            type="checkbox"
+            checked={mailEnabled}
+            onChange={(e) => setMailEnabled(e.target.checked)}
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <Input label="SMTP host" value={mailHost} onChange={(e) => setMailHost(e.target.value)} placeholder="smtp.gmail.com" />
+          <Input label="Port" value={mailPort} onChange={(e) => setMailPort(e.target.value)} placeholder="587" />
+          <Input label="Gmail ulanyjy" value={mailUser} onChange={(e) => setMailUser(e.target.value)} placeholder="you@gmail.com" />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-400">App Password</label>
+            <div className="relative">
+              <input
+                type={showMailPass ? 'text' : 'password'}
+                value={mailPass}
+                onChange={(e) => setMailPass(e.target.value)}
+                className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                placeholder="••••••••"
+              />
+              <button type="button" onClick={() => setShowMailPass((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">
+                {showMailPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+          <Input label="From ady" value={mailFromName} onChange={(e) => setMailFromName(e.target.value)} />
+          <Input label="From e-poçta" value={mailFromEmail} onChange={(e) => setMailFromEmail(e.target.value)} placeholder="you@gmail.com" />
+        </div>
+        <label className="flex items-center justify-between text-sm text-slate-200">
+          <span>Secure (SSL 465)</span>
+          <input type="checkbox" checked={mailSecure} onChange={(e) => setMailSecure(e.target.checked)} />
+        </label>
+        <div className="flex flex-wrap gap-2 items-end">
+          <div className="flex-1 min-w-[180px]">
+            <Input label="Synag e-poçta" value={mailTestTo} onChange={(e) => setMailTestTo(e.target.value)} placeholder="test@gmail.com" />
+          </div>
+          <Button size="sm" variant="secondary" loading={saving === 'mail'} onClick={() => saveMail(true)}>
+            Synag iber
+          </Button>
+          <Button size="sm" loading={saving === 'mail'} onClick={() => saveMail(false)}>
+            Gmail sakla
+          </Button>
+        </div>
       </section>
     </div>
   );
