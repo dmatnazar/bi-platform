@@ -31,11 +31,11 @@ async function resolveCompany(user: {
   companySlug?: string;
   companyName?: string;
 }): Promise<Company | null> {
-  let company = await getCompanyById(user.companyId);
+  let company: Company | null = (await getCompanyById(user.companyId)) ?? null;
   if (company) return company;
 
   if (user.companySlug) {
-    company = await getCompanyBySlug(user.companySlug);
+    company = (await getCompanyBySlug(user.companySlug)) ?? null;
     if (company) return company;
   }
 
@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!company) {
-    company = await getCompanyBySlug(targetSlug);
+    company = (await getCompanyBySlug(targetSlug)) ?? null;
   }
 
   if (!company) {
