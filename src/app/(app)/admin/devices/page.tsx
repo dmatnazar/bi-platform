@@ -14,6 +14,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ModalPortal } from '@/components/ui/ModalPortal';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 
@@ -61,6 +62,12 @@ export default function DevicesPage() {
     startMinimized: false,
     autoSync: true,
     syncIntervalMin: 5,
+    autoLogin: false,
+    trayMinimize: true,
+    notifyOnSync: true,
+    offlineQueue: true,
+    theme: 'dark' as 'dark' | 'light' | 'system',
+    language: 'tk',
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
@@ -71,6 +78,12 @@ export default function DevicesPage() {
       startMinimized: false,
       autoSync: true,
       syncIntervalMin: 5,
+      autoLogin: false,
+      trayMinimize: true,
+      notifyOnSync: true,
+      offlineQueue: true,
+      theme: 'dark',
+      language: 'tk',
     });
     try {
       const res = await fetch(
@@ -85,6 +98,12 @@ export default function DevicesPage() {
           startMinimized: Boolean(row.settings.startMinimized),
           autoSync: row.settings.autoSync !== false,
           syncIntervalMin: Number(row.settings.syncIntervalMin) || 5,
+          autoLogin: Boolean(row.settings.autoLogin),
+          trayMinimize: row.settings.trayMinimize !== false,
+          notifyOnSync: row.settings.notifyOnSync !== false,
+          offlineQueue: row.settings.offlineQueue !== false,
+          theme: (row.settings.theme as any) || 'dark',
+          language: String(row.settings.language || 'tk'),
         }));
       }
     } catch {
@@ -394,8 +413,9 @@ export default function DevicesPage() {
 
       {/* Approve modal */}
       {approveId && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+        <ModalPortal open={Boolean(approveId)}>
+        <div className="fixed inset-0 z-[300] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in slide-in-from-bottom-4 duration-200">
             <h2 className="text-lg font-bold text-white">Firma bagla we tassykla</h2>
             <p className="text-xs text-slate-400">
               Saýlanan firmalar üçin Electron tunnel we sync açylýar. BI hasabatlary şol firmalar bilen işleýär.
@@ -442,70 +462,110 @@ export default function DevicesPage() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {settingsDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setSettingsDevice(null)} />
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4">
-            <h3 className="text-lg font-semibold text-white text-center">Firma Sazlamalary</h3>
-            <p className="text-xs text-slate-400 text-center">
-              {settingsDevice.name || settingsDevice.hostname || settingsDevice.id}
-            </p>
-            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
-              <span>Autostart</span>
-              <input
-                type="checkbox"
-                checked={settingsForm.autostart}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, autostart: e.target.checked }))}
-                className="h-4 w-4 rounded border-slate-600"
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
-              <span>Minimized start</span>
-              <input
-                type="checkbox"
-                checked={settingsForm.startMinimized}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, startMinimized: e.target.checked }))}
-                className="h-4 w-4 rounded border-slate-600"
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
-              <span>Auto sync</span>
-              <input
-                type="checkbox"
-                checked={settingsForm.autoSync}
-                onChange={(e) => setSettingsForm((f) => ({ ...f, autoSync: e.target.checked }))}
-                className="h-4 w-4 rounded border-slate-600"
-              />
-            </label>
-            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
-              <span>Sync interval (min)</span>
-              <input
-                type="number"
-                min={1}
-                max={1440}
-                value={settingsForm.syncIntervalMin}
-                onChange={(e) =>
-                  setSettingsForm((f) => ({
-                    ...f,
-                    syncIntervalMin: Math.max(1, Number(e.target.value) || 5),
-                  }))
-                }
-                className="w-20 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-sm"
-              />
-            </label>
-            <div className="flex gap-2 pt-2">
-              <Button className="flex-1" loading={settingsSaving} onClick={saveFirmaSazlamalary}>
-                Ýatda sakla
-              </Button>
-              <Button variant="ghost" onClick={() => setSettingsDevice(null)}>
-                Ýatyr
-              </Button>
+        <ModalPortal open={Boolean(settingsDevice)}>
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSettingsDevice(null)} />
+          <div className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/10 animate-in slide-in-from-bottom-4 duration-200">
+            <div className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/95 px-5 py-4 backdrop-blur">
+              <h3 className="text-lg font-semibold text-white text-center">Firma Sazlamalary</h3>
+              <p className="text-xs text-slate-400 text-center mt-1 truncate">
+                {settingsDevice.name || settingsDevice.hostname || settingsDevice.id}
+              </p>
+            </div>
+            <div className="p-5 space-y-5">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Başlatmak</p>
+                <div className="space-y-1 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  {([
+                    ['autostart', 'Autostart (Windows bilen açylsyn)'],
+                    ['startMinimized', 'Minimized başlat'],
+                    ['trayMinimize', 'Ýapylanda tray-e düşsün'],
+                    ['autoLogin', 'Awto login'],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1.5">
+                      <span>{label}</span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean((settingsForm as any)[key])}
+                        onChange={(e) => setSettingsForm((f) => ({ ...f, [key]: e.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-600 accent-indigo-500"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Sync</p>
+                <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+                    <span>Auto sync</span>
+                    <input type="checkbox" checked={settingsForm.autoSync}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, autoSync: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-600 accent-indigo-500" />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+                    <span>Offline queue</span>
+                    <input type="checkbox" checked={(settingsForm as any).offlineQueue !== false}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, offlineQueue: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-600 accent-indigo-500" />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+                    <span>Sync notification</span>
+                    <input type="checkbox" checked={(settingsForm as any).notifyOnSync !== false}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, notifyOnSync: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-600 accent-indigo-500" />
+                  </label>
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+                    <span>Sync interval (min)</span>
+                    <input type="number" min={1} max={1440} value={settingsForm.syncIntervalMin}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, syncIntervalMin: Math.max(1, Number(e.target.value) || 5) }))}
+                      className="w-20 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white" />
+                  </label>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Görnüş</p>
+                <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <label className="text-xs text-slate-400 space-y-1.5 block">
+                    <span>Tema</span>
+                    <select value={(settingsForm as any).theme || 'dark'}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, theme: e.target.value as any }))}
+                      className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-sm text-white">
+                      <option value="dark">Dark</option>
+                      <option value="light">Light</option>
+                      <option value="system">System</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-400 space-y-1.5 block">
+                    <span>Dil</span>
+                    <select value={(settingsForm as any).language || 'tk'}
+                      onChange={(e) => setSettingsForm((f) => ({ ...f, language: e.target.value }))}
+                      className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-sm text-white">
+                      <option value="tk">Türkmen</option>
+                      <option value="ru">Русский</option>
+                      <option value="en">English</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button className="flex-1" loading={settingsSaving} onClick={saveFirmaSazlamalary}>
+                  Ýatda sakla
+                </Button>
+                <Button variant="ghost" onClick={() => setSettingsDevice(null)}>
+                  Ýatyr
+                </Button>
+              </div>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
+
     </div>
   );
 }

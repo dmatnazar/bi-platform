@@ -335,47 +335,46 @@ export function DataTable<T>({
         </table>
       </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
+      {/* Mobile cards — 2-column widget grid, labeled fields */}
+      <div className="md:hidden grid grid-cols-1 xs:grid-cols-2 gap-3">
         {pageRows.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-700 px-4 py-10 text-center text-slate-500 text-sm">
+          <div className="col-span-full rounded-2xl border border-dashed border-slate-700 px-4 py-10 text-center text-slate-500 text-sm">
             {emptyMessage}
           </div>
         ) : (
           pageRows.map((row) => {
             const key = rowKey(row);
+            const dataCols = visibleCols.filter((c) => c.id !== 'actions');
+            const primary = primaryCol && dataCols.find((c) => c.id === primaryCol.id);
+            const rest = dataCols.filter((c) => !primary || c.id !== primary.id);
             return (
               <div
                 key={key}
                 onClick={() => onRowClick?.(row)}
                 className={cn(
-                  'rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2.5 space-y-1',
-                  onRowClick && 'active:scale-[0.99]',
-                  selectedKey === key && 'border-indigo-500/40'
+                  'rounded-xl border border-slate-700/80 bg-slate-900/70 px-3 py-3 space-y-2 shadow-sm',
+                  onRowClick && 'active:scale-[0.99] cursor-pointer',
+                  selectedKey === key && 'border-indigo-500/50 ring-1 ring-indigo-500/20'
                 )}
               >
-                {primaryCol && (
-                  <div className="font-medium text-white text-sm leading-snug">
-                    {primaryCol.cell
-                      ? primaryCol.cell(row)
-                      : String(primaryCol.accessor(row) ?? '')}
+                {primary && (
+                  <div className="font-semibold text-white text-sm leading-snug break-words border-b border-slate-800 pb-2">
+                    {primary.cell ? primary.cell(row) : String(primary.accessor(row) ?? '')}
                   </div>
                 )}
-                <div className="grid grid-cols-1 gap-0.5">
-                  {visibleCols
-                    .filter((c) => c.id !== primaryCol?.id && c.id !== 'actions')
-                    .slice(0, 8)
-                    .map((c) => (
-                      <div key={c.id} className="flex justify-between gap-2 text-[11px] leading-snug">
-                        <span className="text-slate-500 shrink-0 max-w-[42%] truncate">{c.header}</span>
-                        <span className="text-slate-300 text-right truncate">
-                          {c.cell ? c.cell(row) : String(c.accessor(row) ?? '—')}
-                        </span>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-2">
+                  {rest.map((c) => {
+                    const content = c.cell ? c.cell(row) : String(c.accessor(row) ?? '—');
+                    return (
+                      <div key={c.id} className="min-w-0">
+                        <p className="text-[9px] uppercase tracking-wide text-slate-500 truncate">{c.header}</p>
+                        <div className="text-[12px] text-slate-200 leading-snug break-words mt-0.5">{content}</div>
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
                 {visibleCols.find((c) => c.id === 'actions') && (
-                  <div className="pt-2 border-t border-slate-800" onClick={(e) => e.stopPropagation()}>
+                  <div className="pt-2 border-t border-slate-800 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
                     {visibleCols.find((c) => c.id === 'actions')!.cell?.(row)}
                   </div>
                 )}

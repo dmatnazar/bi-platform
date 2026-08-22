@@ -62,7 +62,7 @@ function sign(body: unknown): string {
   return crypto.createHmac('sha256', secret).update(payload).digest('hex');
 }
 
-async function gatewayFetch(
+export async function gatewayFetch(
   method: string,
   pathSuffix: string,
   body?: unknown,
@@ -336,6 +336,21 @@ export async function updateEndpointOnGateway(payload: {
   return gatewayFetch('POST', '/api/admin/endpoint-update', payload);
 }
 
+export async function createEndpointOnGateway(payload: Record<string, unknown>) {
+  return gatewayFetch('POST', '/api/admin/endpoint-create/admin', payload);
+}
+
+export async function deleteEndpointOnGateway(payload: {
+  id?: string;
+  tenantSlug?: string;
+  method?: string;
+  pathTemplate?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/endpoint-delete/admin', payload);
+}
+
+
+
 export async function getDeviceSettingsOnGateway(params?: {
   deviceId?: string;
   tenantSlug?: string;
@@ -445,4 +460,78 @@ export async function updateStaffPasswordOnGateway(payload: {
   tenantSlug?: string;
 }) {
   return gatewayFetch('POST', '/api/admin/staff-password-reset', payload);
+}
+
+
+// ── Billing / tariffs / wallets ─────────────────────────────────
+
+export async function billingOverviewOnGateway() {
+  return gatewayFetch('GET', '/api/admin/billing/overview');
+}
+
+export async function listTariffsOnGateway() {
+  return gatewayFetch('GET', '/api/admin/billing/tariffs');
+}
+
+export async function upsertTariffOnGateway(payload: Record<string, unknown>) {
+  return gatewayFetch('POST', '/api/admin/billing/tariff-upsert', payload);
+}
+
+export async function assignTariffOnGateway(payload: {
+  tenantSlug: string;
+  tariffId: string;
+  grantIncludedCredits?: boolean;
+}) {
+  return gatewayFetch('POST', '/api/admin/billing/assign-tariff', payload);
+}
+
+export async function topUpOnGateway(payload: {
+  tenantSlug: string;
+  amount: number;
+  reason?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/billing/topup', payload);
+}
+
+export async function adjustBalanceOnGateway(payload: {
+  tenantSlug: string;
+  amount: number;
+  reason: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/billing/adjust', payload);
+}
+
+export async function ledgerOnGateway(params?: { tenantSlug?: string; limit?: number }) {
+  const q = new URLSearchParams();
+  if (params?.tenantSlug) q.set('tenantSlug', params.tenantSlug);
+  if (params?.limit) q.set('limit', String(params.limit));
+  const qs = q.toString();
+  return gatewayFetch('GET', `/api/admin/billing/ledger${qs ? `?${qs}` : ''}`);
+}
+
+export async function walletOnGateway(tenantSlug: string) {
+  return gatewayFetch('GET', `/api/admin/billing/wallet?tenantSlug=${encodeURIComponent(tenantSlug)}`);
+}
+
+
+export async function requestTariffChangeOnGateway(payload: {
+  tenantSlug: string;
+  requestedTariffId: string;
+  message?: string;
+  requestedBy?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/billing/request-tariff-change', payload);
+}
+
+export async function listTariffRequestsOnGateway(status?: string) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+  return gatewayFetch('GET', `/api/admin/billing/tariff-requests${qs}`);
+}
+
+export async function resolveTariffRequestOnGateway(payload: {
+  requestId: string;
+  action: 'approve' | 'reject';
+  resolvedBy?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/billing/resolve-tariff-request', payload);
 }

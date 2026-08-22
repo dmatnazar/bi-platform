@@ -216,7 +216,7 @@ export default function SettingsPage() {
   if (loading) return <p className="text-slate-500 text-sm">Ýüklenýär...</p>;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Sazlamalar</h1>
         <p className="text-sm text-slate-400 mt-1">
@@ -230,6 +230,7 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
       <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -429,6 +430,7 @@ export default function SettingsPage() {
           </Button>
         </div>
       </section>
+      </div>
     </div>
   );
 }

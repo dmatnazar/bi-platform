@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Database, Plus, Pencil, Trash2, RefreshCw, Server } from 'lucide-react';
+import { Database, Plus, Pencil, Trash2, RefreshCw, Server, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
@@ -31,6 +32,13 @@ interface TenantOpt {
   name: string;
 }
 
+const DB_TYPES = [
+  { value: 'mssql', label: 'Microsoft SQL Server', port: 1433, ready: true },
+  { value: 'postgresql', label: 'PostgreSQL (ýakynada)', port: 5432, ready: false },
+  { value: 'mongodb', label: 'MongoDB (ýakynada)', port: 27017, ready: false },
+  { value: 'excel', label: 'MS Excel (ýakynada)', port: 0, ready: false },
+] as const;
+
 const emptyForm = {
   tenantSlug: '',
   label: '',
@@ -42,6 +50,7 @@ const emptyForm = {
   encrypt: true,
   trustServerCertificate: true,
   isPrimary: false,
+  dbType: 'mssql' as string,
 };
 
 export default function ConnectionsPage() {
@@ -52,6 +61,8 @@ export default function ConnectionsPage() {
   const [editing, setEditing] = useState<ConnRow | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [dbList, setDbList] = useState<string[]>([]);
+  const [loadingDbs, setLoadingDbs] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,12 +89,45 @@ export default function ConnectionsPage() {
     load();
   }, [load]);
 
+  const [testingId, setTestingId] = useState<string | null>(null);
+
+  async function testConn(row: ConnRow) {
+    setTestingId(row.id);
+    try {
+      const res = await fetch('/api/admin-test-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: row.tenantSlug,
+          sqlQuery: 'SELECT 1 AS ok',
+          dbKey: row.dbKey || 'primary',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Baglanyşyk şowsuz', data.error || 'Device offline ýa-da DB ýalňyş');
+        return;
+      }
+      toastSuccess(
+        'Baglanyşyk OK',
+        `${row.label || row.dbKey} · device üstünden · ${data.elapsedMs ?? '?'}ms`
+      );
+    } catch (e) {
+      toastError('Baglanyşyk şowsuz', String(e));
+    } finally {
+      setTestingId(null);
+    }
+  }
+
+
   function openCreate() {
     setEditing(null);
     setForm({
       ...emptyForm,
       tenantSlug: tenants[0]?.slug || '',
+      dbType: 'mssql',
     });
+    setDbList([]);
     setModal(true);
   }
 
@@ -100,8 +144,64 @@ export default function ConnectionsPage() {
       encrypt: c.encrypt !== false,
       trustServerCertificate: c.trustServerCertificate !== false,
       isPrimary: Boolean(c.isPrimary),
+      dbType: (c as any).dbType || 'mssql',
     });
+    setDbList(c.database ? [c.database] : []);
     setModal(true);
+  }
+
+  async function fetchDatabases() {
+    if (!form.tenantSlug) {
+      toastError('Firma gerek', 'Ilki firma saýlaň');
+      return;
+    }
+    if (form.dbType !== 'mssql') {
+      toastError('Goldanmaýar', 'Häzirlikçe diňe MSSQL üçin database sanawy elýeterli');
+      return;
+    }
+    // Existing connection: use test-query through agent
+    if (!editing?.id && !form.host.trim()) {
+      toastError('Host gerek', 'Host / username dolduryň');
+      return;
+    }
+    setLoadingDbs(true);
+    try {
+      const res = await fetch('/api/admin-test-query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: form.tenantSlug,
+          dbKey: editing?.dbKey || 'primary',
+          sqlQuery:
+            "SELECT name FROM sys.databases WHERE state = 0 AND name NOT IN ('master','tempdb','model','msdb') ORDER BY name",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError(
+          'Database sanawy alynmady',
+          data.error ||
+            'Baglanyşyk heniz saklanmadyk ýa-da device offline. Ilki saklap, soňra barlaň.'
+        );
+        return;
+      }
+      const rows = (data.rows || []) as { name?: string }[];
+      const names = rows.map((r) => r.name).filter(Boolean) as string[];
+      if (names.length === 0) {
+        toastError('Database ýok', 'Serwerde elýeterli database tapylmady');
+        setDbList([]);
+        return;
+      }
+      setDbList(names);
+      if (!form.database && names[0]) {
+        setForm((f) => ({ ...f, database: names[0] }));
+      }
+      toastSuccess('Database-ler', `${names.length} sany tapyldy`);
+    } catch (e) {
+      toastError('Database sanawy', String(e));
+    } finally {
+      setLoadingDbs(false);
+    }
   }
 
   async function save() {
@@ -126,6 +226,7 @@ export default function ConnectionsPage() {
           encrypt: form.encrypt,
           trustServerCertificate: form.trustServerCertificate,
           isPrimary: form.isPrimary,
+          dbType: form.dbType || 'mssql',
         }),
       });
       const data = await res.json();
@@ -234,6 +335,15 @@ export default function ConnectionsPage() {
         accessor: () => '',
         cell: (r) => (
           <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              title="Device üstünden DB barla"
+              disabled={testingId === r.id}
+              onClick={() => void testConn(r)}
+            >
+              <Activity className={`h-3.5 w-3.5 ${testingId === r.id ? 'animate-pulse text-emerald-400' : ''}`} />
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
@@ -249,7 +359,7 @@ export default function ConnectionsPage() {
         ),
       },
     ],
-    [tenants]
+    [tenants, testingId]
   );
 
   return (
@@ -282,8 +392,9 @@ export default function ConnectionsPage() {
       />
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setModal(false)} />
+        <ModalPortal open={Boolean(modal)}>
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setModal(false)} />
           <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-3">
             <h3 className="text-lg font-semibold text-white text-center">
               {editing ? 'Baglanyşygy üýtget' : 'Täze baglanyşyk'}
@@ -295,6 +406,31 @@ export default function ConnectionsPage() {
               options={tenants.map((t) => ({ value: t.slug, label: `${t.name} (${t.slug})` }))}
               disabled={!!editing}
             />
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400">Database görnüşi</label>
+              <select
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500/50"
+                value={form.dbType}
+                onChange={(e) => {
+                  const t = DB_TYPES.find((d) => d.value === e.target.value);
+                  setForm((f) => ({
+                    ...f,
+                    dbType: e.target.value,
+                    port: t && t.port ? t.port : f.port,
+                  }));
+                  setDbList([]);
+                }}
+              >
+                {DB_TYPES.map((d) => (
+                  <option key={d.value} value={d.value} disabled={!d.ready}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              {form.dbType !== 'mssql' && (
+                <p className="text-[11px] text-amber-400/90">Bu görnüş ýakynada goşular — häzir diňe MSSQL işjeň.</p>
+              )}
+            </div>
             <Input
               label="Label"
               value={form.label}
@@ -314,11 +450,42 @@ export default function ConnectionsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 1433 }))}
               />
             </div>
-            <Input
-              label="Database"
-              value={form.database}
-              onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
-            />
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs text-slate-400">Database</label>
+                <button
+                  type="button"
+                  onClick={() => void fetchDatabases()}
+                  disabled={loadingDbs}
+                  className="text-[11px] px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 disabled:opacity-50"
+                >
+                  {loadingDbs ? 'Barlanýar…' : 'Database-leri barla'}
+                </button>
+              </div>
+              {dbList.length > 0 ? (
+                <select
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500/50"
+                  value={form.database}
+                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                >
+                  <option value="">— saýlaň —</option>
+                  {dbList.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  value={form.database}
+                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                  placeholder="Ilki maglumatlary dolduryň, soň «Database-leri barla»"
+                />
+              )}
+              <p className="text-[10px] text-slate-500">
+                Host, username, password dolduryp saklaň → soňra «Database-leri barla» bilen bar bolan DB-lerden saýlaň.
+              </p>
+            </div>
             <Input
               label="Username"
               value={form.username}
@@ -366,7 +533,9 @@ export default function ConnectionsPage() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );
 }
+

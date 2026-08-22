@@ -5,7 +5,7 @@ import type { GlobalFilterDef, GlobalFilterValues } from '@/lib/types';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2 } from 'lucide-react';
+import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Props {
@@ -256,6 +256,8 @@ export function DashboardFilterBar({
   className,
   compact,
 }: Props) {
+  const [filtersOpen, setFiltersOpen] = useState(true);
+
   const hasFilters = filters.length > 0;
 
   const activeCount = useMemo(() => {
@@ -311,41 +313,58 @@ export function DashboardFilterBar({
   return (
     <div
       className={cn(
-        'rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-900/60 shadow-lg shadow-black/20',
-        compact ? 'p-3' : 'p-4',
+        'rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-900/60 shadow-md shadow-black/15',
+        compact ? 'p-2' : 'p-2.5',
         className
       )}
     >
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="flex items-center gap-2 text-slate-300">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-400">
-            <Filter className="h-4 w-4" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((o) => !o)}
+          className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors min-w-0"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400 shrink-0">
+            <Filter className="h-3.5 w-3.5" />
           </div>
-          <div>
-            <p className="text-sm font-semibold text-white leading-tight">Filterler</p>
-            <p className="text-[11px] text-slate-500">
+          <div className="text-left min-w-0">
+            <p className="text-xs font-semibold text-white leading-tight flex items-center gap-1.5">
+              Filterler
+              {filtersOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
+            </p>
+            <p className="text-[10px] text-slate-500 truncate">
               {activeCount > 0 ? `${activeCount} aktif` : 'Ähli widget-lere täsir edýär'}
             </p>
           </div>
-        </div>
+        </button>
 
-        {filters.some((f) => f.type === 'daterange') && (
-          <div className="flex flex-wrap gap-1.5 ml-auto">
+        {filtersOpen && filters.some((f) => f.type === 'daterange') && (
+          <div className="flex flex-wrap gap-1 ml-auto">
             {PRESETS.map((p) => (
               <button
                 key={p.label}
                 type="button"
                 onClick={() => applyPreset(p)}
-                className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors"
+                className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors"
               >
                 {p.label}
               </button>
             ))}
           </div>
         )}
+        {!filtersOpen && (
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(true)}
+            className="ml-auto text-[10px] text-indigo-400 hover:text-indigo-300 px-2 py-1"
+          >
+            Aç
+          </button>
+        )}
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
+      {filtersOpen && (
+      <div className="flex flex-wrap items-end gap-2 mt-2.5 pt-2.5 border-t border-slate-800/80">
         {filters.map((f) => {
           if (f.type === 'daterange') {
             return (
@@ -521,6 +540,7 @@ export function DashboardFilterBar({
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

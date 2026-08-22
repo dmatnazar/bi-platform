@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, RefreshCw, Check, X, Eye, EyeOff, CloudUpload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
@@ -366,9 +367,10 @@ export default function StaffPage() {
       />
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+        <ModalPortal open={Boolean(modal)}>
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setModal(false)} />
-          <div className="relative w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl flex flex-col max-h-[min(92vh,720px)]">
+          <div className="relative w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/10 flex flex-col max-h-[min(92vh,780px)] animate-in slide-in-from-bottom-4 duration-200">
             <h3 className="text-lg font-semibold text-white text-center px-5 pt-5 pb-3 shrink-0 border-b border-slate-800/80">
               {editing ? 'Işgäri üýtget' : 'Täze işgär'}
             </h3>
@@ -468,6 +470,7 @@ export default function StaffPage() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

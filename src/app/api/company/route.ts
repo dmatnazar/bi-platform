@@ -31,17 +31,14 @@ async function resolveCompany(user: {
   companySlug?: string;
   companyName?: string;
 }): Promise<Company | null> {
-  // 1) Local by id
   let company = await getCompanyById(user.companyId);
   if (company) return company;
 
-  // 2) Local by slug
   if (user.companySlug) {
     company = await getCompanyBySlug(user.companySlug);
     if (company) return company;
   }
 
-  // 3) VPS catalog tenant → materialize local record
   try {
     const catalog = await fetchCatalog(false);
     const tenant =
@@ -68,7 +65,6 @@ async function resolveCompany(user: {
     /* offline */
   }
 
-  // 4) Last resort — synthetic from session
   if (user.companySlug || user.companyName) {
     const now = new Date().toISOString();
     return {
@@ -113,6 +109,7 @@ export async function POST(req: NextRequest) {
           message: res.data?.message || 'Bagly ishgar yada API bar',
           staffCount: res.data?.staffCount,
           endpointCount: res.data?.endpointCount,
+          connectionCount: res.data?.connectionCount,
         },
         { status: 409 }
       );
@@ -145,37 +142,68 @@ export async function POST(req: NextRequest) {
   const parsed = profileSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: 'nadogry' }, { status: 400 });
 
-  const targetSlug = parsed.data.slug || user.companySlug;
-  let company = await resolveCompany(user);
+  const isSuper =
+    !!(user as any).isSuperAdmin ||
+    user.role === 'super_admin' ||
+    (user as any).role === 'superadmin';
 
-  // Super-admin may update any tenant by slug from body
-  if (parsed.data.slug && parsed.data.slug !== company?.slug) {
-    try {
-      const catalog = await fetchCatalog(true);
-      const tenant = catalog.tenants.find((t) => t.slug === parsed.data.slug);
-      if (tenant) {
-        company = {
-          id: tenant.id,
-          slug: tenant.slug,
-          name: tenant.name,
-          isActive: tenant.isActive !== false,
-          createdAt: new Date().toISOString(),
-          updatedAt: tenant.updatedAt || new Date().toISOString(),
-        };
-      }
-    } catch {
-      /* ignore */
-    }
+  const targetSlug = (parsed.data.slug || user.companySlug || '').trim().toLowerCase();
+  if (!targetSlug) {
+    return NextResponse.json({ error: 'slug gerek' }, { status: 400 });
+  }
+  if (!parsed.data.name?.trim()) {
+    return NextResponse.json({ error: 'ady gerek' }, { status: 400 });
   }
 
-  if (!company) return NextResponse.json({ error: 'Kompaniýa ýok' }, { status: 404 });
+  if (!isSuper && user.companySlug && targetSlug !== user.companySlug) {
+    return NextResponse.json({ error: 'Rugsat yok' }, { status: 403 });
+  }
+
+  let company: Company | null = null;
+  let isNew = false;
+
+  try {
+    const catalog = await fetchCatalog(true);
+    const tenant = catalog.tenants.find((t) => t.slug === targetSlug);
+    if (tenant) {
+      company = {
+        id: tenant.id,
+        slug: tenant.slug,
+        name: tenant.name,
+        isActive: tenant.isActive !== false,
+        createdAt: new Date().toISOString(),
+        updatedAt: tenant.updatedAt || new Date().toISOString(),
+      };
+    }
+  } catch {
+    /* offline */
+  }
+
+  if (!company) {
+    company = await getCompanyBySlug(targetSlug);
+  }
+
+  if (!company) {
+    isNew = true;
+    const nowIso = new Date().toISOString();
+    company = {
+      id: `tenant_${targetSlug}_${Date.now()}`,
+      slug: targetSlug,
+      name: parsed.data.name.trim(),
+      isActive: parsed.data.isActive !== false,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+  }
 
   const now = new Date().toISOString();
   const updated: Company = {
     ...company,
     ...parsed.data,
-    slug: company.slug,
+    slug: targetSlug,
     id: company.id,
+    name: parsed.data.name.trim(),
+    isActive: parsed.data.isActive !== false,
     updatedAt: now,
   };
   await upsertCompany(updated);
@@ -184,10 +212,10 @@ export async function POST(req: NextRequest) {
   const online = await checkGatewayHealth();
   if (online) {
     const res = await updateTenantOnGateway({
-      slug: company.slug,
+      slug: targetSlug,
       name: updated.name,
       isActive: updated.isActive,
-      expectedUpdatedAt: (body as any).expectedUpdatedAt || company.updatedAt,
+      expectedUpdatedAt: isNew ? undefined : (body as any).expectedUpdatedAt || company.updatedAt,
     });
     if (res.status === 409) {
       return NextResponse.json(
@@ -206,7 +234,13 @@ export async function POST(req: NextRequest) {
         { status: 502 }
       );
     }
+    if (res.data?.tenant?.id) {
+      updated.id = res.data.tenant.id;
+      await upsertCompany(updated);
+    }
+  } else if (isNew) {
+    return NextResponse.json({ error: 'VPS offline — täze firma döredip bolmaýar' }, { status: 503 });
   }
 
-  return NextResponse.json({ ok: true, company: updated, gatewaySynced });
+  return NextResponse.json({ ok: true, company: updated, gatewaySynced, created: isNew });
 }

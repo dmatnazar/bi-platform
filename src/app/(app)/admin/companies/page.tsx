@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, Plus, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ModalPortal } from '@/components/ui/ModalPortal';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -257,9 +258,20 @@ export default function CompaniesPage() {
   }
 
   async function deactivate(c: Company) {
+    const staff = c.staffCount ?? 0;
+    const eps = c.endpointCount ?? 0;
+    const conns = c.connectionCount ?? 0;
+    const devices = c.deviceCount ?? 0;
+    if (staff > 0 || eps > 0 || conns > 0) {
+      toastError(
+        'Pozup bolmayar',
+        `Bagly maglumat bar: ${staff} işgär, ${eps} API, ${conns} DB. Ilki olary aýyryň.`
+      );
+      return;
+    }
     const ok = await confirmDialog({
-      title: 'Kompaniyany poz',
-      message: `"${c.name}" (${c.slug}) doly pozulsynmy? Bagly ishgar/API bar bolsa warning cykar.`,
+      title: 'Kompaniýany poz',
+      message: `"${c.name}" (${c.slug}) doly pozulsynmy? Bu amal yzyna alynmaýar.`,
       confirmLabel: 'Poz',
       danger: true,
     });
@@ -272,14 +284,18 @@ export default function CompaniesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 409) {
-        toastError('Pozup bolmayar', data.message || data.error || 'Bagly ishgar yada API bar');
+        toastError(
+          'Pozup bolmayar',
+          data.message ||
+            `Bagly: ${data.staffCount ?? 0} işgär, ${data.endpointCount ?? 0} API, ${data.connectionCount ?? 0} DB`
+        );
         return;
       }
       if (!res.ok) {
         toastError('Pozmak sowusuz', data.error || res.statusText);
         return;
       }
-      toastSuccess('Kompaniya pozuldy', 'VPS bilen sync');
+      toastSuccess('Kompaniýa pozuldy', 'VPS bilen sync');
       await load();
     } catch (e) {
       toastError('Pozmak sowusuz', String(e));
@@ -378,8 +394,19 @@ export default function CompaniesPage() {
               <button
                 type="button"
                 onClick={() => void deactivate(r)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10"
-                title="Passiw et"
+                disabled={
+                  (r.staffCount ?? 0) > 0 ||
+                  (r.endpointCount ?? 0) > 0 ||
+                  (r.connectionCount ?? 0) > 0
+                }
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                title={
+                  (r.staffCount ?? 0) > 0 ||
+                  (r.endpointCount ?? 0) > 0 ||
+                  (r.connectionCount ?? 0) > 0
+                    ? 'Bagly işgär/API/DB bar — pozup bolmaýar'
+                    : 'Poz'
+                }
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -429,9 +456,27 @@ export default function CompaniesPage() {
       />
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setModal(false)} />
-          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-5">
+        <ModalPortal open={Boolean(modal)}>
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => {
+              if (editing?.id) {
+                void fetch('/api/company', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    lockAction: 'unlock',
+                    entityType: 'tenant',
+                    entityId: editing.id,
+                    openedBy: 'bi',
+                  }),
+                });
+              }
+              setModal(false);
+            }}
+          />
+          <div className="relative w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 p-5 sm:p-6 space-y-5 shadow-2xl shadow-indigo-500/10 animate-in slide-in-from-bottom-4 duration-200">
             <h3 className="text-lg font-semibold text-white text-center">
               {editing ? 'Kompaniyany uytget' : 'Taze kompaniya'}
             </h3>
@@ -541,12 +586,30 @@ export default function CompaniesPage() {
               <Button className="flex-1" loading={saving} onClick={() => void save()}>
                 Yatda sakla Â· Sync
               </Button>
-              <Button variant="ghost" onClick={() => setModal(false)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (editing?.id) {
+                    void fetch('/api/company', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        lockAction: 'unlock',
+                        entityType: 'tenant',
+                        entityId: editing.id,
+                        openedBy: 'bi',
+                      }),
+                    });
+                  }
+                  setModal(false);
+                }}
+              >
                 Yatyr
               </Button>
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

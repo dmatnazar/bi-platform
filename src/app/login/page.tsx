@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
 
 interface Notif {
@@ -86,9 +87,13 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-indigo-600/20 rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 right-0 w-[300px] h-[300px] bg-violet-600/10 rounded-full blur-[100px]" />
+      {/* Animated orbs + tsParticles network (reporting / analytics vibe) */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
+        <div className="login-orb login-orb-a" />
+        <div className="login-orb login-orb-b" />
+        <div className="login-orb login-orb-c" />
+        <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
       </div>
 
       <div className="relative w-full max-w-md animate-fade-in">
@@ -97,7 +102,7 @@ export default function LoginPage() {
             <BarChart3 className="h-7 w-7 text-white" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-white">BI Platform</h1>
-          <p className="text-slate-400 text-sm mt-1">Hasabat we analitika merkezi</p>
+          <p className="text-slate-300 text-sm mt-1">Hasabat we analitika merkezi</p>
         </div>
 
         {/* Notifications for this username */}
@@ -131,11 +136,11 @@ export default function LoginPage() {
 
         <form
           onSubmit={onSubmit}
-          className="bg-slate-900/70 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl backdrop-blur-sm space-y-5"
+          className="bg-slate-900/85 border border-slate-700 rounded-2xl p-6 sm:p-8 shadow-xl backdrop-blur-md space-y-5 ring-1 ring-white/5"
         >
           <div>
             <h2 className="text-lg font-semibold text-white">Giriş</h2>
-            <p className="text-sm text-slate-400 mt-0.5">Öz login we parolyňyz bilen giriň</p>
+            <p className="text-sm text-slate-300 mt-0.5">Öz login we parolyňyz bilen giriň</p>
           </div>
 
           {error && (

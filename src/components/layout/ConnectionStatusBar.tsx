@@ -74,10 +74,10 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       ? 'el bilen'
       : `her ${status.catalogSyncIntervalSec}s`;
 
-  // Non-super: minimal status only
+  // Viewer / company user: still show live sync strip (not only VPS)
   if (!isSuperAdmin) {
     return (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-400 px-1 py-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-300 px-1 py-1.5">
         <div className="inline-flex items-center gap-1.5" title="VPS Gateway">
           <Dot ok={!!status?.gatewayOnline} />
           {status?.gatewayOnline ? (
@@ -89,9 +89,28 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             VPS {status?.gatewayOnline ? 'online' : 'offline'}
           </span>
         </div>
+        <div className="inline-flex items-center gap-1.5" title="BI Client / catalog">
+          <Dot ok={!!status?.biClientDataAvailable} warn={!!status?.fromCache && status?.biClientDataAvailable} />
+          <Database className="h-3.5 w-3.5 text-sky-400" />
+          <span className={status?.biClientDataAvailable ? 'text-sky-300' : 'text-slate-500'}>
+            BI Client {status?.biClientDataAvailable ? 'live' : '—'}
+          </span>
+        </div>
+        <div className="inline-flex items-center gap-1.5 text-slate-400">
+          <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+          <span>
+            Sync: <span className="text-slate-200">{syncLabel}</span>
+            <span className="text-slate-500"> · {intervalLabel}</span>
+          </span>
+        </div>
         {(companyName || status?.scoped?.companyName) && (
-          <span className="text-slate-500 truncate max-w-[200px]">
+          <span className="text-slate-500 truncate max-w-[160px]">
             {companyName || status?.scoped?.companyName}
+          </span>
+        )}
+        {status?.scoped && (
+          <span className="text-slate-500">
+            API {status.scoped.endpoints} · işgär {status.scoped.staff}
           </span>
         )}
       </div>

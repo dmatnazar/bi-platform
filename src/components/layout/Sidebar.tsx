@@ -15,11 +15,13 @@ import {
   UserCircle,
   Server,
   Database,
+  Wallet,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/lib/types';
 import { canManageStaff, canManageCompany, isSuperAdmin, isViewerOnly } from '@/lib/auth-client';
+import { BalanceBadge } from '@/components/billing/BalanceBadge';
 
 interface Props {
   user: SessionUser;
@@ -39,6 +41,9 @@ export function Sidebar({ user }: Props) {
             : []),
           ...(isSuperAdmin(user)
             ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
+            : []),
+          ...(isSuperAdmin(user)
+            ? [{ href: '/admin/billing', label: 'Tarif & Balans', icon: Wallet }]
             : []),
           ...(isSuperAdmin(user) || canManageCompany(user.role)
             ? [{ href: '/admin/devices', label: 'Enjamlar', icon: Server }]
@@ -102,24 +107,31 @@ export function Sidebar({ user }: Props) {
       </nav>
 
       <div className="border-t border-slate-800 p-3 space-y-1">
-        <Link
-          href="/profile"
-          onClick={() => setOpen(false)}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-colors',
-            pathname === '/profile'
-              ? 'bg-indigo-500/15 text-indigo-300'
-              : 'text-slate-300 hover:bg-slate-800/60'
-          )}
-        >
-          <UserCircle className="h-4 w-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium truncate text-sm">{user.fullName}</p>
-            <p className="text-[11px] text-slate-500 truncate">
-              @{user.username} · {user.role}
-            </p>
-          </div>
-        </Link>
+        <div className="flex items-center gap-1.5 px-1">
+          <Link
+            href="/profile"
+            onClick={() => setOpen(false)}
+            className={cn(
+              'flex flex-1 items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors min-w-0',
+              pathname === '/profile'
+                ? 'bg-indigo-500/15 text-indigo-300'
+                : 'text-slate-300 hover:bg-slate-800/60'
+            )}
+          >
+            <UserCircle className="h-4 w-4 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium truncate text-sm">{user.fullName}</p>
+              <p className="text-[11px] text-slate-500 truncate">
+                @{user.username} · {user.role}
+              </p>
+            </div>
+          </Link>
+          <BalanceBadge
+            companySlug={user.companySlug}
+            username={user.username}
+            role={user.role}
+          />
+        </div>
         <button
           onClick={logout}
           className="flex w-full items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-800/60 hover:text-rose-300 transition-colors"
@@ -133,18 +145,19 @@ export function Sidebar({ user }: Props) {
 
   return (
     <>
-      <div className="lg:hidden fixed top-0 inset-x-0 z-40 h-14 bg-slate-950/90 backdrop-blur border-b border-slate-800 flex items-center px-4 gap-3">
+      <div className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 bg-slate-950/90 backdrop-blur border-b border-slate-800 flex items-center px-4 gap-3">
         <button
           onClick={() => setOpen(true)}
           className="p-2 rounded-lg text-slate-300 hover:bg-slate-800"
         >
           <Menu className="h-5 w-5" />
         </button>
-        <span className="font-semibold text-sm">BI Platform <span className="text-[10px] font-normal text-slate-500">v1.0.0</span></span>
+        <span className="font-semibold text-sm flex-1">BI Platform <span className="text-[10px] font-normal text-slate-500">v1.0.0</span></span>
+        <BalanceBadge companySlug={user.companySlug} username={user.username} role={user.role} compact />
       </div>
 
       {open && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <div className="lg:hidden fixed inset-0 z-40 flex">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside className="relative w-72 max-w-[85vw] h-full bg-slate-900 border-r border-slate-800 flex flex-col shadow-2xl">
             <button

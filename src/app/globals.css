@@ -62,3 +62,62 @@ body {
 .animate-fade-in {
   animation: fade-in 0.35s ease-out both;
 }
+
+
+/* Login page animated orbs */
+@keyframes login-float-a {
+  0%, 100% { transform: translate(-10%, -20%) scale(1); }
+  50% { transform: translate(15%, 10%) scale(1.15); }
+}
+@keyframes login-float-b {
+  0%, 100% { transform: translate(20%, 30%) scale(1); }
+  50% { transform: translate(-25%, -10%) scale(1.2); }
+}
+@keyframes login-float-c {
+  0%, 100% { transform: translate(0%, 40%) scale(1); opacity: 0.5; }
+  50% { transform: translate(-15%, -15%) scale(1.1); opacity: 0.85; }
+}
+.login-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(64px);
+  will-change: transform;
+}
+.login-orb-a {
+  top: -10%;
+  left: 20%;
+  width: min(70vw, 520px);
+  height: min(70vw, 520px);
+  background: rgba(99, 102, 241, 0.55);
+  animation: login-float-a 14s ease-in-out infinite;
+}
+.login-orb-b {
+  bottom: -15%;
+  right: -5%;
+  width: min(60vw, 420px);
+  height: min(60vw, 420px);
+  background: rgba(139, 92, 246, 0.45);
+  animation: login-float-b 18s ease-in-out infinite;
+}
+.login-orb-c {
+  top: 40%;
+  left: -10%;
+  width: min(50vw, 360px);
+  height: min(50vw, 360px);
+  background: rgba(56, 189, 248, 0.32);
+  animation: login-float-c 16s ease-in-out infinite;
+}
+
+
+/* Shared animated background for all pages */
+.app-particles-wrap {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: #020617;
+}
+.app-particles-wrap .login-orb-a { opacity: 0.7; }
+.app-particles-wrap .login-orb-b { opacity: 0.65; }
+.app-particles-wrap .login-orb-c { opacity: 0.55; }

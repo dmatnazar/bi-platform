@@ -537,24 +537,27 @@ function TableWidgetBody({
             <div
               key={i}
               className={cn(
-                'rounded-lg border border-slate-800/80 bg-slate-900/50 px-2.5 py-2 space-y-0.5',
+                'rounded-lg border border-slate-800/80 bg-slate-900/50 px-2 py-1.5',
                 dd?.enabled && 'active:bg-indigo-500/10'
               )}
               onClick={() => {
                 if (dd?.enabled) openDrillDown(row);
               }}
             >
-              {visibleCols.slice(0, 6).map((c, j) => (
-                <div key={c} className="flex justify-between gap-2 text-[11px] leading-snug">
-                  <span className="text-slate-500 shrink-0 max-w-[40%] truncate">{c}</span>
-                  <span className={cn('text-right truncate text-slate-200', j === 0 && 'font-medium text-white')}>
+              {/* Column names hidden — values only, 2-row compact grid */}
+              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                {visibleCols.map((c, j) => (
+                  <div
+                    key={c}
+                    className={cn(
+                      'text-[11px] leading-snug min-w-0 break-words',
+                      j === 0 ? 'col-span-2 font-medium text-white text-sm' : 'text-slate-200'
+                    )}
+                  >
                     {String(row[c] ?? '—')}
-                  </span>
-                </div>
-              ))}
-              {visibleCols.length > 6 && (
-                <p className="text-[10px] text-slate-600">+{visibleCols.length - 6} sütün</p>
-              )}
+                  </div>
+                ))}
+              </div>
             </div>
           ))
         )}

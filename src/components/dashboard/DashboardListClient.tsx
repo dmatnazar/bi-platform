@@ -1,4 +1,5 @@
 'use client';
+import { ParticlesBackground } from '@/components/ParticlesBackground';
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -277,7 +278,9 @@ export function DashboardListClient({ initial, canEdit }: Props) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      <ParticlesBackground theme="dashboard" className="pointer-events-none absolute inset-0 -z-10 opacity-60" />
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Dashboardlar</h1>

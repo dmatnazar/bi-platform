@@ -4,8 +4,11 @@ import { useEffect, useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { BarChart3, CheckCircle2, Eye, EyeOff, AlertTriangle, Loader2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { ModalPortal } from '@/components/ui/ModalPortal';
+import { Plus, Building2 } from 'lucide-react';
 
 interface CompanyOpt {
   id: string;
@@ -25,6 +28,13 @@ type SubmitPhase =
 export default function RegisterPage() {
   const [companies, setCompanies] = useState<CompanyOpt[]>([]);
   const [tenantSlug, setTenantSlug] = useState('');
+  const [companyModal, setCompanyModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newSlug, setNewSlug] = useState('');
+  const [tariffs, setTariffs] = useState<{ id: string; name: string; priceMonthly: number; includedCredits: number; description?: string; code: string }[]>([]);
+  const [newTariffId, setNewTariffId] = useState('tariff_free');
+  const [creatingCompany, setCreatingCompany] = useState(false);
+  const [companyErr, setCompanyErr] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phoneLocal, setPhoneLocal] = useState('');
@@ -42,7 +52,63 @@ export default function RegisterPage() {
       .then((r) => r.json())
       .then((d) => setCompanies(d.companies || []))
       .catch(() => {});
+    fetch('/api/billing?action=tariffs')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d.tariffs || [];
+        setTariffs(list);
+        const free = list.find((t: any) => t.code === 'free');
+        if (free) setNewTariffId(free.id);
+      })
+      .catch(() => {});
   }, []);
+
+  function slugifyName(name: string) {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 60);
+  }
+
+  async function createCompany() {
+    setCompanyErr('');
+    if (!newName.trim() || !newSlug.trim()) {
+      setCompanyErr('Firma ady we slug gerek');
+      return;
+    }
+    setCreatingCompany(true);
+    try {
+      const res = await fetch('/api/public/create-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newName.trim(),
+          slug: newSlug.trim(),
+          tariffId: newTariffId || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCompanyErr(data.error || 'Döredip bolmady');
+        return;
+      }
+      const c = data.company;
+      setCompanies((prev) => {
+        if (prev.some((x) => x.slug === c.slug)) return prev;
+        return [...prev, { id: c.id, name: c.name, slug: c.slug }];
+      });
+      setTenantSlug(c.slug);
+      setCompanyModal(false);
+      setNewName('');
+      setNewSlug('');
+    } catch {
+      setCompanyErr('Baglanyşyk säwligi');
+    } finally {
+      setCreatingCompany(false);
+    }
+  }
 
   // Poll registration status after submit
   useEffect(() => {
@@ -127,7 +193,9 @@ export default function RegisterPage() {
   if (phase === 'approved' || phase === 'rejected' || phase === 'delivered' || phase === 'on_vps') {
     const ok = phase === 'approved' || phase === 'delivered';
     return (
-      <div className="min-h-dvh flex items-center justify-center px-4">
+      <div className="min-h-dvh flex relative items-center justify-center px-4">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950"><ParticlesBackground theme="login" className="absolute inset-0" /><div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgb(2_6_23)_75%)]" /></div>
+
         <div className="max-w-md w-full text-center space-y-4 animate-fade-in">
           <div
             className={`mx-auto h-16 w-16 rounded-full flex items-center justify-center ${
@@ -206,15 +274,115 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <Select
-            label="Kompaniýa"
-            name="tenantSlug"
-            value={tenantSlug}
-            onChange={(e) => setTenantSlug(e.target.value)}
-            placeholder="Kompaniýa saýlaň"
-            required
-            options={companies.map((c) => ({ value: c.slug, label: c.name }))}
-          />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-sm font-medium text-slate-300">Kompaniýa</label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCompanyErr('');
+                  setCompanyModal(true);
+                }}
+                className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Täze firma
+              </button>
+            </div>
+            <Select
+              name="tenantSlug"
+              value={tenantSlug}
+              onChange={(e) => setTenantSlug(e.target.value)}
+              placeholder="Kompaniýa saýlaň"
+              required
+              options={companies.map((c) => ({ value: c.slug, label: c.name }))}
+            />
+            <p className="text-[11px] text-slate-500">
+              Sanawda ýok bolsa «Täze firma» basyp goşuň (tarif saýlap bilersiňiz).
+            </p>
+          </div>
+
+          {companyModal && (
+            <ModalPortal open>
+              <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setCompanyModal(false)} />
+                <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-3 shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-indigo-400" />
+                    <h3 className="text-lg font-semibold text-white">Täze firma</h3>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Firma VPS-e ýazylýar. Tarif saýlaň — aýda şol mukdarda REQ berilýär. Galan balans soň
+                    top-up bilen doldurylýar.
+                  </p>
+                  {companyErr && (
+                    <div className="rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-sm px-3 py-2">
+                      {companyErr}
+                    </div>
+                  )}
+                  <Input
+                    label="Firma ady *"
+                    value={newName}
+                    onChange={(e) => {
+                      setNewName(e.target.value);
+                      setNewSlug(slugifyName(e.target.value));
+                    }}
+                    placeholder="Mysal: Acme LLC"
+                  />
+                  <Input
+                    label="Slug (URL) *"
+                    value={newSlug}
+                    onChange={(e) =>
+                      setNewSlug(
+                        e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9-]/g, '')
+                          .slice(0, 60)
+                      )
+                    }
+                    placeholder="acme-llc"
+                  />
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-300">Tarif</label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {(tariffs.length ? tariffs : [
+                        { id: 'tariff_free', code: 'free', name: 'Free', priceMonthly: 0, includedCredits: 500, description: 'Başlangyç' },
+                      ]).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setNewTariffId(t.id)}
+                          className={`w-full text-left rounded-xl border px-3 py-2.5 text-sm transition-colors ${
+                            newTariffId === t.id
+                              ? 'border-indigo-500 bg-indigo-500/10'
+                              : 'border-slate-700 bg-slate-950/80 hover:border-slate-600'
+                          }`}
+                        >
+                          <div className="flex justify-between gap-2">
+                            <span className="font-medium text-white">{t.name}</span>
+                            <span className="text-indigo-300 text-xs">
+                              {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} REQ/aý`}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Aýda {t.includedCredits?.toLocaleString?.() ?? t.includedCredits} REQ · {t.description || ''}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <Button className="flex-1" loading={creatingCompany} onClick={() => void createCompany()}>
+                      Firma döret
+                    </Button>
+                    <Button variant="ghost" type="button" onClick={() => setCompanyModal(false)}>
+                      Ýatyr
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </ModalPortal>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
