@@ -166,3 +166,12 @@ export function SqlCodeEditor({ value, onChange, height = '100%', autoFocus }: P
     </div>
   );
 }
+
+/** Warm CodeMirror CDN cache — safe to call many times */
+export function preloadSqlEditor() {
+  return ensureCodeMirror().catch(() => {});
+}
+
+if (typeof window !== 'undefined') {
+  void preloadSqlEditor();
+}

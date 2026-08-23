@@ -125,6 +125,15 @@ export interface WidgetDataSource {
   seriesField?: string;
   /** for table: which columns to show (empty = all) */
   columns?: string[];
+  /** Columns hidden in UI (ids used only for filters) */
+  hiddenColumns?: string[];
+  /** Footer aggregates: Sum/Count/Max shown under table */
+  tableAggregates?: Array<{
+    column: string;
+    fn: 'sum' | 'count' | 'max' | 'min';
+    label?: string;
+    suffix?: string;
+  }>;
   /**
    * Table default / fixed sort order (multi-column).
    * Applied client-side on fetched rows.
@@ -150,8 +159,19 @@ export interface WidgetDataSource {
     dbKey?: string;
     /** Also forward current global filter values (beginDate, endDate, …) */
     passGlobalFilters?: boolean;
-    /** Modal title, supports {value} and {field} */
+    /** Modal title, supports {value}, {field}, {columnName} */
     titleTemplate?: string;
+    /** Footer aggregates for drill-down table */
+    aggregates?: Array<{
+      column: string;
+      fn: 'sum' | 'count' | 'max' | 'min';
+      label?: string;
+      suffix?: string;
+    }>;
+    /** Hide columns in drill-down table (persisted) */
+    hiddenColumns?: string[];
+    /** Column order in drill-down (persisted) */
+    columnOrder?: string[];
   };
 }
 

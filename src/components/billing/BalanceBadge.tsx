@@ -30,7 +30,7 @@ interface WalletInfo {
 }
 
 function balanceColor(balance: number, threshold: number, level: string) {
-  if (level === 'empty' || balance <= 0) {
+  if (level === 'empty' /* REQ gutardy — tarif teklip */ || balance <= 0) {
     return { text: 'text-rose-400', bg: 'bg-rose-500/20', ring: 'ring-rose-500/40', bar: 'bg-rose-500' };
   }
   if (level === 'critical' || balance <= threshold * 0.25) {
@@ -43,9 +43,36 @@ function balanceColor(balance: number, threshold: number, level: string) {
 }
 
 /** 1 birlik gapda = 1 REQ (görkezmek üçin) */
-function fmtTmt(n: number | null | undefined) {
+function fmtReq(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return '—';
   return `${Number(n).toLocaleString('ru-RU')} REQ`;
+}
+
+/** 50 TMT = 500 REQ → 400 REQ = 40 TMT; Free → "Free" */
+function formatBalancePair(
+  balanceReq: number,
+  tariff?: { priceMonthly?: number; includedCredits?: number; code?: string; name?: string } | null
+): { primary: string; secondary: string } {
+  const reqStr = `${Number(balanceReq).toLocaleString('ru-RU')} REQ`;
+  const price = Number(tariff?.priceMonthly ?? 0);
+  const included = Number(tariff?.includedCredits ?? 0);
+  const isFree =
+    price <= 0 ||
+    (tariff?.code || '').toLowerCase() === 'free' ||
+    (tariff?.name || '').toLowerCase() === 'free';
+  if (isFree) {
+    return { primary: reqStr, secondary: 'Free' };
+  }
+  if (included > 0 && price > 0) {
+    const tmt = (balanceReq / included) * price;
+    const tmtStr = `${Math.round(tmt * 100) / 100} TMT`;
+    return { primary: reqStr, secondary: tmtStr };
+  }
+  return { primary: reqStr, secondary: '' };
+}
+
+function fmtTmt(n: number | null | undefined) {
+  return fmtReq(n);
 }
 
 function TariffCard({
@@ -149,7 +176,7 @@ export function BalanceBadge({
       if (data.wallet) {
         setWallet(data.wallet);
         const w = data.wallet as WalletInfo;
-        if (w.level === 'empty' || w.level === 'critical') {
+        if (w.level === 'empty' /* REQ gutardy — tarif teklip */ || w.level === 'critical') {
           try {
             const key = `bal-warn-${companySlug}-${w.level}`;
             const last = sessionStorage.getItem(key);
@@ -157,7 +184,7 @@ export function BalanceBadge({
             if (!last || now - Number(last) > 10 * 60 * 1000) {
               sessionStorage.setItem(key, String(now));
               toastWarning(
-                w.level === 'empty' ? 'Balans gutardy' : 'Balans critiki pes',
+                w.level === 'empty' /* REQ gutardy — tarif teklip */ ? 'Balans gutardy' : 'Balans critiki pes',
                 `${fmtTmt(w.balanceCredits)} galdy — top-up ýa-da tarif üýtgetme gerek bolup biler`
               );
             }
@@ -174,7 +201,7 @@ export function BalanceBadge({
 
   useEffect(() => {
     void load();
-    const t = setInterval(() => void load(), 30000);
+    const t = setInterval(() => void load(), 5000);
     return () => clearInterval(t);
   }, [load]);
 
@@ -262,18 +289,32 @@ export function BalanceBadge({
         className={`
           group flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-left transition-all duration-500
           ring-1 ${colors.ring} ${colors.bg} shadow-lg hover:brightness-110
-          ${wallet?.level === 'empty' || wallet?.level === 'critical' ? 'animate-pulse' : ''}
+          ${wallet?.level === 'empty' /* REQ gutardy — tarif teklip */ || wallet?.level === 'critical' ? 'animate-pulse' : ''}
         `}
       >
         <Wallet className={`h-3.5 w-3.5 shrink-0 ${colors.text}`} />
         <div className="min-w-0">
-          <p className={`text-xs font-semibold tabular-nums leading-tight ${colors.text}`}>
-            {bal == null ? '…' : Number(bal).toLocaleString('ru-RU')}
-            <span className="font-medium opacity-80 text-[10px] ml-0.5">REQ</span>
-          </p>
-          {!compact && wallet?.tariff && (
-            <p className="text-[9px] text-slate-500 truncate max-w-[88px] leading-tight">{wallet.tariff.name}</p>
-          )}
+          {(() => {
+            const pair =
+              bal == null
+                ? { primary: '…', secondary: '' }
+                : formatBalancePair(bal, wallet?.tariff);
+            return (
+              <>
+                <p className={`text-xs font-semibold tabular-nums leading-tight ${colors.text}`}>
+                  {pair.primary}
+                  {pair.secondary ? (
+                    <span className="font-medium opacity-80 text-[10px]"> / {pair.secondary}</span>
+                  ) : null}
+                </p>
+                {!compact && wallet?.tariff && (
+                  <p className="text-[9px] text-slate-500 truncate max-w-[100px] leading-tight">
+                    {wallet.tariff.name}
+                  </p>
+                )}
+              </>
+            );
+          })()}
         </div>
       </button>
 
@@ -295,7 +336,16 @@ export function BalanceBadge({
               {/* Balance */}
               <div className={`rounded-xl border border-slate-700/80 p-4 ${colors.bg}`}>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">Firmanyň gapy</p>
-                <p className={`text-3xl font-bold tabular-nums text-center mt-1 ${colors.text}`}>{fmtTmt(bal)}</p>
+                <p className={`text-3xl font-bold tabular-nums text-center mt-1 ${colors.text}`}>
+                  {bal == null
+                    ? '—'
+                    : formatBalancePair(bal, wallet?.tariff).primary}
+                </p>
+                {bal != null && formatBalancePair(bal, wallet?.tariff).secondary && (
+                  <p className="text-center text-sm text-slate-400 mt-1">
+                    ≈ {formatBalancePair(bal, wallet?.tariff).secondary}
+                  </p>
+                )}
                 {wallet?.warning && (
                   <p className="mt-2 text-xs text-center text-amber-300 flex items-center justify-center gap-1">
                     <AlertTriangle className="h-3.5 w-3.5" />

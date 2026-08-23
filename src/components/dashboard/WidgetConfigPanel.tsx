@@ -42,6 +42,7 @@ export function WidgetConfigPanel({
 }: Props) {
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
   const [sampleColumns, setSampleColumns] = useState<string[]>([]);
+  const [drillSampleColumns, setDrillSampleColumns] = useState<string[]>([]);
   const ds = widget.dataSource;
 
   useEffect(() => {
@@ -93,6 +94,48 @@ export function WidgetConfigPanel({
       cancelled = true;
     };
   }, [ds?.tenantSlug, ds?.path, ds?.method, ds?.dbKey, ds?.endpointId]);
+  // Probe drill-down (child) API for aggregate column list
+  useEffect(() => {
+    const dd = ds?.drillDown;
+    if (!dd?.enabled || !dd.path || !dd.tenantSlug) {
+      setDrillSampleColumns([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/gateway/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tenantSlug: dd.tenantSlug,
+            path: dd.path,
+            method: dd.method || 'GET',
+            dbKey: dd.dbKey || ds?.dbKey || 'primary',
+            params: {},
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        const rows: Record<string, unknown>[] = Array.isArray(data.rows)
+          ? data.rows
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+        if (cancelled) return;
+        if (rows[0] && typeof rows[0] === 'object') {
+          setDrillSampleColumns(Object.keys(rows[0]));
+        } else {
+          setDrillSampleColumns([]);
+        }
+      } catch {
+        if (!cancelled) setDrillSampleColumns([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ds?.drillDown?.enabled, ds?.drillDown?.path, ds?.drillDown?.tenantSlug, ds?.drillDown?.method, ds?.dbKey]);
+
 
   const selectedEp = useMemo(
     () => endpoints.find((e) => e.id === ds?.endpointId),
@@ -634,6 +677,7 @@ export function WidgetConfigPanel({
       {widget.type === 'table' && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
           <p className="text-xs font-semibold text-slate-300">Tablo sazlamalary</p>
+
           <Input
             label="Sütünler (csv)"
             value={(ds?.columns || []).join(', ')}
@@ -646,6 +690,38 @@ export function WidgetConfigPanel({
             }}
             placeholder="id, name, total"
           />
+
+          {sampleColumns.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-[11px] font-medium text-slate-400">
+                Görünýän columnlar (filter-only id-leri öçüriň)
+              </label>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/60 p-2 space-y-1">
+                {sampleColumns.map((col) => {
+                  const hidden = (ds?.hiddenColumns || []).includes(col);
+                  return (
+                    <label
+                      key={col}
+                      className="flex items-center gap-2 text-xs text-slate-300 px-1 py-0.5 hover:bg-slate-800/50 rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!hidden}
+                        onChange={(e) => {
+                          const cur = new Set(ds?.hiddenColumns || []);
+                          if (e.target.checked) cur.delete(col);
+                          else cur.add(col);
+                          patchDs({ hiddenColumns: [...cur] });
+                        }}
+                      />
+                      <span className={hidden ? 'text-slate-600 line-through' : 'font-mono'}>{col}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <Input
             label="Order by (field:asc, field2:desc)"
             value={(ds?.orderBy || []).map((o) => `${o.field}:${o.dir}`).join(', ')}
@@ -666,6 +742,7 @@ export function WidgetConfigPanel({
             }}
             placeholder="total:desc, name:asc"
           />
+
           <label className="flex items-center gap-2 text-xs text-slate-300">
             <input
               type="checkbox"
@@ -675,6 +752,131 @@ export function WidgetConfigPanel({
             />
             Gözleg gutusyny görkez
           </label>
+
+          <div className="space-y-2 pt-2 border-t border-slate-800">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-medium text-slate-400">Aşaky jemi (Sum / Count / Max)</p>
+              <button
+                type="button"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                onClick={() => {
+                  const cols = sampleColumns.length ? sampleColumns : (ds?.columns || []);
+                  const col = cols[0] || '';
+                  patchDs({
+                    tableAggregates: [
+                      ...(ds?.tableAggregates || []),
+                      { column: col, fn: 'sum', label: col || 'Jemi', suffix: '' },
+                    ],
+                  });
+                }}
+              >
+                + Aggregate
+              </button>
+            </div>
+            {(ds?.tableAggregates || []).map((a, i) => (
+              <div key={i} className="grid grid-cols-2 gap-1.5 rounded-lg border border-slate-800 p-2">
+                <select
+                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2"
+                  value={a.column}
+                  onChange={(e) => {
+                    const next = [...(ds?.tableAggregates || [])];
+                    next[i] = { ...next[i], column: e.target.value };
+                    patchDs({ tableAggregates: next });
+                  }}
+                >
+                  <option value="">— column saýla —</option>
+                  {(sampleColumns.length ? sampleColumns : [a.column].filter(Boolean)).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <input
+                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2 font-mono"
+                  placeholder="Ýa-da column adyny ýazyň (Jemi bahasy)"
+                  value={a.column}
+                  onChange={(e) => {
+                    const next = [...(ds?.tableAggregates || [])];
+                    next[i] = { ...next[i], column: e.target.value };
+                    patchDs({ tableAggregates: next });
+                  }}
+                />
+                <select
+                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white"
+                  value={a.fn}
+                  onChange={(e) => {
+                    const next = [...(ds?.tableAggregates || [])];
+                    next[i] = { ...next[i], fn: e.target.value as 'sum' | 'count' | 'max' | 'min' };
+                    patchDs({ tableAggregates: next });
+                  }}
+                >
+                  <option value="sum">Sum</option>
+                  <option value="count">Count</option>
+                  <option value="max">Max</option>
+                  <option value="min">Min</option>
+                </select>
+                <input
+                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white"
+                  placeholder="Suffix (TMT)"
+                  value={a.suffix || ''}
+                  onChange={(e) => {
+                    const next = [...(ds?.tableAggregates || [])];
+                    next[i] = { ...next[i], suffix: e.target.value };
+                    patchDs({ tableAggregates: next });
+                  }}
+                />
+                <input
+                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2"
+                  placeholder="Label (Jemi bahasy)"
+                  value={a.label || ''}
+                  onChange={(e) => {
+                    const next = [...(ds?.tableAggregates || [])];
+                    next[i] = { ...next[i], label: e.target.value };
+                    patchDs({ tableAggregates: next });
+                  }}
+                />
+                <div className="col-span-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-[10px] text-slate-400"
+                    disabled={i === 0}
+                    onClick={() => {
+                      const next = [...(ds?.tableAggregates || [])];
+                      if (i <= 0) return;
+                      [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                      patchDs({ tableAggregates: next });
+                    }}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[10px] text-slate-400"
+                    disabled={i >= (ds?.tableAggregates || []).length - 1}
+                    onClick={() => {
+                      const next = [...(ds?.tableAggregates || [])];
+                      if (i >= next.length - 1) return;
+                      [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                      patchDs({ tableAggregates: next });
+                    }}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[10px] text-rose-400"
+                    onClick={() => {
+                      const next = (ds?.tableAggregates || []).filter((_, j) => j !== i);
+                      patchDs({ tableAggregates: next.length ? next : undefined });
+                    }}
+                  >
+                    Poz
+                  </button>
+                </div>
+              </div>
+            ))}
+            <p className="text-[10px] text-slate-500">
+              Mysal: <span className="text-slate-400">Jemi bahasy : 14225.33 TMT</span>
+            </p>
+          </div>
         </div>
       )}
 
@@ -790,6 +992,204 @@ export function WidgetConfigPanel({
                 }
                 placeholder="Faktura #{value}"
               />
+              {sampleColumns.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] text-slate-500">Title-e column goş (basylan setirden):</p>
+                  <div className="flex flex-wrap gap-1">
+                    {sampleColumns.map((col) => (
+                      <button
+                        key={col}
+                        type="button"
+                        className="px-1.5 py-0.5 rounded-md border border-slate-700 text-[10px] font-mono text-slate-300 hover:border-indigo-500/50"
+                        onClick={() => {
+                          const cur = ds.drillDown?.titleTemplate || '';
+                          const token = `{${col}}`;
+                          patchDs({
+                            drillDown: {
+                              ...ds.drillDown!,
+                              titleTemplate: cur.includes(token)
+                                ? cur
+                                : (cur ? `${cur} ${token}` : token).trim(),
+                            },
+                          });
+                        }}
+                      >
+                        {`{${col}}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-2 pt-2 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-medium text-slate-400">Drill-down jemi (Sum/Count)</p>
+                  <button
+                    type="button"
+                    className="text-[11px] text-indigo-400"
+                    onClick={() => {
+                      const cols = sampleColumns.length ? sampleColumns : [];
+                      patchDs({
+                        drillDown: {
+                          ...ds.drillDown!,
+                          aggregates: [
+                            ...(ds.drillDown?.aggregates || []),
+                            { column: cols[0] || '', fn: 'sum', label: cols[0] || 'Jemi', suffix: '' },
+                          ],
+                        },
+                      });
+                    }}
+                  >
+                    + Aggregate
+                  </button>
+                </div>
+                {(ds.drillDown?.aggregates || []).map((a, i) => (
+                  <div key={i} className="grid grid-cols-2 gap-1.5 rounded-lg border border-slate-800 p-2">
+                    <select
+                      className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2"
+                      value={a.column}
+                      onChange={(e) => {
+                        const next = [...(ds.drillDown?.aggregates || [])];
+                        next[i] = { ...next[i], column: e.target.value };
+                        patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                      }}
+                    >
+                      <option value="">— column saýla —</option>
+                      {(drillSampleColumns.length
+                        ? drillSampleColumns
+                        : sampleColumns.length
+                          ? sampleColumns
+                          : [a.column].filter(Boolean)
+                      ).map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                    <input
+                      className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2 font-mono"
+                      placeholder="Ýa-da column adyny ýazyň"
+                      value={a.column}
+                      onChange={(e) => {
+                        const next = [...(ds.drillDown?.aggregates || [])];
+                        next[i] = { ...next[i], column: e.target.value };
+                        patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                      }}
+                    />
+                    <select
+                      className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white"
+                      value={a.fn}
+                      onChange={(e) => {
+                        const next = [...(ds.drillDown?.aggregates || [])];
+                        next[i] = { ...next[i], fn: e.target.value as 'sum' | 'count' | 'max' | 'min' };
+                        patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                      }}
+                    >
+                      <option value="sum">Sum</option>
+                      <option value="count">Count</option>
+                      <option value="max">Max</option>
+                      <option value="min">Min</option>
+                    </select>
+                    <input
+                      className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white"
+                      placeholder="Suffix"
+                      value={a.suffix || ''}
+                      onChange={(e) => {
+                        const next = [...(ds.drillDown?.aggregates || [])];
+                        next[i] = { ...next[i], suffix: e.target.value };
+                        patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                      }}
+                    />
+                    <input
+                      className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2"
+                      placeholder="Label"
+                      value={a.label || ''}
+                      onChange={(e) => {
+                        const next = [...(ds.drillDown?.aggregates || [])];
+                        next[i] = { ...next[i], label: e.target.value };
+                        patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                      }}
+                    />
+                    <div className="col-span-2 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="text-[10px] text-slate-400"
+                        disabled={i === 0}
+                        onClick={() => {
+                          const next = [...(ds.drillDown?.aggregates || [])];
+                          if (i <= 0) return;
+                          [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                          patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                        }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10px] text-slate-400"
+                        disabled={i >= (ds.drillDown?.aggregates || []).length - 1}
+                        onClick={() => {
+                          const next = [...(ds.drillDown?.aggregates || [])];
+                          if (i >= next.length - 1) return;
+                          [next[i], next[i + 1]] = [next[i + 1], next[i]];
+                          patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
+                        }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[10px] text-rose-400"
+                        onClick={() => {
+                          const next = (ds.drillDown?.aggregates || []).filter((_, j) => j !== i);
+                          patchDs({
+                            drillDown: {
+                              ...ds.drillDown!,
+                              aggregates: next.length ? next : undefined,
+                            },
+                          });
+                        }}
+                      >
+                        Poz
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {(drillSampleColumns.length > 0 || sampleColumns.length > 0) && (
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <p className="text-[11px] font-medium text-slate-400">
+                    Drill-down görünýän columnlar
+                  </p>
+                  <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-800 bg-slate-950/60 p-2 space-y-1">
+                    {(drillSampleColumns.length ? drillSampleColumns : sampleColumns).map((col) => {
+                      const hidden = (ds.drillDown?.hiddenColumns || []).includes(col);
+                      return (
+                        <label
+                          key={col}
+                          className="flex items-center gap-2 text-xs text-slate-300 px-1 py-0.5 hover:bg-slate-800/50 rounded"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!hidden}
+                            onChange={(e) => {
+                              const cur = new Set(ds.drillDown?.hiddenColumns || []);
+                              if (e.target.checked) cur.delete(col);
+                              else cur.add(col);
+                              patchDs({
+                                drillDown: {
+                                  ...ds.drillDown!,
+                                  hiddenColumns: [...cur],
+                                },
+                              });
+                            }}
+                          />
+                          <span className={hidden ? 'text-slate-600 line-through' : 'font-mono'}>{col}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <label className="flex items-center gap-2 text-xs text-slate-300">
                 <input
                   type="checkbox"

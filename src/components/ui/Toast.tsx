@@ -64,9 +64,9 @@ export function ToastHost() {
         return (
           <div
             key={t.id}
-            className={`pointer-events-auto rounded-xl border ${st.border} ${st.bg} backdrop-blur-md shadow-xl px-3.5 py-3 flex gap-3`}
+            className={`bg-slate-950/98 shadow-2xl pointer-events-auto rounded-xl border ${st.border} ${st.bg} backdrop-blur-md shadow-xl px-3.5 py-3 flex gap-3`}
           >
-            <Icon className={`h-4.5 w-4.5 ${st.ic} shrink-0 mt-0.5`} />
+            <Icon className={`bg-slate-950/98 shadow-2xl h-4.5 w-4.5 ${st.ic} shrink-0 mt-0.5`} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-white">{t.title}</p>
               {t.message && <p className="text-xs text-slate-400 mt-0.5 whitespace-pre-wrap">{t.message}</p>}

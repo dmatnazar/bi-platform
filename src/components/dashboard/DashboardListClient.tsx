@@ -1,7 +1,7 @@
 'use client';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Dashboard, DashboardExportPayload, DashboardWidget } from '@/lib/types';
@@ -48,6 +48,18 @@ export function DashboardListClient({ initial, canEdit }: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState(initial);
+
+  // Soft restore: if user navigates back to /dashboards list after viewing one, keep list;
+  // deep-links already open /dashboards/[id]. Remember last id for "soňky" badge only.
+  useEffect(() => {
+    try {
+      const last = sessionStorage.getItem('bi-last-dashboard-id');
+      if (last) setLastId(last);
+    } catch {
+      /* */
+    }
+  }, []);
+  const [lastId, setLastId] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [menuId, setMenuId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<Dashboard | null>(null);

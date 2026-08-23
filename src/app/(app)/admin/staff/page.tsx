@@ -90,7 +90,7 @@ export default function StaffPage() {
         list.filter(
           (row: StaffRow) =>
             (meId ? row.id !== meId : true) &&
-            (meUsername ? row.username?.toLowerCase() !== meUsername.toLowerCase() : true)
+            true // login bolan işgär hem sanawda görünsin
         )
       );
       setRegs(r.registrations || []);

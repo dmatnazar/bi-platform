@@ -66,6 +66,34 @@ export function DashboardView({ initial, editable }: Props) {
   const [filterValues, setFilterValues] = useState<GlobalFilterValues>(() =>
     defaultFilterValues(initial.globalFilters || [])
   );
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
+
+  // Load saved filters AFTER mount (avoid SSR hydration mismatch on "N aktif")
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`bi-dash-filters:${initial.id}`);
+      if (raw) {
+        const saved = JSON.parse(raw) as GlobalFilterValues;
+        setFilterValues((prev) => ({ ...prev, ...saved }));
+      }
+    } catch {
+      /* */
+    }
+    setFiltersHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial.id]);
+
+  // Remember last-used filters for this dashboard (only after hydrate)
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    try {
+      localStorage.setItem(`bi-dash-filters:${dashboard.id}`, JSON.stringify(filterValues));
+      sessionStorage.setItem('bi-last-dashboard-id', dashboard.id);
+      sessionStorage.setItem('bi-last-dashboard-path', `/dashboards/${dashboard.id}`);
+    } catch {
+      /* */
+    }
+  }, [dashboard.id, filterValues, filtersHydrated]);
 
   // when filter defs change (e.g. suggested), seed missing defaults
   const effectiveFilterValues = useMemo(() => {

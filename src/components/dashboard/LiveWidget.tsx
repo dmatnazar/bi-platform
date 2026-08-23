@@ -152,7 +152,18 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {} }
   ]);
 
   const displayRows = useMemo(
-    () => filterRowsByGlobalSearch(rows, searchQuery),
+    () => {
+      let r = filterRowsByGlobalSearch(rows, searchQuery);
+      const hide = ds?.hiddenColumns || [];
+      if (hide.length && r?.length) {
+        r = r.map((row) => {
+          const o = { ...row };
+          for (const h of hide) delete o[h];
+          return o;
+        });
+      }
+      return r;
+    },
     [rows, searchQuery]
   );
 

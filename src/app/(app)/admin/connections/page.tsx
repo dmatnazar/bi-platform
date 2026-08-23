@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Database, Plus, Pencil, Trash2, RefreshCw, Server, Activity } from 'lucide-react';
+import { Database, Plus, Pencil, Trash2, RefreshCw, Server, Activity, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Input } from '@/components/ui/Input';
@@ -32,13 +32,6 @@ interface TenantOpt {
   name: string;
 }
 
-const DB_TYPES = [
-  { value: 'mssql', label: 'Microsoft SQL Server', port: 1433, ready: true },
-  { value: 'postgresql', label: 'PostgreSQL (ýakynada)', port: 5432, ready: false },
-  { value: 'mongodb', label: 'MongoDB (ýakynada)', port: 27017, ready: false },
-  { value: 'excel', label: 'MS Excel (ýakynada)', port: 0, ready: false },
-] as const;
-
 const emptyForm = {
   tenantSlug: '',
   label: '',
@@ -50,7 +43,6 @@ const emptyForm = {
   encrypt: true,
   trustServerCertificate: true,
   isPrimary: false,
-  dbType: 'mssql' as string,
 };
 
 export default function ConnectionsPage() {
@@ -60,9 +52,8 @@ export default function ConnectionsPage() {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<ConnRow | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
+  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [dbList, setDbList] = useState<string[]>([]);
-  const [loadingDbs, setLoadingDbs] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,14 +116,13 @@ export default function ConnectionsPage() {
     setForm({
       ...emptyForm,
       tenantSlug: tenants[0]?.slug || '',
-      dbType: 'mssql',
     });
-    setDbList([]);
     setModal(true);
   }
 
   function openEdit(c: ConnRow) {
     setEditing(c);
+    setShowPassword(false);
     setForm({
       tenantSlug: c.tenantSlug,
       label: c.label || c.dbKey,
@@ -144,64 +134,8 @@ export default function ConnectionsPage() {
       encrypt: c.encrypt !== false,
       trustServerCertificate: c.trustServerCertificate !== false,
       isPrimary: Boolean(c.isPrimary),
-      dbType: (c as any).dbType || 'mssql',
     });
-    setDbList(c.database ? [c.database] : []);
     setModal(true);
-  }
-
-  async function fetchDatabases() {
-    if (!form.tenantSlug) {
-      toastError('Firma gerek', 'Ilki firma saýlaň');
-      return;
-    }
-    if (form.dbType !== 'mssql') {
-      toastError('Goldanmaýar', 'Häzirlikçe diňe MSSQL üçin database sanawy elýeterli');
-      return;
-    }
-    // Existing connection: use test-query through agent
-    if (!editing?.id && !form.host.trim()) {
-      toastError('Host gerek', 'Host / username dolduryň');
-      return;
-    }
-    setLoadingDbs(true);
-    try {
-      const res = await fetch('/api/admin-test-query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenantSlug: form.tenantSlug,
-          dbKey: editing?.dbKey || 'primary',
-          sqlQuery:
-            "SELECT name FROM sys.databases WHERE state = 0 AND name NOT IN ('master','tempdb','model','msdb') ORDER BY name",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toastError(
-          'Database sanawy alynmady',
-          data.error ||
-            'Baglanyşyk heniz saklanmadyk ýa-da device offline. Ilki saklap, soňra barlaň.'
-        );
-        return;
-      }
-      const rows = (data.rows || []) as { name?: string }[];
-      const names = rows.map((r) => r.name).filter(Boolean) as string[];
-      if (names.length === 0) {
-        toastError('Database ýok', 'Serwerde elýeterli database tapylmady');
-        setDbList([]);
-        return;
-      }
-      setDbList(names);
-      if (!form.database && names[0]) {
-        setForm((f) => ({ ...f, database: names[0] }));
-      }
-      toastSuccess('Database-ler', `${names.length} sany tapyldy`);
-    } catch (e) {
-      toastError('Database sanawy', String(e));
-    } finally {
-      setLoadingDbs(false);
-    }
   }
 
   async function save() {
@@ -226,7 +160,6 @@ export default function ConnectionsPage() {
           encrypt: form.encrypt,
           trustServerCertificate: form.trustServerCertificate,
           isPrimary: form.isPrimary,
-          dbType: form.dbType || 'mssql',
         }),
       });
       const data = await res.json();
@@ -406,31 +339,6 @@ export default function ConnectionsPage() {
               options={tenants.map((t) => ({ value: t.slug, label: `${t.name} (${t.slug})` }))}
               disabled={!!editing}
             />
-            <div className="space-y-1.5">
-              <label className="text-xs text-slate-400">Database görnüşi</label>
-              <select
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500/50"
-                value={form.dbType}
-                onChange={(e) => {
-                  const t = DB_TYPES.find((d) => d.value === e.target.value);
-                  setForm((f) => ({
-                    ...f,
-                    dbType: e.target.value,
-                    port: t && t.port ? t.port : f.port,
-                  }));
-                  setDbList([]);
-                }}
-              >
-                {DB_TYPES.map((d) => (
-                  <option key={d.value} value={d.value} disabled={!d.ready}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-              {form.dbType !== 'mssql' && (
-                <p className="text-[11px] text-amber-400/90">Bu görnüş ýakynada goşular — häzir diňe MSSQL işjeň.</p>
-              )}
-            </div>
             <Input
               label="Label"
               value={form.label}
@@ -450,52 +358,39 @@ export default function ConnectionsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 1433 }))}
               />
             </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <label className="text-xs text-slate-400">Database</label>
-                <button
-                  type="button"
-                  onClick={() => void fetchDatabases()}
-                  disabled={loadingDbs}
-                  className="text-[11px] px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 hover:bg-sky-500/25 disabled:opacity-50"
-                >
-                  {loadingDbs ? 'Barlanýar…' : 'Database-leri barla'}
-                </button>
-              </div>
-              {dbList.length > 0 ? (
-                <select
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-1 focus:ring-indigo-500/50"
-                  value={form.database}
-                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
-                >
-                  <option value="">— saýlaň —</option>
-                  {dbList.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  value={form.database}
-                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
-                  placeholder="Ilki maglumatlary dolduryň, soň «Database-leri barla»"
-                />
-              )}
-              <p className="text-[10px] text-slate-500">
-                Host, username, password dolduryp saklaň → soňra «Database-leri barla» bilen bar bolan DB-lerden saýlaň.
-              </p>
-            </div>
             <Input
               label="Username"
               value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
             />
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400">
+                {editing ? 'Password (boş = öňki saklanar)' : 'Password'}
+              </label>
+              <div className="relative">
+                <input
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 pr-10 text-sm text-white"
+                  type={showPassword ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  autoComplete="new-password"
+                  placeholder={editing && (editing as any).hasPassword ? '••••••••' : ''}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
             <Input
-              label={editing ? 'Password (boş = üýtgetme)' : 'Password'}
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              label="Database"
+              value={form.database}
+              onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+              placeholder="Maglumat bazasynyň ady"
             />
             <label className="flex items-center justify-between text-sm text-slate-200">
               <span>Encrypt</span>

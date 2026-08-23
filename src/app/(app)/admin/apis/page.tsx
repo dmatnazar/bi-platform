@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2 } from 'lucide-react';
+import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
 import { formatDate } from '@/lib/utils';
 import { toastSuccess, toastInfo, toastError } from '@/components/ui/Toast';
+import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { buildFullApiUrl } from '@/lib/api-url';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { SqlCodeEditor } from '@/components/sql/SqlCodeEditor';
+import { SqlCodeEditor, preloadSqlEditor } from '@/components/sql/SqlCodeEditor';
 
 interface Endpoint {
   id: string;
@@ -81,7 +82,6 @@ export default function ApisPage() {
   const [editDbKey, setEditDbKey] = useState('primary');
   const [editCache, setEditCache] = useState(0);
   const [editAuth, setEditAuth] = useState(true);
-  const [sqlStudio, setSqlStudio] = useState(false);
   const [isCreate, setIsCreate] = useState(false);
   type ParamRow = { name: string; type: string; required: boolean; source: 'query' | 'url' | 'body' };
   const [editParams, setEditParams] = useState<ParamRow[]>([]);
@@ -95,15 +95,70 @@ export default function ApisPage() {
     elapsedMs?: number;
     error?: string;
   } | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+
+
+  function pathFromName(name: string) {
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    return slug ? `/${slug}` : '/';
+  }
+
+  function pathConflict(path: string, method: string, excludeId?: string) {
+    const norm = (path || '').replace(/\/+$/, '') || '/';
+    return endpoints.find(
+      (e) =>
+        e.id !== excludeId &&
+        (e.method || 'GET').toUpperCase() === (method || 'GET').toUpperCase() &&
+        ((e.pathTemplate || '').replace(/\/+$/, '') || '/') === norm &&
+        e.tenantSlug === (editTenantSlug || editEp?.tenantSlug)
+    );
+  }
+
+
+  function extractSqlParamNames(sql: string): string[] {
+    const found = [...(sql || '').matchAll(/@([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
+    // also :name style
+    const pathStyle = [...(sql || '').matchAll(/(?:^|[^:\w]):([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
+    return [...new Set([...found, ...pathStyle])];
+  }
+
+  function autoCompleteParams() {
+    const next = mergeParamsFromSql(editSql, editParams);
+    const added = next.length - editParams.length;
+    setEditParams(next);
+    toastSuccess('Auto params', added > 0 ? `${added} parametr goşuldy` : 'Täze ýok / eýýäm doly');
+  }
+
+  function mergeParamsFromSql(sql: string, current: ParamRow[]): ParamRow[] {
+    const names = extractSqlParamNames(sql);
+    if (!names.length) return current;
+    const existing = new Set(current.map((p) => p.name.trim().toLowerCase()).filter(Boolean));
+    const next = [...current];
+    for (const name of names) {
+      if (existing.has(name.toLowerCase())) continue;
+      next.push({ name, type: 'string', required: false, source: 'query' });
+      existing.add(name.toLowerCase());
+    }
+    return next;
+  }
 
   function openEdit(e: Endpoint) {
-    setSqlStudio(false);
+    void preloadSqlEditor();
     setIsCreate(false);
     setEditEp(e);
     setEditName(e.name);
     setEditPath(e.pathTemplate);
     setEditMethod(e.method);
     setEditSql(e.sqlQuery || '');
+    setEditParams((prev) => {
+      const rows: ParamRow[] = [];
+      // existing parse happens below; merge after
+      return prev;
+    });
     setEditDbKey(e.dbKey || 'primary');
     setEditCache(e.cacheTtlSec || 0);
     setEditAuth(e.authRequired !== false);
@@ -126,12 +181,13 @@ export default function ApisPage() {
         }
       }
     }
-    setEditParams(rows);
+    setEditParams(mergeParamsFromSql(e.sqlQuery || '', rows));
     setExecResult(null);
+    try { document.body.style.overflow = 'hidden'; } catch { /* */ }
   }
 
   function openCreate() {
-    setSqlStudio(false);
+    void preloadSqlEditor();
     setIsCreate(true);
     const slug = tenants[0]?.slug || '';
     setEditEp({
@@ -149,6 +205,7 @@ export default function ApisPage() {
     setEditPath('/report');
     setEditMethod('GET');
     setEditSql('SELECT 1 AS ok');
+    // params empty for new
     setEditDbKey('primary');
     setEditCache(0);
     setEditAuth(true);
@@ -159,13 +216,30 @@ export default function ApisPage() {
 
   function closeEdit() {
     setEditEp(null);
-    setSqlStudio(false);
     setExecResult(null);
+    setShowResultModal(false);
     setIsCreate(false);
+    try { document.body.style.overflow = ''; } catch { /* */ }
   }
 
   async function saveEdit() {
     if (!editEp) return;
+    if (!(editName || '').trim()) {
+      toastError('At gerek', 'API adyny ýazyň');
+      return;
+    }
+    if (!(editPath || '').trim() || editPath === '/') {
+      toastError('Path gerek', 'Path dolduryň');
+      return;
+    }
+    const conflict = pathConflict(editPath, editMethod, isCreate ? undefined : editEp.id);
+    if (conflict) {
+      toastError(
+        'Path eýýäm bar',
+        `«${conflict.name}» bilen birmeňzeş: ${editMethod} ${editPath}\nPath ýa-da method üýtgetiň.`
+      );
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/endpoints', {
@@ -207,11 +281,51 @@ export default function ApisPage() {
         return;
       }
       toastSuccess(isCreate ? 'API goşuldy' : 'API üýtgedildi', 'VPS-e ýazyldy · Electron catalog-dan görer');
-      setEditEp(null);
+      closeEdit();
       await load(true);
     } finally {
       setSaving(false);
     }
+  }
+
+
+  function sqlCopy() {
+    void navigator.clipboard.writeText(editSql || '');
+    toastSuccess('SQL göçürildi');
+  }
+  async function sqlPaste() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setEditSql((prev) => (prev ? prev + (prev.endsWith('\n') ? '' : '\n') + text : text));
+      toastSuccess('Paste');
+    } catch {
+      toastError('Clipboard', 'Brauzer paste rugsady gerek');
+    }
+  }
+  function sqlCut() {
+    void navigator.clipboard.writeText(editSql || '');
+    setEditSql('');
+    toastSuccess('Cut');
+  }
+  function sqlClear() {
+    setEditSql('');
+  }
+  function sqlBeautify() {
+    let s = editSql || '';
+    // simple SQL beautify
+    s = s.replace(/\s+/g, ' ').trim();
+    const keywords = [
+      'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
+      'JOIN', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'INSERT INTO', 'VALUES',
+      'UPDATE', 'SET', 'DELETE FROM', 'UNION', 'LIMIT', 'OFFSET',
+    ];
+    for (const kw of keywords) {
+      const re = new RegExp('\\b' + kw.replace(' ', '\\s+') + '\\b', 'gi');
+      s = s.replace(re, '\n' + kw);
+    }
+    s = s.replace(/,\s*/g, ',\n  ');
+    setEditSql(s.trim() + '\n');
+    toastSuccess('Beautify');
   }
 
   async function executeSql() {
@@ -234,6 +348,7 @@ export default function ApisPage() {
       const data = await res.json();
       if (!res.ok) {
         setExecResult({ ok: false, error: data.error || 'şowsuz' });
+        setShowResultModal(true);
         toastError('Execute şowsuz', data.error);
         return;
       }
@@ -243,6 +358,7 @@ export default function ApisPage() {
         rowCount: data.rowCount ?? (data.rows?.length || 0),
         elapsedMs: data.elapsedMs,
       });
+      setShowResultModal(true);
       toastSuccess('Execute OK', `${data.rowCount ?? data.rows?.length ?? 0} setir`);
     } catch (e: any) {
       setExecResult({ ok: false, error: String(e) });
@@ -253,7 +369,13 @@ export default function ApisPage() {
   }
 
   async function deleteEp(e: Endpoint) {
-    if (!confirm(`«${e.name}» (${e.method} ${e.pathTemplate}) pozulsynmy?`)) return;
+    const ok = await confirmDialog({
+      title: 'API pozulsynmy?',
+      message: `«${e.name}»\n${e.method} ${e.pathTemplate}\n\nBu amal yzyna alynmaýar. VPS-den hem öçüriler.`,
+      confirmLabel: 'Hawa, poz',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch('/api/endpoints', {
         method: 'DELETE',
@@ -331,16 +453,18 @@ export default function ApisPage() {
             <button
               type="button"
               onClick={() => openEdit(r)}
-              className="px-2 py-1 text-[10px] rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+              title="Üýtget"
             >
-              Üýtget
+              <Pencil className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => void deleteEp(r)}
-              className="px-2 py-1 text-[10px] rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10"
+              title="Poz"
             >
-              Poz
+              <Trash2 className="h-4 w-4" />
             </button>
             <button
               type="button"
@@ -369,6 +493,328 @@ export default function ApisPage() {
     ],
     [gatewayBase, tenants, copied]
   );
+
+
+  // ── Full-screen API editor (not modal) ──────────────────────
+  if (editEp) {
+    return (
+      <ModalPortal open={Boolean(editEp)}>
+      <div className="fixed inset-0 z-[320] flex flex-col bg-slate-950">
+        <div className="shrink-0 border-b border-slate-800 bg-slate-900/95 px-4 py-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={closeEdit}
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Yza
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-semibold text-white truncate">
+              {isCreate ? 'Täze API' : editName || editEp.name || 'API üýtget'}
+            </h1>
+            <p className="text-xs text-slate-500 font-mono truncate">
+              {editMethod} /api/v1/{editTenantSlug || editEp.tenantSlug}/{editDbKey || 'primary'}/
+              {(editPath || '').replace(/^\//, '')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isCreate && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-rose-400 hover:text-rose-300"
+                onClick={() => void deleteEp(editEp)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Poz
+              </Button>
+            )}
+            <Button variant="secondary" size="sm" onClick={closeEdit}>
+              Ýatyr
+            </Button>
+            <Button size="sm" loading={saving} onClick={() => void saveEdit()}>
+              Sakla
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="max-w-[1600px] mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
+            {/* Left: meta */}
+            <div className="space-y-4 lg:col-span-3 overflow-y-auto max-h-[calc(100vh-5rem)]">
+              {isCreate && (
+                <div>
+                  <label className="text-xs text-slate-400">Firma</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                    value={editTenantSlug}
+                    onChange={(e) => setEditTenantSlug(e.target.value)}
+                  >
+                    <option value="">— saýlaň —</option>
+                    {tenants.map((tn) => (
+                      <option key={tn.slug} value={tn.slug}>
+                        {tn.name} ({tn.slug})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400">Ady</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                    value={editName}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setEditName(v);
+                      if (isCreate) setEditPath(pathFromName(v));
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400">Method</label>
+                  <select
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                    value={editMethod}
+                    onChange={(e) => setEditMethod(e.target.value)}
+                  >
+                    {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400">Path</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
+                    value={editPath}
+                    onChange={(e) => setEditPath(e.target.value)}
+                    placeholder="/test"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400">dbKey</label>
+                  <input
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
+                    value={editDbKey}
+                    onChange={(e) => setEditDbKey(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400">Cache TTL (sek)</label>
+                  <input
+                    type="number"
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                    value={editCache}
+                    onChange={(e) => setEditCache(Number(e.target.value) || 0)}
+                  />
+                </div>
+                <div className="flex items-end pb-2">
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={editAuth}
+                      onChange={(e) => setEditAuth(e.target.checked)}
+                    />
+                    Auth required
+                  </label>
+                </div>
+              </div>
+
+              {/* Params */}
+              <div>
+                <div className="flex items-center justify-between mb-2 gap-2">
+                  <label className="text-xs text-slate-400">Parametrler</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300"
+                      onClick={autoCompleteParams}
+                      title="SQL-däki @param-lary awto goş"
+                    >
+                      Auto params
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                      onClick={() =>
+                        setEditParams((p) => [
+                          ...p,
+                          { name: '', type: 'string', required: false, source: 'query' },
+                        ])
+                      }
+                    >
+                      + Param
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {editParams.map((pr, i) => (
+                    <div key={i} className="flex flex-wrap gap-2 items-center text-xs">
+                      <input
+                        className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-white"
+                        placeholder="name"
+                        value={pr.name}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, name: v } : r)));
+                        }}
+                      />
+                      <select
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-white"
+                        value={pr.source}
+                        onChange={(e) => {
+                          const v = e.target.value as ParamRow['source'];
+                          setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, source: v } : r)));
+                        }}
+                      >
+                        <option value="url">url</option>
+                        <option value="query">query</option>
+                        <option value="body">body</option>
+                      </select>
+                      <select
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-white"
+                        value={pr.type}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, type: v } : r)));
+                        }}
+                      >
+                        {['string', 'number', 'int', 'boolean', 'date', 'datetime', 'time', 'uuid', 'text', 'json'].map((tp) => (
+                          <option key={tp} value={tp}>
+                            {tp}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="flex items-center gap-1 text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={pr.required}
+                          onChange={(e) => {
+                            const v = e.target.checked;
+                            setEditParams((rows) =>
+                              rows.map((r, j) => (j === i ? { ...r, required: v } : r))
+                            );
+                          }}
+                        />
+                        req
+                      </label>
+                      <button
+                        type="button"
+                        className="text-rose-400"
+                        onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+                        {/* Right: SQL ~80% */}
+            <div className="flex flex-col lg:col-span-9 min-h-0" style={{ height: 'min(80vh, calc(100vh - 5.5rem))' }}>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <label className="text-xs text-slate-400 mr-auto">SQL query</label>
+                <button type="button" onClick={() => void sqlPaste()} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <ClipboardPaste className="h-3 w-3" /> Paste
+                </button>
+                <button type="button" onClick={sqlCopy} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <Copy className="h-3 w-3" /> Copy
+                </button>
+                <button type="button" onClick={sqlCut} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <Scissors className="h-3 w-3" /> Cut
+                </button>
+                <button type="button" onClick={sqlClear} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <Eraser className="h-3 w-3" /> Clear
+                </button>
+                <button type="button" onClick={sqlBeautify} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-emerald-300 hover:bg-slate-800">
+                  <Sparkles className="h-3 w-3" /> Beautify
+                </button>
+                <Button size="sm" variant="secondary" loading={executing} onClick={() => void executeSql()}>
+                  <Play className="h-3.5 w-3.5" />
+                  Run
+                </Button>
+              </div>
+              <div className="relative flex-1 rounded-xl border border-slate-700 overflow-hidden bg-slate-950 min-h-[50vh]">
+                <SqlCodeEditor
+                  value={editSql}
+                  onChange={(v) => {
+                    setEditSql(v);
+                    setEditParams((prev) => mergeParamsFromSql(v, prev));
+                  }}
+                  height="100%"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {showResultModal && execResult && (
+          <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-slate-950/90" onClick={() => setShowResultModal(false)} />
+            <div className="relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden">
+              <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900">
+                <h3 className="text-sm font-semibold text-white flex-1">
+                  SQL netije
+                  {execResult.rowCount != null && (
+                    <span className="text-slate-400 font-normal ml-2">{execResult.rowCount} setir</span>
+                  )}
+                  {execResult.elapsedMs != null && (
+                    <span className="text-slate-500 font-normal ml-2">{execResult.elapsedMs} ms</span>
+                  )}
+                </h3>
+                <button
+                  type="button"
+                  className="p-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                  onClick={() => setShowResultModal(false)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 overflow-auto p-3">
+                {execResult.error ? (
+                  <p className="p-4 text-sm text-rose-400 font-mono whitespace-pre-wrap">{execResult.error}</p>
+                ) : execResult.rows && execResult.rows.length > 0 ? (
+                  <DataTable
+                    rows={(execResult.rows as Record<string, unknown>[]).map((r, i) => ({
+                      ...r,
+                      __rowId: String(i),
+                    }))}
+                    columns={Object.keys(execResult.rows[0] as object).map((col) => ({
+                      id: col,
+                      header: col,
+                      accessor: (r: Record<string, unknown>) => r[col] as string | number | null,
+                      cell: (r: Record<string, unknown>) => (
+                        <span className="font-mono text-xs text-slate-300">
+                          {r[col] == null ? '' : String(r[col])}
+                        </span>
+                      ),
+                    }))}
+                    rowKey={(r) => String(r.__rowId ?? '')}
+                    storageKey="api-sql-result"
+                    searchPlaceholder="Netijede gözle..."
+                    emptyMessage="Setir ýok"
+                  />
+                ) : (
+                  <p className="p-4 text-sm text-slate-500">Netije boş</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      </ModalPortal>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -414,315 +860,6 @@ export default function ApisPage() {
         emptyMessage={loading ? 'Ýüklenýär...' : 'Endpoint ýok — «Täze API» bilen goşuň'}
         onRowClick={openEdit}
       />
-
-      {editEp && !sqlStudio && (
-        <ModalPortal open={Boolean(editEp && !sqlStudio)}>
-        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="absolute inset-0 bg-black/60" onClick={closeEdit} />
-          <div className="relative w-full sm:max-w-4xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-800 bg-slate-900 p-5 space-y-4 animate-in slide-in-from-bottom-4 duration-200">
-            <h3 className="text-lg font-semibold text-white text-center">
-              {isCreate ? 'Täze API' : 'API üýtget'}
-            </h3>
-            {isCreate && (
-              <Select
-                label="Firma *"
-                value={editTenantSlug}
-                onChange={(e) => {
-                  setEditTenantSlug(e.target.value);
-                  setEditEp((ep) => (ep ? { ...ep, tenantSlug: e.target.value } : ep));
-                }}
-                options={tenants.map((t) => ({ value: t.slug, label: `${t.name} (${t.slug})` }))}
-              />
-            )}
-            <Input label="Ady" value={editName} onChange={(e) => setEditName(e.target.value)} />
-            <Select
-              label="Method"
-              value={editMethod}
-              onChange={(e) => setEditMethod(e.target.value)}
-              options={[
-                { value: 'GET', label: 'GET' },
-                { value: 'POST', label: 'POST' },
-                { value: 'PUT', label: 'PUT' },
-                { value: 'DELETE', label: 'DELETE' },
-              ]}
-            />
-            <Input
-              label="Path template"
-              value={editPath}
-              onChange={(e) => setEditPath(e.target.value)}
-              placeholder="/orders"
-            />
-            <p className="text-[10px] font-mono text-slate-500 break-all">
-              {buildFullApiUrl({
-                gatewayBase: gatewayBase || 'http://localhost:4000',
-                tenantSlug: editEp.tenantSlug,
-                pathTemplate: editPath,
-                dbKey: editEp.dbKey || 'primary',
-              })}
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <Input label="DB key" value={editDbKey} onChange={(e) => setEditDbKey(e.target.value)} placeholder="primary" />
-              <Input
-                label="Cache TTL (sek)"
-                type="number"
-                value={String(editCache)}
-                onChange={(e) => setEditCache(Number(e.target.value) || 0)}
-              />
-              <label className="flex items-end gap-2 pb-2 text-sm text-slate-300">
-                <input type="checkbox" checked={editAuth} onChange={(e) => setEditAuth(e.target.checked)} className="h-4 w-4 accent-indigo-500" />
-                Auth required
-              </label>
-            </div>
-
-            <div className="space-y-2 rounded-xl border border-slate-700/80 p-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-slate-400">Parametrler (query / url / body)</label>
-                <button
-                  type="button"
-                  className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-white"
-                  onClick={() =>
-                    setEditParams((p) => [
-                      ...p,
-                      { name: '', type: 'string', required: false, source: 'query' },
-                    ])
-                  }
-                >
-                  + Parametr
-                </button>
-              </div>
-              {editParams.length === 0 && (
-                <p className="text-[11px] text-slate-500">Parametr ýok — SQL-de @name ulansa goşuň</p>
-              )}
-              {editParams.map((row, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-1.5 items-center">
-                  <input
-                    className="col-span-3 rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white"
-                    placeholder="ady"
-                    value={row.name}
-                    onChange={(e) =>
-                      setEditParams((ps) =>
-                        ps.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x))
-                      )
-                    }
-                  />
-                  <select
-                    className="col-span-2 rounded border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
-                    value={row.type}
-                    onChange={(e) =>
-                      setEditParams((ps) =>
-                        ps.map((x, i) => (i === idx ? { ...x, type: e.target.value } : x))
-                      )
-                    }
-                  >
-                    {['string', 'int', 'bigint', 'float', 'date', 'datetime', 'bit'].map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                  </select>
-                  <select
-                    className="col-span-2 rounded border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
-                    value={row.source}
-                    onChange={(e) =>
-                      setEditParams((ps) =>
-                        ps.map((x, i) =>
-                          i === idx ? { ...x, source: e.target.value as ParamRow['source'] } : x
-                        )
-                      )
-                    }
-                  >
-                    <option value="query">query</option>
-                    <option value="url">url</option>
-                    <option value="body">body</option>
-                  </select>
-                  <label className="col-span-3 flex items-center gap-1 text-[11px] text-slate-300">
-                    <input
-                      type="checkbox"
-                      checked={row.required}
-                      onChange={(e) =>
-                        setEditParams((ps) =>
-                          ps.map((x, i) => (i === idx ? { ...x, required: e.target.checked } : x))
-                        )
-                      }
-                    />
-                    Required
-                  </label>
-                  <button
-                    type="button"
-                    className="col-span-2 text-rose-400 hover:text-rose-300 text-xs flex justify-end"
-                    onClick={() => setEditParams((ps) => ps.filter((_, i) => i !== idx))}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-xs text-slate-400">SQL Query</label>
-                <button
-                  type="button"
-                  onClick={() => setSqlStudio(true)}
-                  className="text-[11px] px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 border border-indigo-500/30"
-                >
-                  SQL Studio · uly redaktor
-                </button>
-              </div>
-              <textarea
-                className="w-full min-h-[100px] rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-mono text-emerald-300 outline-none focus:ring-1 focus:ring-indigo-500/50"
-                value={editSql}
-                onChange={(e) => setEditSql(e.target.value)}
-                spellCheck={false}
-                placeholder="SELECT ..."
-                readOnly
-                onClick={() => setSqlStudio(true)}
-              />
-            </div>
-            {execResult && (
-              <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 max-h-72 overflow-auto">
-                {execResult.ok ? (
-                  <>
-                    <p className="text-[11px] text-emerald-400 mb-2">
-                      {execResult.rowCount ?? 0} setir
-                      {execResult.elapsedMs != null ? ` · ${execResult.elapsedMs}ms` : ''}
-                      {(execResult.rows?.length || 0) > 100 ? ' · ilkinji 100 görkezilýär' : ''}
-                    </p>
-                    {Array.isArray(execResult.rows) && execResult.rows.length > 0 && typeof execResult.rows[0] === 'object' && execResult.rows[0] !== null ? (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full text-[11px] border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-700 text-left text-slate-400">
-                              {Object.keys(execResult.rows[0] as Record<string, unknown>).map((col) => (
-                                <th key={col} className="px-2 py-1.5 font-medium whitespace-nowrap sticky top-0 bg-slate-950">
-                                  {col}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(execResult.rows as Record<string, unknown>[]).slice(0, 100).map((row, i) => (
-                              <tr key={i} className="border-b border-slate-800/80 hover:bg-slate-900/80">
-                                {Object.keys(execResult.rows![0] as Record<string, unknown>).map((col) => {
-                                  const v = row[col];
-                                  const display =
-                                    v === null || v === undefined
-                                      ? ''
-                                      : typeof v === 'object'
-                                        ? JSON.stringify(v)
-                                        : String(v);
-                                  return (
-                                    <td key={col} className="px-2 py-1 font-mono text-slate-300 whitespace-nowrap max-w-[240px] truncate" title={display}>
-                                      {display}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <pre className="text-[10px] font-mono text-slate-300 whitespace-pre-wrap break-all">
-                        {JSON.stringify(execResult.rows?.slice?.(0, 20) ?? execResult.rows, null, 2)}
-                      </pre>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-[11px] text-rose-400">{execResult.error}</p>
-                )}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-2">
-              <Button className="flex-1" loading={saving} onClick={saveEdit}>
-                Ýatda sakla · Sync
-              </Button>
-              <Button variant="secondary" loading={executing} onClick={executeSql}>
-                Execute
-              </Button>
-              <Button variant="ghost" onClick={closeEdit}>
-                Ýatyr
-              </Button>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
-
-      {sqlStudio && editEp && (
-        <ModalPortal open={Boolean(sqlStudio)}>
-        <div className="fixed inset-0 z-[310] flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSqlStudio(false)} />
-          <div className="relative w-full max-w-5xl max-h-[94vh] flex flex-col rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900/90">
-              <div>
-                <h3 className="text-base font-semibold text-white">SQL Studio</h3>
-                <p className="text-[11px] text-slate-500 font-mono truncate">
-                  {editMethod} {editPath} · {editEp.tenantSlug}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" loading={executing} onClick={executeSql}>
-                  Execute
-                </Button>
-                <Button size="sm" onClick={() => setSqlStudio(false)}>
-                  Taýýar
-                </Button>
-              </div>
-            </div>
-            <div className="flex-1 min-h-0 grid grid-rows-2 lg:grid-rows-1 lg:grid-cols-2">
-              <div className="relative flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[280px] lg:min-h-0">
-                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-800/80 flex items-center justify-between">
-                  <span>Query · SQL Studio</span>
-                  <span className="normal-case text-slate-600">Ctrl+Space autocomplete</span>
-                </div>
-                <div className="flex-1 min-h-[240px] relative">
-                  <SqlCodeEditor value={editSql} onChange={setEditSql} height="100%" autoFocus />
-                </div>
-              </div>
-              <div className="flex flex-col min-h-[180px] overflow-hidden">
-                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-slate-500 border-b border-slate-800/80">
-                  Netije
-                  {execResult?.ok && (
-                    <span className="ml-2 normal-case text-emerald-400">
-                      {execResult.rowCount ?? 0} setir
-                      {execResult.elapsedMs != null ? ` · ${execResult.elapsedMs}ms` : ''}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1 overflow-auto p-2">
-                  {execResult?.ok && Array.isArray(execResult.rows) && execResult.rows.length > 0 && typeof execResult.rows[0] === 'object' ? (
-                    <table className="min-w-full text-[11px] border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-700 text-left text-slate-400">
-                          {Object.keys(execResult.rows[0] as object).map((col) => (
-                            <th key={col} className="px-2 py-1.5 font-medium whitespace-nowrap sticky top-0 bg-slate-950">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(execResult.rows as Record<string, unknown>[]).slice(0, 200).map((row, i) => (
-                          <tr key={i} className="border-b border-slate-800/80">
-                            {Object.keys(execResult.rows![0] as object).map((col) => {
-                              const v = row[col];
-                              const d = v == null ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
-                              return (
-                                <td key={col} className="px-2 py-1 font-mono text-slate-300 whitespace-nowrap max-w-[200px] truncate" title={d}>{d}</td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  ) : execResult && !execResult.ok ? (
-                    <p className="text-sm text-rose-400 p-2">{execResult.error}</p>
-                  ) : (
-                    <p className="text-xs text-slate-600 p-2">Execute basyň — netije şu ýerde tablisa görnüşinde çykar</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        </ModalPortal>
-      )}
     </div>
   );
 }

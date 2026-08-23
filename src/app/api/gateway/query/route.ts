@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, isSuperAdmin } from '@/lib/auth';
 import { getSettings } from '@/lib/db';
+import { gatewayFetch } from '@/lib/gateway';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -116,6 +117,9 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         Accept: 'application/json',
         'x-debug-params': '1',
+        'x-staff-role': String(user.role || ''),
+        'x-staff-id': String(user.id || user.username || ''),
+        'x-billing-done': '1',
       },
       body: method === 'POST' ? JSON.stringify(params || {}) : undefined,
       signal: AbortSignal.timeout(30000),
@@ -152,12 +156,47 @@ export async function POST(req: NextRequest) {
       : Array.isArray(data?.rows)
         ? data.rows
         : data?.data || [data];
+    // REQ charge (company wallet) — dashboard filter / widget hits
+    let reqBalance: number | undefined;
+    try {
+      const role = String(user.role || '');
+      const isAdmin =
+        role === 'admin' ||
+        role === 'super_admin' ||
+        role === 'superadmin' ||
+        Boolean((user as any).isSuperAdmin);
+      if (!isAdmin) {
+        const cr = await gatewayFetch('POST', '/api/admin/billing/consume', {
+          tenantSlug,
+          staffId: String(user.id || user.username || ''),
+          staffRole: role,
+          endpointName: path,
+        });
+        if (typeof cr.data?.balance === 'number') reqBalance = cr.data.balance;
+        if (cr.status === 402 || cr.data?.code === 'NO_CREDITS') {
+          return NextResponse.json(
+            {
+              error: cr.data?.message || 'REQ balans gutardy',
+              code: cr.data?.code || 'NO_CREDITS',
+              suggestUpgrade: cr.data?.suggestUpgrade,
+              periodEnd: cr.data?.periodEnd,
+              rows: [],
+            },
+            { status: 402 }
+          );
+        }
+      }
+    } catch {
+      /* ignore billing errors so data still shows if billing endpoint missing */
+    }
+
     return NextResponse.json({
       rows,
       url: url.toString(),
       _debugParams: data?._debugParams || params,
       _bound: data?._bound,
       _via: data?._via,
+      _reqBalance: reqBalance,
     });
   } catch (err) {
     const agent = await checkAgentOnline(base, tenantSlug);

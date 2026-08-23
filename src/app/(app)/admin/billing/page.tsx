@@ -223,7 +223,7 @@ export default function BillingPage() {
           name: tariffForm.name,
           description: tariffForm.description,
           priceMonthly: Number(tariffForm.priceMonthly) || 0,
-          currency: 'REQ',
+          currency: 'TMT',
           includedCredits: Number(tariffForm.includedCredits) || 0,
           maxStaff: Number(tariffForm.maxStaff) || 0,
           maxApiCallsDay: Number(tariffForm.maxApiCallsDay) || 0,
@@ -563,7 +563,7 @@ export default function BillingPage() {
               >
                 {tariffs.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name} — {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} REQ`} ·{' '}
+                    {t.name} — {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} TMT`} ·{' '}
                     {t.includedCredits} REQ
                   </option>
                 ))}
@@ -596,7 +596,7 @@ export default function BillingPage() {
                   ['code', 'Kod (free, starter…)', 'starter'],
                   ['name', 'Ady', 'Starter'],
                   ['description', 'Düşündiriş', ''],
-                  ['priceMonthly', 'Aýlyk baha (REQ)', '50'],
+                  ['priceMonthly', 'Aýlyk baha (TMT)', '50'],
                   ['includedCredits', 'Aýlyk REQ', '5000'],
                   ['maxStaff', 'Max işgär', '10'],
                   ['maxApiCallsDay', 'Günde max API', '1000'],

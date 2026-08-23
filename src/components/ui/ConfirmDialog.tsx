@@ -61,8 +61,8 @@ export function ConfirmDialogHost() {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={() => close(false)} />
-      <div className="relative w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+      <div className="absolute inset-0 bg-slate-950/80" onClick={() => close(false)} />
+      <div className="relative w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-950 p-5 border-slate-700 shadow-2xl space-y-4">
         <div className="flex gap-3">
           <div
             className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${

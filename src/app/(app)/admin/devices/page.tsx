@@ -257,7 +257,7 @@ export default function DevicesPage() {
             Enjamlar
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Electron agent-leri tassyklamak, firma baglamak we petiklemek
+            Electron agent-leri tassyklamak, firma baglamak we duruzmak üçin ulanylýar.
             {pendingCount > 0 && (
               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
                 {pendingCount} garaşylýar
@@ -382,7 +382,7 @@ export default function DevicesPage() {
                         disabled={acting === d.id}
                       >
                         <Ban className="h-3.5 w-3.5 mr-1" />
-                        Petikle
+                        Duruz
                       </Button>
                     )}
                     <Button

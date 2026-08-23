@@ -172,9 +172,14 @@ function TableWidgetBody({
     const value = row[dd.sourceField];
     if (value == null || value === '') return;
 
-    const title = (dd.titleTemplate || '{field}: {value}')
-      .replace('{field}', dd.sourceField)
-      .replace('{value}', String(value));
+    let title = dd.titleTemplate || '{field}: {value}';
+    title = title.replace(/\{field\}/g, dd.sourceField).replace(/\{value\}/g, String(value));
+    // Any {columnName} from the clicked row
+    title = title.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, col: string) => {
+      if (col === 'field' || col === 'value') return _;
+      const v = row[col];
+      return v == null ? '' : String(v);
+    });
     setDrillTitle(title);
     setDrillOpen(true);
     setDrillLoading(true);
@@ -273,11 +278,38 @@ function TableWidgetBody({
     });
   }, [filtered, sorts]);
 
+  const configuredAggs = widget.dataSource?.tableAggregates || [];
+
+  function computeAgg(
+    rows: Record<string, unknown>[],
+    col: string,
+    fn: 'sum' | 'count' | 'max' | 'min'
+  ): string {
+    if (fn === 'count') return String(rows.length);
+    const nums = rows.map((r) => Number(r[col])).filter((n) => Number.isFinite(n));
+    if (!nums.length) return '—';
+    if (fn === 'sum') return String(Math.round(nums.reduce((a, b) => a + b, 0) * 1000) / 1000);
+    if (fn === 'max') return String(Math.max(...nums));
+    if (fn === 'min') return String(Math.min(...nums));
+    return '—';
+  }
+
+  const aggregates = useMemo(() => {
+    if (!sorted?.length || !configuredAggs.length) return [] as { label: string; value: string; suffix?: string }[];
+    return configuredAggs.map((a) => ({
+      label: a.label || a.column,
+      value: computeAgg(sorted, a.column, a.fn),
+      suffix: a.suffix,
+    }));
+  }, [configuredAggs, sorted]);
+
+
   function toggleSort(field: string, multi: boolean) {
     setSorts((prev) => {
       const idx = prev.findIndex((s) => s.field === field);
       if (!multi) {
         if (idx < 0) return [{ field, dir: 'asc' }];
+
         if (prev[idx].dir === 'asc') return [{ field, dir: 'desc' }];
         return [];
       }
@@ -324,6 +356,17 @@ function TableWidgetBody({
     setSearch('');
     setColFilters({});
   }
+
+
+  const drillColKeys = useMemo(() => {
+    if (!drillRows[0]) return [] as string[];
+    const all = Object.keys(drillRows[0]);
+    const order = dd?.columnOrder?.length
+      ? [...dd.columnOrder.filter((c) => all.includes(c)), ...all.filter((c) => !(dd.columnOrder || []).includes(c))]
+      : all;
+    const hidden = new Set(dd?.hiddenColumns || []);
+    return order.filter((c) => !hidden.has(c));
+  }, [drillRows, dd?.columnOrder, dd?.hiddenColumns]);
 
   return (
     <div className={cn('h-full max-h-full flex flex-col min-h-0 overflow-hidden gap-1.5', className)}>
@@ -563,13 +606,28 @@ function TableWidgetBody({
         )}
       </div>
 
-      <div className="shrink-0 text-[10px] text-slate-500 flex flex-wrap justify-between gap-1">
-        <span>
-          {sorted.length}/{rows.length} hat
-          {sorts.length > 0 && <> · sort: {sorts.map((s) => `${s.field} ${s.dir}`).join(', ')}</>}
-          {dd?.enabled && <> · setir basyp detal</>}
-        </span>
-        <span className="opacity-70 hidden sm:inline">Sütün süýşür · Shift+klik multi-sort</span>
+      <div className="shrink-0 text-[10px] text-slate-500 space-y-1.5 border-t border-slate-800/60 pt-1.5">
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <span>
+            {sorted.length}/{rows.length} hat
+            {sorts.length > 0 && <> · sort: {sorts.map((s) => `${s.field} ${s.dir}`).join(', ')}</>}
+            {dd?.enabled && <> · setir basyp detal</>}
+          </span>
+          <span className="opacity-70 hidden sm:inline">Sütün süýşür · Shift+klik multi-sort</span>
+        </div>
+        {aggregates.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-slate-200">
+            {aggregates.map((a, i) => (
+              <span key={a.label + i} className="inline-flex items-baseline gap-1">
+                {i > 0 && <span className="text-slate-600 mr-1">/</span>}
+                <span className="font-semibold text-white">{a.label}</span>
+                <span className="text-slate-500">:</span>
+                <strong className="font-bold text-emerald-300 tabular-nums">{a.value}</strong>
+                {a.suffix ? <span className="text-slate-400 text-[11px]">{a.suffix}</span> : null}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Drill-down modal */}
@@ -579,7 +637,7 @@ function TableWidgetBody({
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setDrillOpen(false)}
           />
-          <div className="relative w-full sm:max-w-3xl max-h-[85dvh] rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden">
+          <div className="relative w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-w-4xl sm:max-h-[90dvh] rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden z-10">
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-semibold text-white truncate">{drillTitle}</h3>
               <button
@@ -590,7 +648,7 @@ function TableWidgetBody({
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-auto p-3">
+            <div className="flex-1 min-h-0 overflow-auto p-3 flex flex-col">
               {drillLoading && (
                 <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-sm">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -604,33 +662,91 @@ function TableWidgetBody({
                 <p className="text-sm text-slate-500 py-10 text-center">Maglumat tapylmady</p>
               )}
               {!drillLoading && drillRows.length > 0 && (
-                <table className="w-full text-sm min-w-[240px]">
-                  <thead>
-                    <tr className="text-left text-slate-400 border-b border-slate-700">
-                      {Object.keys(drillRows[0]).map((k) => (
-                        <th key={k} className="py-1.5 pr-3 font-medium sticky top-0 bg-slate-900">
-                          {k}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {drillRows.map((r, idx) => (
-                      <tr key={idx} className="border-b border-slate-800/60 text-slate-200">
-                        {Object.keys(drillRows[0]).map((k) => (
-                          <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate">
-                            {String(r[k] ?? '')}
-                          </td>
+                <>
+                  <div className="hidden sm:block overflow-auto flex-1 min-h-0">
+                    <table className="w-full text-sm min-w-[240px]">
+                      <thead>
+                        <tr className="text-left text-slate-400 border-b border-slate-700">
+                          {drillColKeys.map((k) => (
+                            <th key={k} className="py-1.5 pr-3 font-medium sticky top-0 bg-slate-900">
+                              {k}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {drillRows.map((r, idx) => (
+                          <tr key={idx} className="border-b border-slate-800/60 text-slate-200">
+                            {drillColKeys.map((k) => (
+                              <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate">
+                                {String(r[k] ?? '')}
+                              </td>
+                            ))}
+                          </tr>
                         ))}
-                      </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="sm:hidden space-y-1.5 flex-1 min-h-0 overflow-y-auto">
+                    {drillRows.map((r, idx) => (
+                      <div key={idx} className="rounded-lg border border-slate-800 bg-slate-900/50 px-2 py-1.5">
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                          {drillColKeys.map((k, j) => (
+                            <div
+                              key={k}
+                              className={
+                                j === 0
+                                  ? 'col-span-2 text-sm font-medium text-white'
+                                  : 'text-[11px] text-slate-200 break-words'
+                              }
+                            >
+                              <span className="text-slate-500 text-[10px] mr-1">{k}:</span>
+                              {String(r[k] ?? '—')}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                </>
               )}
             </div>
-            <div className="shrink-0 px-4 py-2 border-t border-slate-800 text-[10px] text-slate-500">
-              {drillRows.length} hat
-              {dd?.sourceField && <> · {dd.sourceField} → {dd.targetParam || dd.sourceField}</>}
+            <div className="shrink-0 px-4 py-2.5 border-t border-slate-800 space-y-1.5">
+              <div className="text-[10px] text-slate-500">
+                {drillRows.length} hat
+                {dd?.sourceField && <> · {dd.sourceField} → {dd.targetParam || dd.sourceField}</>}
+              </div>
+              {(() => {
+                const cfgs = dd?.aggregates || [];
+                if (!cfgs.length || !drillRows.length) return null;
+                const items = cfgs.map((a) => {
+                  const fn = a.fn || 'sum';
+                  let value = '—';
+                  if (fn === 'count') value = String(drillRows.length);
+                  else {
+                    const nums = drillRows.map((r) => Number(r[a.column])).filter((n) => Number.isFinite(n));
+                    if (nums.length) {
+                      if (fn === 'sum') value = String(Math.round(nums.reduce((x, y) => x + y, 0) * 1000) / 1000);
+                      else if (fn === 'max') value = String(Math.max(...nums));
+                      else if (fn === 'min') value = String(Math.min(...nums));
+                    }
+                  }
+                  return { label: a.label || a.column, value, suffix: a.suffix };
+                });
+                return (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-slate-200">
+                    {items.map((a, i) => (
+                      <span key={a.label + i} className="inline-flex items-baseline gap-1">
+                        {i > 0 && <span className="text-slate-600 mr-1">/</span>}
+                        <span className="font-semibold text-white">{a.label}</span>
+                        <span className="text-slate-500">:</span>
+                        <strong className="font-bold text-emerald-300 tabular-nums">{a.value}</strong>
+                        {a.suffix ? <span className="text-slate-400 text-[11px]">{a.suffix}</span> : null}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

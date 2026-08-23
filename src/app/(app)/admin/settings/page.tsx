@@ -405,8 +405,19 @@ export default function SettingsPage() {
                 onChange={(e) => setMailPass(e.target.value)}
                 className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
                 placeholder="••••••••"
+                autoComplete="new-password"
               />
-              <button type="button" onClick={() => setShowMailPass((v) => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowMailPass((v) => !v);
+                }}
+                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+                tabIndex={-1}
+                aria-label={showMailPass ? 'Gizle' : 'Görkez'}
+              >
                 {showMailPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>

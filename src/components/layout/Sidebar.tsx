@@ -17,7 +17,7 @@ import {
   Database,
   Wallet,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/lib/types';
 import { canManageStaff, canManageCompany, isSuperAdmin, isViewerOnly } from '@/lib/auth-client';
@@ -27,26 +27,80 @@ interface Props {
   user: SessionUser;
 }
 
+type NavBadges = {
+  devicesPending?: number;
+  staffPending?: number;
+  billingEmpty?: number;
+};
+
 export function Sidebar({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [badges, setBadges] = useState<NavBadges>({});
 
-  const nav = [
+  const loadBadges = useCallback(async () => {
+    try {
+      const res = await fetch('/api/nav-badges');
+      if (!res.ok) return;
+      const data = await res.json();
+      setBadges({
+        devicesPending: Number(data.devicesPending) || 0,
+        staffPending: Number(data.staffPending) || 0,
+        billingEmpty: Number(data.billingEmpty) || 0,
+      });
+    } catch {
+      /* */
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBadges();
+    const t = setInterval(() => void loadBadges(), 20000);
+    return () => clearInterval(t);
+  }, [loadBadges]);
+
+  const nav: {
+    href: string;
+    label: string;
+    icon: typeof LayoutDashboard;
+    badge?: number;
+  }[] = [
     { href: '/dashboards', label: 'Dashboardlar', icon: LayoutDashboard },
     ...(!isViewerOnly(user.role)
       ? [
           ...(canManageStaff(user.role)
-            ? [{ href: '/admin/staff', label: 'Işgärler', icon: Users }]
+            ? [
+                {
+                  href: '/admin/staff',
+                  label: 'Işgärler',
+                  icon: Users,
+                  badge: badges.staffPending,
+                },
+              ]
             : []),
           ...(isSuperAdmin(user)
             ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
             : []),
           ...(isSuperAdmin(user)
-            ? [{ href: '/admin/billing', label: 'Tarif & Balans', icon: Wallet }]
+            ? [
+                {
+                  href: '/admin/billing',
+                  label: 'Tarif & Balans',
+                  icon: Wallet,
+                  badge: badges.billingEmpty,
+                },
+              ]
             : []),
           ...(isSuperAdmin(user) || canManageCompany(user.role)
-            ? [{ href: '/admin/devices', label: 'Enjamlar', icon: Server }]
+            ? [
+                {
+                  href: '/admin/devices',
+                  label: 'Enjamlar',
+                  icon: Server,
+                  badge: badges.devicesPending,
+                },
+              ]
             : []),
           ...(canManageCompany(user.role)
             ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }]
@@ -65,6 +119,15 @@ export function Sidebar({ user }: Props) {
     await fetch('/api/auth/me', { method: 'DELETE' });
     router.push('/login');
     router.refresh();
+  }
+
+  function Badge({ n }: { n?: number }) {
+    if (!n || n <= 0) return null;
+    return (
+      <span className="ml-auto min-w-[1.15rem] h-5 px-1.5 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center shadow">
+        {n > 99 ? '99+' : n}
+      </span>
+    );
   }
 
   const NavContent = (
@@ -99,45 +162,34 @@ export function Sidebar({ user }: Props) {
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <Icon className="h-4 w-4 shrink-0 opacity-90" />
+              <span className="truncate flex-1">{item.label}</span>
+              <Badge n={item.badge} />
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-slate-800 p-3 space-y-1">
-        <div className="flex items-center gap-1.5 px-1">
-          <Link
-            href="/profile"
-            onClick={() => setOpen(false)}
-            className={cn(
-              'flex flex-1 items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm transition-colors min-w-0',
-              pathname === '/profile'
-                ? 'bg-indigo-500/15 text-indigo-300'
-                : 'text-slate-300 hover:bg-slate-800/60'
-            )}
-          >
-            <UserCircle className="h-4 w-4 shrink-0" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium truncate text-sm">{user.fullName}</p>
-              <p className="text-[11px] text-slate-500 truncate">
-                @{user.username} · {user.role}
-              </p>
-            </div>
-          </Link>
-          <BalanceBadge
-            companySlug={user.companySlug}
-            username={user.username}
-            role={user.role}
-          />
+      <div className="border-t border-slate-800 p-3 space-y-2">
+        <div className="flex items-center gap-2 px-1">
+          <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
+            <UserCircle className="h-5 w-5 text-slate-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-slate-200 truncate">
+              {user.fullName || user.username}
+            </p>
+            <p className="text-[10px] text-slate-500 truncate">{user.role}</p>
+          </div>
+          <BalanceBadge compact />
         </div>
         <button
-          onClick={logout}
-          className="flex w-full items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-800/60 hover:text-rose-300 transition-colors"
+          type="button"
+          onClick={() => void logout()}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-800 hover:text-rose-300"
         >
           <LogOut className="h-4 w-4" />
-          Çykmak
+          Çykyş
         </button>
       </div>
     </>
@@ -145,35 +197,31 @@ export function Sidebar({ user }: Props) {
 
   return (
     <>
-      <div className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 bg-slate-950/90 backdrop-blur border-b border-slate-800 flex items-center px-4 gap-3">
-        <button
-          onClick={() => setOpen(true)}
-          className="p-2 rounded-lg text-slate-300 hover:bg-slate-800"
-        >
-          <Menu className="h-5 w-5" />
-        </button>
-        <span className="font-semibold text-sm flex-1">BI Platform <span className="text-[10px] font-normal text-slate-500">v1.0.0</span></span>
-        <BalanceBadge companySlug={user.companySlug} username={user.username} role={user.role} compact />
-      </div>
+      <button
+        type="button"
+        className="lg:hidden fixed top-3 left-3 z-50 p-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-200"
+        onClick={() => setOpen(true)}
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 backdrop-blur-xl">
+        {NavContent}
+      </aside>
 
       {open && (
-        <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <aside className="relative w-72 max-w-[85vw] h-full bg-slate-900 border-r border-slate-800 flex flex-col shadow-2xl">
-            <button
-              onClick={() => setOpen(false)}
-              className="absolute top-4 right-3 p-1.5 rounded-lg text-slate-400 hover:bg-slate-800"
-            >
-              <X className="h-5 w-5" />
-            </button>
+        <div className="lg:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setOpen(false)} />
+          <aside className="absolute left-0 top-0 bottom-0 w-72 flex flex-col bg-slate-950 border-r border-slate-800 shadow-2xl">
+            <div className="flex justify-end p-2">
+              <button type="button" className="p-2 text-slate-400" onClick={() => setOpen(false)}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
             {NavContent}
           </aside>
         </div>
       )}
-
-      <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-900/50 h-dvh sticky top-0">
-        {NavContent}
-      </aside>
     </>
   );
 }

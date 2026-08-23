@@ -3,6 +3,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import {
   Search,
+  Filter,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -75,6 +76,8 @@ export function DataTable<T>({
 }: Props<T>) {
   const prefs = loadPrefs(storageKey);
   const [search, setSearch] = useState('');
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [showColFilters, setShowColFilters] = useState(false);
   const [sortId, setSortId] = useState<string | null>(() => prefs?.sortId ?? null);
   const [sortDir, setSortDir] = useState<SortDir>(() => prefs?.sortDir ?? null);
   const [page, setPage] = useState(0);
@@ -133,14 +136,25 @@ export function DataTable<T>({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((row) =>
-      orderedCols.some((c) => {
-        const v = c.accessor(row);
-        return v != null && String(v).toLowerCase().includes(q);
-      })
-    );
-  }, [rows, search, orderedCols]);
+    return rows.filter((row) => {
+      if (q) {
+        const hit = orderedCols.some((c) => {
+          const v = c.accessor(row);
+          return v != null && String(v).toLowerCase().includes(q);
+        });
+        if (!hit) return false;
+      }
+      for (const [colId, fv] of Object.entries(columnFilters)) {
+        const needle = fv.trim().toLowerCase();
+        if (!needle) continue;
+        const col = orderedCols.find((c) => c.id === colId);
+        if (!col) continue;
+        const v = col.accessor(row);
+        if (v == null || !String(v).toLowerCase().includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [rows, search, orderedCols, columnFilters]);
 
   const sorted = useMemo(() => {
     if (!sortId || !sortDir) return filtered;
@@ -223,6 +237,19 @@ export function DataTable<T>({
               </button>
             )}
           </div>
+            <button
+              type="button"
+              onClick={() => setShowColFilters((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
+                showColFilters
+                  ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
+                  : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Sütün filterleri"
+            >
+              <Filter className="h-3.5 w-3.5" />
+              Filter
+            </button>
         </div>
         <div className="flex items-center gap-2">
           {toolbarRight}
@@ -301,6 +328,24 @@ export function DataTable<T>({
                 </th>
               ))}
             </tr>
+
+            {showColFilters && (
+            <tr className="bg-slate-950/90 border-b border-slate-800">
+              {visibleCols.map((c) => (
+                <th key={`f-${c.id}`} className="px-2 py-1.5 font-normal">
+                  <input
+                    className="w-full min-w-[4rem] rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-indigo-500/50"
+                    placeholder="Filter..."
+                    value={columnFilters[c.id] || ''}
+                    onChange={(e) =>
+                      setColumnFilters((prev) => ({ ...prev, [c.id]: e.target.value }))
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </th>
+              ))}
+            </tr>
+            )}
           </thead>
           <tbody>
             {pageRows.length === 0 ? (

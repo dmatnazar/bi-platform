@@ -585,17 +585,19 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
 
   const selectedEp = useMemo(() => endpoints.find((e) => e.id === epId), [endpoints, epId]);
 
-  async function loadColumns(id: string): Promise<void> {
+  async function loadColumns(id: string, opts?: { preserve?: boolean }): Promise<void> {
     const ep = endpoints.find((e) => e.id === id);
     if (!ep) return;
     setEpId(id);
     setLoadingCols(true);
     setError('');
     setColumns([]);
-    setLabelCol('');
-    setValueCol('');
-    setPreview([]);
-    setParamKey('');
+    if (!opts?.preserve) {
+      setLabelCol('');
+      setValueCol('');
+      setPreview([]);
+      setParamKey('');
+    }
     // Diňe label boş bolsa API adyny teklip et
     setLabel((prev) => prev.trim() || ep.name || '');
     try {
@@ -641,9 +643,11 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
         cols[1] ||
         cols[0] ||
         '';
-      setLabelCol(guessLabel);
-      setValueCol(guessValue);
-      setParamKey(guessValue);
+      if (!opts?.preserve) {
+        setLabelCol(guessLabel);
+        setValueCol(guessValue);
+        setParamKey(guessValue);
+      }
       // preview unique pairs
       const seen = new Set<string>();
       const prev: { label: string; value: string }[] = [];
@@ -735,12 +739,14 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
         );
         if (match) {
           setEpId(match.id);
-          void loadColumns(match.id).then(() => {
+          void loadColumns(match.id, { preserve: true }).then(() => {
             setLabelCol(src.labelField || '');
             setValueCol(src.valueField || '');
             setParamKey(f.key);
             setLabel(f.label || f.key);
           });
+        } else {
+          setError('API match tapylmady — el bilen saýlaň');
         }
       })
       .catch(() => {});
