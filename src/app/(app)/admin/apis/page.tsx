@@ -26,10 +26,17 @@ interface Endpoint {
   authRequired?: boolean;
 }
 
+interface TenantConnection {
+  dbKey: string;
+  label?: string;
+  database?: string;
+}
+
 interface Tenant {
   id: string;
   slug: string;
   name: string;
+  connections?: TenantConnection[];
 }
 
 export default function ApisPage() {
@@ -543,23 +550,37 @@ export default function ApisPage() {
           <div className="max-w-[1600px] mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
             {/* Left: meta */}
             <div className="space-y-4 lg:col-span-3 overflow-y-auto max-h-[calc(100vh-5rem)]">
-              {isCreate && (
-                <div>
-                  <label className="text-xs text-slate-400">Firma</label>
-                  <select
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
-                    value={editTenantSlug}
-                    onChange={(e) => setEditTenantSlug(e.target.value)}
-                  >
-                    <option value="">— saýlaň —</option>
-                    {tenants.map((tn) => (
-                      <option key={tn.slug} value={tn.slug}>
-                        {tn.name} ({tn.slug})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div>
+                <label className="text-xs text-slate-400">Firma</label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-60"
+                  value={editTenantSlug}
+                  disabled={!isCreate}
+                  title={!isCreate ? 'Bar bolan API-de firma üýtgedip bolanok — täze API dörediň' : undefined}
+                  onChange={(e) => {
+                    const slug = e.target.value;
+                    setEditTenantSlug(slug);
+                    // company changed → connection list changes, reset to that
+                    // company's first connection so dbKey never points at a
+                    // connection belonging to the previous firma
+                    const tn = tenants.find((t) => t.slug === slug);
+                    const firstConn = tn?.connections?.[0]?.dbKey;
+                    setEditDbKey(firstConn || 'primary');
+                  }}
+                >
+                  <option value="">— saýlaň —</option>
+                  {tenants.map((tn) => (
+                    <option key={tn.slug} value={tn.slug}>
+                      {tn.name} ({tn.slug})
+                    </option>
+                  ))}
+                </select>
+                {!isCreate && (
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Firma diňe API döredilende saýlanýar.
+                  </p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-400">Ady</label>
@@ -599,12 +620,51 @@ export default function ApisPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400">dbKey</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
-                    value={editDbKey}
-                    onChange={(e) => setEditDbKey(e.target.value)}
-                  />
+                  <label className="text-xs text-slate-400">Connection (dbKey)</label>
+                  {(() => {
+                    const tn = tenants.find((t) => t.slug === (editTenantSlug || editEp?.tenantSlug));
+                    const conns = tn?.connections || [];
+                    const knownKeys = new Set(conns.map((c) => c.dbKey));
+                    const isCustom = editDbKey !== '' && !knownKeys.has(editDbKey);
+                    return (
+                      <>
+                        <select
+                          className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
+                          value={isCustom ? '__custom__' : editDbKey || 'primary'}
+                          onChange={(e) => {
+                            if (e.target.value === '__custom__') {
+                              setEditDbKey((prev) => (knownKeys.has(prev) ? '' : prev));
+                              return;
+                            }
+                            setEditDbKey(e.target.value);
+                          }}
+                        >
+                          {conns.length === 0 && <option value="primary">primary</option>}
+                          {conns.map((c) => (
+                            <option key={c.dbKey} value={c.dbKey}>
+                              {c.label ? `${c.label} (${c.dbKey})` : c.dbKey}
+                              {c.database ? ` · ${c.database}` : ''}
+                            </option>
+                          ))}
+                          <option value="__custom__">— el bilen ýaz —</option>
+                        </select>
+                        {conns.length === 0 && (editTenantSlug || editEp?.tenantSlug) && (
+                          <p className="mt-1 text-[10px] text-amber-400">
+                            Bu firma üçin baglanyşyk tapylmady — «DB baglanyşyklar» sahypasyndan goşuň.
+                          </p>
+                        )}
+                        {isCustom && (
+                          <input
+                            autoFocus
+                            className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
+                            placeholder="dbKey el bilen ýaz"
+                            value={editDbKey}
+                            onChange={(e) => setEditDbKey(e.target.value)}
+                          />
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

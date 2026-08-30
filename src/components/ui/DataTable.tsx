@@ -253,19 +253,19 @@ export function DataTable<T>({
         </div>
         <div className="flex items-center gap-2">
           {toolbarRight}
-          <div className="relative hidden sm:block">
+          <div className="relative">
             <button
               type="button"
               onClick={() => setColsOpen((v) => !v)}
               className="h-9 px-3 rounded-xl border border-slate-700 bg-slate-900/80 text-xs text-slate-300 inline-flex items-center gap-1.5"
             >
               <Columns3 className="h-3.5 w-3.5" />
-              Sütünler
+              <span className="hidden xs:inline">Sütünler</span>
             </button>
             {colsOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setColsOpen(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-xl p-2">
+                <div className="absolute right-0 top-full mt-1 z-50 w-[min(14rem,calc(100vw-2rem))] max-h-[60vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-xl p-2">
                   {orderedCols.map((c) => (
                     <div
                       key={c.id}

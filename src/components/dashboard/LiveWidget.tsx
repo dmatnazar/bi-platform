@@ -15,6 +15,8 @@ interface Props {
   editable?: boolean;
   onConfigure?: () => void;
   globalFilters?: GlobalFilterValues;
+  /** bump this number to force an immediate re-fetch (manual refresh button) */
+  refreshToken?: number;
 }
 
 const SEARCH_KEY_RE = /search|gözleg|gozleg|keyword|^q$|query/i;
@@ -90,7 +92,7 @@ function LoadingOverlay({ active }: { active: boolean }) {
   );
 }
 
-export function LiveWidget({ widget, editable, onConfigure, globalFilters = {} }: Props) {
+export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, refreshToken }: Props) {
   const [rows, setRows] = useState<Record<string, unknown>[] | undefined>(undefined);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -149,6 +151,7 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {} }
     JSON.stringify(ds?.params),
     JSON.stringify(ds?.paramBindings),
     apiFiltersKey,
+    refreshToken,
   ]);
 
   const displayRows = useMemo(

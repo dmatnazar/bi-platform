@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { UserCircle, Camera, Trash2, Eye, EyeOff } from 'lucide-react';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
+import { BalanceBadge } from '@/components/billing/BalanceBadge';
 
 function compressImage(file: File, maxW: number, quality: number): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -132,9 +133,18 @@ export default function ProfilePage() {
   return (
     <div className="min-h-[70vh] flex items-center justify-center p-2">
       <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl p-6 sm:p-8 space-y-6">
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-white">Profil</h1>
-          <p className="text-sm text-slate-400">Hasap sazlamalary</p>
+        <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:items-start sm:justify-between sm:text-left">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold text-white">Profil</h1>
+            <p className="text-sm text-slate-400">Hasap sazlamalary</p>
+          </div>
+          {user?.companySlug && (
+            <BalanceBadge
+              companySlug={user.companySlug}
+              username={user.username}
+              role={user.role}
+            />
+          )}
         </div>
 
         {/* Avatar row: photo + actions beside it */}

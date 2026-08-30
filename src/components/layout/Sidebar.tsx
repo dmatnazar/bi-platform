@@ -181,7 +181,12 @@ export function Sidebar({ user }: Props) {
             </p>
             <p className="text-[10px] text-slate-500 truncate">{user.role}</p>
           </div>
-          <BalanceBadge compact />
+          <BalanceBadge
+            compact
+            companySlug={user.companySlug}
+            username={user.username}
+            role={user.role}
+          />
         </div>
         <button
           type="button"

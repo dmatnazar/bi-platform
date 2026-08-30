@@ -990,13 +990,26 @@ export function WidgetConfigPanel({
                     },
                   })
                 }
-                placeholder="Faktura #{value}"
+                list="drill-title-columns"
+                placeholder="Faktura #{value} — {customer_name}"
               />
-              {sampleColumns.length > 0 && (
+              {/* Any {columnName} typed here (from the list below or hand-typed —
+                  even a column not shown yet) is replaced live with that column's
+                  value from the clicked row. {field}/{value} = source column/value. */}
+              <datalist id="drill-title-columns">
+                <option value="{field}" />
+                <option value="{value}" />
+                {(sampleColumns.length ? sampleColumns : ds.columns || []).map((col) => (
+                  <option key={col} value={`{${col}}`} />
+                ))}
+              </datalist>
+              {(sampleColumns.length > 0 || (ds.columns || []).length > 0) && (
                 <div className="space-y-1">
-                  <p className="text-[10px] text-slate-500">Title-e column goş (basylan setirden):</p>
+                  <p className="text-[10px] text-slate-500">
+                    Title-e column goş (basylan setirden) — ýa-da islendik {'{column}'} adyny ýazyň, öz maglumaty gelýär:
+                  </p>
                   <div className="flex flex-wrap gap-1">
-                    {sampleColumns.map((col) => (
+                    {(sampleColumns.length ? sampleColumns : ds.columns || []).map((col) => (
                       <button
                         key={col}
                         type="button"

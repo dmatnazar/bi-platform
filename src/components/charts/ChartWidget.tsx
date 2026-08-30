@@ -9,6 +9,7 @@ import {
   ArrowUp,
   ArrowUpDown,
   Columns3,
+  Download,
   Filter,
   GripVertical,
   Loader2,
@@ -137,6 +138,30 @@ function TableWidgetBody({
   const [sorts, setSorts] = useState<SortSpec[]>(widget.dataSource?.orderBy || []);
   const enableSearch = widget.dataSource?.enableSearch !== false;
   const dragCol = useRef<string | null>(null);
+
+  function csvEscape(v: unknown): string {
+    const s = v == null ? '' : String(v);
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  function exportCsv(rowsToExport: Record<string, unknown>[], cols: string[]) {
+    if (!rowsToExport.length || !cols.length) return;
+    const lines = [
+      cols.map(csvEscape).join(','),
+      ...rowsToExport.map((r) => cols.map((c) => csvEscape(r[c])).join(',')),
+    ];
+    // BOM so Excel opens UTF-8 (Turkmen/Cyrillic chars) correctly
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const safeName = (widget.title || 'table').trim().replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'table';
+    a.download = `${safeName}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
 
   // Drill-down state
   const dd = widget.dataSource?.drillDown;
@@ -479,10 +504,26 @@ function TableWidgetBody({
               Arassala
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => exportCsv(sorted, visibleCols)}
+            disabled={!sorted.length}
+            className="h-8 px-2 rounded-lg border border-slate-700 bg-slate-950/80 text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1 shrink-0 disabled:opacity-40 disabled:hover:text-slate-400"
+            title="CSV ýükle"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">CSV</span>
+          </button>
           </div>
         </div>
 
-      <div className="hidden md:block flex-1 min-h-0 overflow-x-auto overflow-y-auto -mx-0.5 px-0.5 overscroll-contain">
+      {/*
+        overscroll-behavior must stay 'auto' (not 'contain'/'none') here: once the
+        user scrolls this inner region to its top/bottom edge, 'auto' lets the
+        remaining wheel/touch delta chain to the dashboard page so it keeps
+        scrolling instead of getting stuck.
+      */}
+      <div className="hidden md:block flex-1 min-h-0 overflow-x-auto overflow-y-auto -mx-0.5 px-0.5 [overscroll-behavior:auto]">
         <table className="w-full text-sm min-w-[280px] border-separate border-spacing-0">
           <thead>
             <tr className="text-left text-slate-400">
@@ -569,8 +610,8 @@ function TableWidgetBody({
         </table>
       </div>
 
-      {/* Mobile compact cards */}
-      <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5">
+      {/* Mobile compact cards — [overscroll-behavior:auto] lets scroll chain to the page at the edges */}
+      <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5 [overscroll-behavior:auto]">
         {sorted.length === 0 ? (
           <p className="text-center text-slate-500 text-xs py-8">
             {search || activeColFilterCount ? 'Filter boýunça netije ýok' : 'Maglumat ýok'}
