@@ -61,6 +61,27 @@ export function DashboardCanvas({
     };
   }, [expandedId]);
 
+  // Mobile table card / hierarchy → open same fullscreen as Maximize button
+  useEffect(() => {
+    const onExpand = (ev: Event) => {
+      const e = ev as CustomEvent<{ id?: string; row?: Record<string, unknown> }>;
+      const id = e.detail?.id;
+      if (!id) return;
+      setExpandedId(id);
+      if (e.detail?.row) {
+        window.setTimeout(() => {
+          window.dispatchEvent(
+            new CustomEvent('bi-widget-drill', {
+              detail: { id, row: e.detail!.row },
+            })
+          );
+        }, 250);
+      }
+    };
+    window.addEventListener('bi-widget-expand', onExpand as EventListener);
+    return () => window.removeEventListener('bi-widget-expand', onExpand as EventListener);
+  }, []);
+
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     const ro = new ResizeObserver((entries) => {

@@ -226,6 +226,8 @@ export interface DashboardWidget {
     columnOrder?: string[];
     /** Compact mobile-friendly density */
     dense?: boolean;
+    /** Table mobile card: these columns on row 1; rest on row 2 */
+    mobileCardPrimaryColumns?: string[];
   };
 }
 

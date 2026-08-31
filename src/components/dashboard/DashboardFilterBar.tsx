@@ -182,7 +182,7 @@ function MultiselectFilter({
           : `${selected.length} / ${opts.length}`;
 
   return (
-    <div className="relative min-w-[160px]">
+    <div className="relative min-w-[110px] sm:min-w-[160px]">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -374,8 +374,8 @@ export function DashboardFilterBar({
           if (f.type === 'daterange') {
             return (
               <div key={f.key} className="w-full sm:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-2 p-2 sm:p-0 rounded-xl sm:rounded-none bg-slate-950/40 sm:bg-transparent border border-slate-800/80 sm:border-0">
-                <div className="w-full sm:min-w-[140px] sm:w-auto">
-                  <label className="mb-1 block text-[11px] font-medium text-slate-400">
+                <div className="w-full sm:min-w-[100px] sm:min-w-[140px] sm:w-auto">
+                  <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                     {f.label} — başla
                     {f.required && <span className="text-rose-400 ml-0.5">*</span>}
                   </label>
@@ -389,8 +389,8 @@ export function DashboardFilterBar({
                     />
                   </div>
                 </div>
-                <div className="w-full sm:min-w-[140px] sm:w-auto">
-                  <label className="mb-1 block text-[11px] font-medium text-slate-400">
+                <div className="w-full sm:min-w-[100px] sm:min-w-[140px] sm:w-auto">
+                  <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                     gutar
                   </label>
                   <div className="relative">
@@ -414,7 +414,7 @@ export function DashboardFilterBar({
               /begin|start|from|end|gutar|to$|dateFrom|dateTo/i.test(f.key);
             return (
               <div key={f.key} className="min-w-[150px]">
-                <label className="mb-1 block text-[11px] font-medium text-slate-400">
+                <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                   {f.label}
                   {f.required && <span className="text-rose-400 ml-0.5">*</span>}
                 </label>
@@ -439,7 +439,7 @@ export function DashboardFilterBar({
                       setKey(f.key, raw);
                     }
                   }}
-                  className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  className="w-full h-8 sm:h-9 rounded-lg sm:rounded-xl border border-slate-700 bg-slate-950/80 px-2 sm:px-3 text-xs sm:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
             );
@@ -447,8 +447,8 @@ export function DashboardFilterBar({
 
           if (f.type === 'text') {
             return (
-              <div key={f.key} className="min-w-[180px] flex-1 max-w-xs">
-                <label className="mb-1 block text-[11px] font-medium text-slate-400">
+              <div key={f.key} className="min-w-[120px] sm:min-w-[180px] flex-1 max-w-xs">
+                <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                   {f.label}
                 </label>
                 <div className="relative">
@@ -468,7 +468,7 @@ export function DashboardFilterBar({
           if (f.type === 'number') {
             return (
               <div key={f.key} className="min-w-[120px]">
-                <label className="mb-1 block text-[11px] font-medium text-slate-400">
+                <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                   {f.label}
                 </label>
                 <input
@@ -477,7 +477,7 @@ export function DashboardFilterBar({
                   onChange={(e) =>
                     setKey(f.key, e.target.value === '' ? null : Number(e.target.value))
                   }
-                  className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  className="w-full h-8 sm:h-9 rounded-lg sm:rounded-xl border border-slate-700 bg-slate-950/80 px-2 sm:px-3 text-xs sm:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                 />
               </div>
             );
@@ -485,7 +485,7 @@ export function DashboardFilterBar({
 
           if (f.type === 'multiselect') {
             return (
-              <div key={f.key} className="min-w-[160px] space-y-1">
+              <div key={f.key} className="min-w-[110px] sm:min-w-[160px] space-y-1">
                 <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{f.label}</label>
                 <MultiselectFilter
                   filter={f}
@@ -497,7 +497,7 @@ export function DashboardFilterBar({
           }
           if (f.type === 'select' && f.options) {
             return (
-              <div key={f.key} className="min-w-[140px]">
+              <div key={f.key} className="min-w-[100px] sm:min-w-[140px]">
                 <Select
                   label={f.label}
                   value={String(values[f.key] ?? '')}

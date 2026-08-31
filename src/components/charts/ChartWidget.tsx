@@ -1,22 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import ReactECharts from 'echarts-for-react';
 import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Columns3,
-  Download,
-  Filter,
-  GripVertical,
-  Loader2,
-  RotateCcw,
-  Search,
-  X,
-} from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Download, Filter, GripVertical, Loader2, Maximize2, RotateCcw, Search, X } from 'lucide-react';
 
 const DEMO_BAR = [
   { name: 'Ýan', value: 420 },
@@ -130,6 +119,25 @@ function TableWidgetBody({
     setHiddenCols(next);
     try {
       localStorage.setItem(`bi-table-hidden:${widget.id}`, JSON.stringify([...next]));
+    } catch { /* */ }
+  };
+
+  /** Mobile card row-1 columns (rest go to row 2) */
+  const [mobilePrimaryCols, setMobilePrimaryCols] = useState<string[]>(() => {
+    const fromCfg = widget.config?.mobileCardPrimaryColumns || [];
+    try {
+      const ls = localStorage.getItem(`bi-table-mobile-primary:${widget.id}`);
+      if (ls) {
+        const parsed = JSON.parse(ls) as string[];
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch { /* */ }
+    return fromCfg;
+  });
+  const persistMobilePrimary = (next: string[]) => {
+    setMobilePrimaryCols(next);
+    try {
+      localStorage.setItem(`bi-table-mobile-primary:${widget.id}`, JSON.stringify(next));
     } catch { /* */ }
   };
 
@@ -267,6 +275,7 @@ function TableWidgetBody({
   const [drillLoading, setDrillLoading] = useState(false);
   const [drillError, setDrillError] = useState('');
 
+
   const visibleCols = useMemo(
     () => colOrder.filter((c) => !hiddenCols.has(c)),
     [colOrder, hiddenCols]
@@ -337,6 +346,20 @@ function TableWidgetBody({
       setDrillLoading(false);
     }
   }
+
+  // Fullscreen expand may request drill-open on this widget instance
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      const e = ev as CustomEvent<{ id?: string; row?: Record<string, unknown> }>;
+      if (e.detail?.id !== widget.id || !e.detail?.row) return;
+      if (!widget.dataSource?.drillDown?.enabled) return;
+      void openDrillDown(e.detail.row);
+    };
+    window.addEventListener('bi-widget-drill', handler as EventListener);
+    return () => window.removeEventListener('bi-widget-drill', handler as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widget.id, widget.dataSource?.drillDown?.enabled]);
+
 
   const activeColFilterCount = useMemo(
     () =>
@@ -551,7 +574,7 @@ function TableWidgetBody({
             {showColPicker && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowColPicker(false)} />
-                <div className="absolute right-0 top-full mt-1 z-50 w-56 max-h-64 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl p-2 space-y-0.5">
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 max-h-80 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl p-2 space-y-0.5">
                   <div className="flex gap-1 mb-1.5">
                     <button
                       type="button"
@@ -568,6 +591,7 @@ function TableWidgetBody({
                       Hiçisi
                     </button>
                   </div>
+                  <p className="text-[10px] text-slate-500 px-1 pt-0.5">Görkez / gizle</p>
                   {colOrder.map((c) => (
                     <label
                       key={c}
@@ -587,6 +611,39 @@ function TableWidgetBody({
                       <span className="text-slate-200 truncate">{c}</span>
                     </label>
                   ))}
+                  <div className="border-t border-slate-800 mt-2 pt-2">
+                    <p className="text-[10px] text-indigo-300/90 px-1 mb-1 leading-snug">
+                      Mobile card · 1-nji setir (saýlananlar). Galanlar 2-nji setirde.
+                    </p>
+                    {visibleCols.map((c) => {
+                      const on = mobilePrimaryCols.includes(c);
+                      return (
+                        <label
+                          key={`m-${c}`}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer text-xs"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(e) => {
+                              const next = e.target.checked
+                                ? [...mobilePrimaryCols.filter((x) => x !== c), c]
+                                : mobilePrimaryCols.filter((x) => x !== c);
+                              persistMobilePrimary(next);
+                            }}
+                            className="rounded border-indigo-600/50"
+                          />
+                          <span className="text-slate-200 truncate">{c}</span>
+                          {on && (
+                            <span className="ml-auto text-[9px] text-indigo-400 shrink-0">row1</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                    {visibleCols.length === 0 && (
+                      <p className="text-[10px] text-slate-500 px-2 py-1">Ilki sütünleri görkeziň</p>
+                    )}
+                  </div>
                 </div>
               </>
             )}
@@ -728,44 +785,69 @@ function TableWidgetBody({
         </table>
       </div>
 
-      {/* Mobile compact cards — [overscroll-behavior:auto] lets scroll chain to the page at the edges */}
+      {/* Mobile cards: row1 = selected primary cols, row2 = the rest (2-col grids) */}
       <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5 [overscroll-behavior:auto]">
         {sorted.length === 0 ? (
           <p className="text-center text-slate-500 text-xs py-8">
             {search || activeColFilterCount ? 'Filter boýunça netije ýok' : 'Maglumat ýok'}
           </p>
         ) : (
-          sorted.slice(0, 200).map((row, i) => (
-            <button
-              type="button"
-              key={i}
-              className={cn(
-                'w-full text-left rounded-lg border border-slate-800/80 bg-slate-900/50 px-2 py-1.5 transition',
-                dd?.enabled && 'active:bg-indigo-500/15 hover:border-indigo-500/40 cursor-pointer'
-              )}
-              onClick={() => {
-                if (dd?.enabled) void openDrillDown(row);
-              }}
-            >
-              {/* Column names hidden — values only, 2-row compact grid */}
-              <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                {visibleCols.map((c, j) => (
-                  <div
-                    key={c}
-                    className={cn(
-                      'text-[11px] leading-snug min-w-0 break-words',
-                      j === 0 ? 'col-span-2 font-medium text-white text-sm' : 'text-slate-200'
-                    )}
-                  >
-                    {String(row[c] ?? '—')}
+          sorted.slice(0, 200).map((row, i) => {
+            const primary = (
+              mobilePrimaryCols.length
+                ? mobilePrimaryCols.filter((c) => visibleCols.includes(c))
+                : visibleCols.slice(0, Math.min(2, visibleCols.length))
+            );
+            const secondary = visibleCols.filter((c) => !primary.includes(c));
+            return (
+              <button
+                type="button"
+                key={i}
+                className={cn(
+                  'w-full text-left rounded-lg border border-slate-800/80 bg-slate-900/50 px-2 py-1.5 transition',
+                  dd?.enabled && 'active:bg-indigo-500/15 hover:border-indigo-500/40 cursor-pointer'
+                )}
+                onClick={() => {
+                  // Hierarchy only — modal drill, no dashboard fullscreen / no reload
+                  if (dd?.enabled) void openDrillDown(row);
+                }}
+              >
+                {/* Row 1 — primary cols: "col: value" same line, wrap if long */}
+                <div className="grid grid-cols-2 gap-x-1.5 gap-y-0.5">
+                  {primary.map((c, j) => (
+                    <div
+                      key={c}
+                      className={cn(
+                        'min-w-0 text-[10px] sm:text-[11px] leading-snug break-words',
+                        primary.length === 1 || j === 0 ? 'col-span-2' : ''
+                      )}
+                    >
+                      <span className="text-slate-500">{c}: </span>
+                      <span
+                        className={cn(
+                          'text-slate-100',
+                          (primary.length === 1 || j === 0) && 'font-medium text-white'
+                        )}
+                      >
+                        {String(row[c] ?? '—')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {/* Row 2 — rest */}
+                {secondary.length > 0 && (
+                  <div className="grid grid-cols-2 gap-x-1.5 gap-y-0.5 mt-1 pt-1 border-t border-slate-800/50">
+                    {secondary.map((c) => (
+                      <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
+                        <span className="text-slate-500">{c}: </span>
+                        <span className="text-slate-300">{String(row[c] ?? '—')}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              {dd?.enabled && (
-                <p className="text-[9px] text-indigo-400/80 mt-1">Basyp detal aç</p>
-              )}
-            </button>
-          ))
+                )}
+              </button>
+            );
+          })
         )}
       </div>
 
@@ -774,7 +856,7 @@ function TableWidgetBody({
           <span>
             {sorted.length}/{rows.length} hat
             {sorts.length > 0 && <> · sort: {sorts.map((s) => `${s.field} ${s.dir}`).join(', ')}</>}
-            {dd?.enabled && <> · setir basyp detal</>}
+            {dd?.enabled && <span className="hidden sm:inline"> · setir basyp detal</span>}
           </span>
           <span className="opacity-70 hidden sm:inline">Sütün süýşür · Shift+klik multi-sort</span>
         </div>
@@ -794,13 +876,15 @@ function TableWidgetBody({
       </div>
 
       {/* Drill-down modal */}
-      {drillOpen && (
-        <div className="fixed inset-0 z-[2147482000] flex items-center justify-center p-0 sm:p-4">
+      {drillOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+        <div className="fixed inset-0 z-[2147482000] flex items-stretch sm:items-center justify-center p-0 sm:p-4">
           <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/75 backdrop-blur-sm"
             onClick={() => setDrillOpen(false)}
           />
-          <div className="relative w-full h-[100dvh] sm:h-auto sm:max-w-4xl sm:max-h-[90dvh] rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden z-10">
+          <div className="relative w-full h-[100dvh] sm:h-[min(92dvh,900px)] sm:max-w-6xl rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-semibold text-white truncate">{drillTitle}</h3>
               <button
@@ -913,7 +997,7 @@ function TableWidgetBody({
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
