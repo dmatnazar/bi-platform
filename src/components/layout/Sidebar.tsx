@@ -16,6 +16,7 @@ import {
   Server,
   Database,
   Wallet,
+  AppWindow,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -107,6 +108,9 @@ export function Sidebar({ user }: Props) {
             : []),
           ...(canManageCompany(user.role)
             ? [{ href: '/admin/connections', label: 'DB baglanyşyklar', icon: Database }]
+            : []),
+          ...(canManageCompany(user.role) || isSuperAdmin(user)
+            ? [{ href: '/admin/apps', label: 'Programmalar', icon: AppWindow }]
             : []),
           ...(canManageCompany(user.role) || isSuperAdmin(user)
             ? [{ href: '/admin/settings', label: 'Sazlamalar', icon: Settings }]

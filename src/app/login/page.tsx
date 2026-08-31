@@ -7,6 +7,7 @@ import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X } from 'lu
 import { Button } from '@/components/ui/Button';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
+import { LoginAppsSection } from '@/components/apps/LoginAppsSection';
 
 interface Notif {
   id: string;
@@ -86,25 +87,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-10 relative overflow-hidden">
+    <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
       {/* Animated orbs + tsParticles network (reporting / analytics vibe) */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
         <div className="login-orb login-orb-a" />
         <div className="login-orb login-orb-b" />
         <div className="login-orb login-orb-c" />
         <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
-        {/* Stronger veil on mobile so text stays readable over particles */}
-        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_15%,rgb(2_6_23)_82%)] sm:bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
-        <div className="absolute inset-0 z-[2] bg-slate-950/40 sm:bg-transparent" />
+        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md animate-fade-in px-0.5 sm:px-0">
-        <div className="flex flex-col items-center mb-5 sm:mb-8 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
+      <div className="relative w-full max-w-md animate-fade-in px-1 sm:px-0">
+        <div className="flex flex-col items-center mb-6 sm:mb-8 text-center">
           <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-3 sm:mb-4">
             <BarChart3 className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
           </div>
-          <h1 className="text-2xl sm:text-2xl font-bold tracking-tight text-white leading-tight">BI Platform</h1>
-          <p className="text-slate-200 text-sm sm:text-sm mt-1.5 px-2 leading-relaxed">Hasabat we analitika merkezi</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-tight">BI Platform</h1>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1 px-2 leading-relaxed">Hasabat we analitika merkezi</p>
         </div>
 
         {/* Notifications for this username */}
@@ -138,11 +137,11 @@ export default function LoginPage() {
 
         <form
           onSubmit={onSubmit}
-          className="bg-slate-900/95 border border-slate-600/80 rounded-2xl p-5 sm:p-8 shadow-xl backdrop-blur-md space-y-4 sm:space-y-5 ring-1 ring-white/10"
+          className="bg-slate-900/85 border border-slate-700 rounded-2xl p-4 sm:p-8 shadow-xl backdrop-blur-md space-y-4 sm:space-y-5 ring-1 ring-white/5"
         >
           <div className="text-center sm:text-left">
-            <h2 className="text-lg sm:text-lg font-semibold text-white">Giriş</h2>
-            <p className="text-sm text-slate-200 mt-1 leading-relaxed">Öz login we parolyňyz bilen giriň</p>
+            <h2 className="text-base sm:text-lg font-semibold text-white">Giriş</h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-0.5 leading-relaxed">Öz login we parolyňyz bilen giriň</p>
           </div>
 
           {error && (
@@ -210,9 +209,7 @@ export default function LoginPage() {
           </p>
         </form>
 
-        <p className="text-center text-[11px] sm:text-xs text-slate-600 mt-4 sm:mt-6 px-2">
-          Demo: <span className="text-slate-400">admin / admin123</span>
-        </p>
+        <LoginAppsSection />
       </div>
     </div>
   );
