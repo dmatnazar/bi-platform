@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Server, RefreshCw, ShieldCheck, Eye, EyeOff, Info } from 'lucide-react';
+import { toastSuccess, toastError, toastWarning, toastInfo } from '@/components/ui/Toast';
 
 const SYNC_OPTIONS = [
   { value: '0', label: 'Diňe el bilen' },
@@ -124,6 +125,7 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      toastSuccess('Gateway saklandy');
       setMsg('Gateway sazlamalary saklandy');
       // Keep typed secret visible after save; refresh other fields
       await load();
@@ -157,6 +159,27 @@ export default function SettingsPage() {
     setSaving('mail' as any);
     setMsg('');
     try {
+      if (test) {
+        const to = mailTestTo.trim();
+        if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+          toastError('Synag e-poçta', 'Dogry e-poçta giriziň');
+          setMsg('Synag e-poçta nädogry');
+          setSaving(null);
+          return;
+        }
+        if (!mailUser.trim()) {
+          toastError('Gmail', 'Gmail ulanyjy gerek');
+          setSaving(null);
+          return;
+        }
+        if (!mailPass || mailPass === '••••••••') {
+          // has saved pass OK — server keeps prev
+        } else if (!mailPass.trim()) {
+          toastError('App Password', 'App Password giriziň ýa-da öň saklanan galsın');
+          setSaving(null);
+          return;
+        }
+      }
       const body: Record<string, unknown> = {
         enabled: mailEnabled,
         host: mailHost.trim() || 'smtp.gmail.com',
@@ -174,15 +197,27 @@ export default function SettingsPage() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      if (!res.ok) throw new Error(data.error || data.details && JSON.stringify(data.details) || 'Şowsuz');
       if (test) {
-        setMsg(data.testOk ? 'Synag haty iberildi' : `Saklandy, ýöne synag: ${data.error || 'şowsuz'}`);
+        if (data.testOk) {
+          toastSuccess('Synag haty iberildi', mailTestTo.trim());
+          setMsg('Synag haty iberildi');
+        } else {
+          toastWarning('Saklandy, ýöne synag şowsuz', data.error || '');
+          setMsg(`Saklandy, ýöne synag: ${data.error || 'şowsuz'}`);
+        }
       } else {
+        toastSuccess('Gmail / SMTP saklandy');
         setMsg('Gmail / SMTP sazlamalary saklandy');
       }
+      // keep masked password if we had one / server confirms
+      if (data.mail?.hasPass) setMailPass('••••••••');
+      else if (!mailPass || mailPass === '••••••••') setMailPass('');
       await load();
     } catch (e) {
-      setMsg(String(e));
+      const m = e instanceof Error ? e.message : String(e);
+      toastError('Gmail / SMTP', m.replace(/^Error:\s*/, ''));
+      setMsg(m);
     } finally {
       setSaving(null);
     }
@@ -411,10 +446,14 @@ export default function SettingsPage() {
               <input
                 type={showMailPass ? 'text' : 'password'}
                 value={mailPass}
-                onChange={(e) => setMailPass(e.target.value)}
-                onFocus={() => {
-                  // Masked placeholder from server — clear so user can type & eye toggle works
-                  if (mailPass === '••••••••') setMailPass('');
+                onChange={(e) => {
+                  const v = e.target.value;
+                  // First key after masked sentinel replaces the whole mask
+                  if (mailPass === '••••••••') {
+                    setMailPass(v.replace(/•/g, ''));
+                  } else {
+                    setMailPass(v);
+                  }
                 }}
                 className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
                 placeholder="App Password giriziň"
@@ -425,7 +464,7 @@ export default function SettingsPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (mailPass === '••••••••') setMailPass('');
+                  // Eye only toggles visibility — does not clear saved mask
                   setShowMailPass((v) => !v);
                 }}
                 className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"

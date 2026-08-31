@@ -40,11 +40,20 @@ function loadTsParticles(): Promise<void> {
       return;
     }
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/tsparticles-slim@2.12.0/tsparticles.slim.bundle.min.js';
+    s.src = '/vendor/tsparticles/tsparticles.slim.bundle.min.js';
     s.async = true;
     s.dataset.tsparticles = '1';
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Failed to load tsparticles'));
+    s.onerror = () => {
+      // CDN fallback if local vendor missing
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/tsparticles-slim@2.12.0/tsparticles.slim.bundle.min.js';
+      s2.async = true;
+      s2.dataset.tsparticles = '1';
+      s2.onload = () => resolve();
+      s2.onerror = () => reject(new Error('Failed to load tsparticles'));
+      document.head.appendChild(s2);
+    };
     document.head.appendChild(s);
   });
   return loadPromise;

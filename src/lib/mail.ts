@@ -45,13 +45,20 @@ export async function sendMail(opts: {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const nodemailer = require('nodemailer') as typeof import('nodemailer');
+    const port = Number(cfg.port) || 587;
+    const secure = port === 465 ? true : Boolean(cfg.secure);
     const transporter = nodemailer.createTransport({
-      host: cfg.host,
-      port: cfg.port || 587,
-      secure: Boolean(cfg.secure),
+      host: cfg.host || 'smtp.gmail.com',
+      port,
+      secure,
+      requireTLS: port === 587,
       auth: {
         user: cfg.user,
         pass: cfg.pass,
+      },
+      tls: {
+        // Gmail / common hosts
+        minVersion: 'TLSv1.2',
       },
     });
 
