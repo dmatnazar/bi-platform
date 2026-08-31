@@ -10,10 +10,12 @@ export async function GET() {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   const cfg = await getMailConfig();
+  // Admin settings: return real pass so App Password eye can show stored value.
+  // Only reachable by canManageCompany / superAdmin (checked above).
   return NextResponse.json({
     mail: {
       ...cfg,
-      pass: cfg.pass ? '••••••••' : '',
+      pass: cfg.pass || '',
       hasPass: Boolean(cfg.pass),
       configured: isMailConfigured(cfg),
     },

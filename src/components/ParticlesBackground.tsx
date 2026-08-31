@@ -79,26 +79,26 @@ function optionsFor(theme: Theme) {
   };
 
   if (theme === 'login') {
+    const mobile =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches;
     return {
       ...base,
       particles: {
-        number: { value: 70, density: { enable: true, area: 800 } },
-        color: { value: ['#6366f1', '#8b5cf6', '#38bdf8', '#a78bfa'] },
-        shape: {
-          type: ['circle', 'triangle', 'edge'],
-        },
-        opacity: { value: { min: 0.15, max: 0.55 } },
-        size: { value: { min: 1, max: 4 } },
+        number: { value: mobile ? 45 : 90, density: { enable: true, area: mobile ? 600 : 800 } },
+        color: { value: ['#818cf8', '#a78bfa', '#38bdf8', '#c4b5fd', '#6366f1'] },
+        shape: { type: ['circle', 'triangle', 'edge'] },
+        opacity: { value: { min: mobile ? 0.25 : 0.2, max: mobile ? 0.75 : 0.6 } },
+        size: { value: { min: mobile ? 1.5 : 1, max: mobile ? 4.5 : 4 } },
         links: {
           enable: true,
-          distance: 130,
-          color: '#6366f1',
-          opacity: 0.22,
-          width: 1,
+          distance: mobile ? 110 : 140,
+          color: '#818cf8',
+          opacity: mobile ? 0.35 : 0.28,
+          width: mobile ? 1.2 : 1,
         },
         move: {
           enable: true,
-          speed: 1.1,
+          speed: mobile ? 0.9 : 1.2,
           direction: 'none',
           random: true,
           straight: false,

@@ -66,7 +66,7 @@ export async function GET() {
       tenantSlug: s.tenantSlug,
       companyName: nameBySlug.get(s.tenantSlug) || s.tenantSlug,
       source: 'gateway' as const,
-      passwordReveal: decryptPasswordPlain(s.passwordEnc),
+      passwordReveal: (s as any).password || decryptPasswordPlain(s.passwordEnc) || '',
       updatedAt: s.updatedAt,
     }));
   } catch {
@@ -94,6 +94,7 @@ const upsertSchema = z.object({
   email: z.string().email().optional().or(z.literal('')),
   active: z.boolean().default(true),
   tenantSlug: z.string().optional(),
+  previousTenantSlug: z.string().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -117,20 +118,37 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
+  // Superadmin may assign any company; others stay in their company
   const tenantSlug = isSuperAdmin(user)
     ? data.tenantSlug || user.companySlug || 'demo'
-    : user.companySlug;
+    : user.companySlug || data.tenantSlug;
   if (!tenantSlug) {
     return NextResponse.json({ error: 'Kompaniýa tapylmady' }, { status: 400 });
   }
 
   const catalog = await fetchCatalog(true);
-  let list = (catalog.staff || []).filter((s) => s.tenantSlug === tenantSlug);
+  const allStaff = catalog.staff || [];
 
   const id = data.id || crypto.randomUUID();
+  // Find existing in any company (supports moving staff between firms)
+  const existingAnywhere = allStaff.find(
+    (s) =>
+      (data.id && s.id === data.id) ||
+      s.username.toLowerCase() === data.username.toLowerCase()
+  );
+  const oldSlug =
+    data.previousTenantSlug ||
+    existingAnywhere?.tenantSlug ||
+    (existingAnywhere as { tenantSlugs?: string[] } | undefined)?.tenantSlugs?.[0];
+
+  let list = allStaff.filter(
+    (s) =>
+      s.tenantSlug === tenantSlug ||
+      (s as { tenantSlugs?: string[] }).tenantSlugs?.includes(tenantSlug)
+  );
   const existing = list.find(
     (s) => s.id === id || s.username.toLowerCase() === data.username.toLowerCase()
-  );
+  ) || (oldSlug === tenantSlug ? existingAnywhere : undefined);
 
   let passwordHash = 'synced-from-bi:keep';
   let passwordPlain: string | undefined;
@@ -188,7 +206,36 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, staffId: entry.id, synced: true });
+  // Moved to another firm: remove from previous tenant list on VPS
+  if (oldSlug && oldSlug !== tenantSlug) {
+    try {
+      const oldList = allStaff
+        .filter(
+          (s) =>
+            (s.tenantSlug === oldSlug ||
+              (s as { tenantSlugs?: string[] }).tenantSlugs?.includes(oldSlug)) &&
+            s.id !== entry.id &&
+            s.username.toLowerCase() !== entry.username.toLowerCase()
+        )
+        .map((s) => ({
+          id: s.id,
+          fullName: s.fullName,
+          username: s.username,
+          passwordHash: 'synced-from-bi:keep',
+          role: s.role,
+          tenantSlugs: (s as { tenantSlugs?: string[] }).tenantSlugs || [oldSlug],
+          phone: s.phone,
+          email: s.email,
+          active: s.active,
+          passwordEnc: (s as { passwordEnc?: string }).passwordEnc,
+        }));
+      await syncStaffToGateway(oldSlug, oldList as any);
+    } catch (e) {
+      console.warn('[staff] remove from old tenant failed', e);
+    }
+  }
+
+  return NextResponse.json({ ok: true, staffId: entry.id, synced: true, tenantSlug });
 }
 
 export async function DELETE(req: NextRequest) {

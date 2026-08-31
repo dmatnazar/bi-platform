@@ -1,6 +1,8 @@
 'use client';
 
 import { create } from 'zustand';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
 
 export type ToastVariant = 'success' | 'warning' | 'error' | 'info';
@@ -53,30 +55,41 @@ const STYLES = {
   info: { border: 'border-sky-500/40', bg: 'bg-sky-500/10', Icon: Info, ic: 'text-sky-400' },
 };
 
+/** Always fixed to viewport top — portal avoids sticky/transform ancestors clipping toasts */
 export function ToastHost() {
   const items = useToastStore((s) => s.items);
   const dismiss = useToastStore((s) => s.dismiss);
-  return (
-    <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[2147483000] flex flex-col gap-2 w-[min(420px,calc(100vw-1.5rem))] pointer-events-none items-stretch">
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted || items.length === 0) return null;
+
+  return createPortal(
+    <div
+      className="fixed top-3 left-1/2 -translate-x-1/2 flex flex-col gap-2 w-[min(420px,calc(100vw-1.5rem))] pointer-events-none items-stretch"
+      style={{ zIndex: 2147483646 }}
+    >
       {items.map((t) => {
         const st = STYLES[t.variant];
         const Icon = st.Icon;
         return (
           <div
             key={t.id}
-            className={`bg-slate-950/98 shadow-2xl pointer-events-auto rounded-xl border ${st.border} ${st.bg} backdrop-blur-md shadow-xl px-3.5 py-3 flex gap-3`}
+            className={`pointer-events-auto rounded-xl border ${st.border} ${st.bg} bg-slate-950/98 backdrop-blur-md shadow-2xl px-3.5 py-3 flex gap-3`}
           >
-            <Icon className={`bg-slate-950/98 shadow-2xl h-4.5 w-4.5 ${st.ic} shrink-0 mt-0.5`} />
+            <Icon className={`h-4.5 w-4.5 ${st.ic} shrink-0 mt-0.5`} />
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-white">{t.title}</p>
-              {t.message && <p className="text-xs text-slate-400 mt-0.5 whitespace-pre-wrap">{t.message}</p>}
+              {t.message && (
+                <p className="text-xs text-slate-300 mt-0.5 whitespace-pre-wrap break-words">{t.message}</p>
+              )}
             </div>
-            <button type="button" onClick={() => dismiss(t.id)} className="text-slate-500 hover:text-white">
+            <button type="button" onClick={() => dismiss(t.id)} className="text-slate-500 hover:text-white shrink-0">
               <X className="h-4 w-4" />
             </button>
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body
   );
 }

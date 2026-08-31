@@ -5,22 +5,36 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-function staffPwKey() {
-  const secret =
+
+
+function resolveStaffPwSecret(): string {
+  try {
+    const file = path.join(process.cwd(), 'data', 'bi-platform.json');
+    if (fs.existsSync(file)) {
+      const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const s = data?.settings?.gatewayAdminSecret;
+      if (s && typeof s === 'string' && s.trim()) return s.trim();
+    }
+  } catch {
+    /* */
+  }
+  return (
     process.env.GATEWAY_ADMIN_SECRET ||
     process.env.ADMIN_SYNC_SECRET ||
-    'dev';
-  return crypto.scryptSync(secret, 'staff-pw-v1', 32);
+    'dev'
+  );
 }
 
 export function decryptPasswordPlain(enc?: string): string {
   if (!enc) return '';
   try {
+    const secret = resolveStaffPwSecret();
+    const key = crypto.scryptSync(secret, 'staff-pw-v1', 32);
     const buf = Buffer.from(enc, 'base64');
     const iv = buf.subarray(0, 12);
     const tag = buf.subarray(12, 28);
     const data = buf.subarray(28);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', staffPwKey(), iv);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
     decipher.setAuthTag(tag);
     return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
   } catch {

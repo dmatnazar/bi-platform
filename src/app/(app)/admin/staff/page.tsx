@@ -56,7 +56,9 @@ export default function StaffPage() {
     phoneLocal: '',
     email: '',
     active: true,
+    tenantSlug: '',
   });
+  const [companies, setCompanies] = useState<{ slug: string; name: string }[]>([]);
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -103,6 +105,19 @@ export default function StaffPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    fetch('/api/companies')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.companies || []).map((c: { slug: string; name: string }) => ({
+          slug: c.slug,
+          name: c.name,
+        }));
+        setCompanies(list);
+      })
+      .catch(() => {});
+  }, []);
+
   function openCreate() {
     setEditing(null);
     setForm({
@@ -113,6 +128,7 @@ export default function StaffPage() {
       phoneLocal: '',
       email: '',
       active: true,
+      tenantSlug: companies[0]?.slug || '',
     });
     setShowPw(false);
     setError('');
@@ -129,6 +145,7 @@ export default function StaffPage() {
       phoneLocal: phoneLocal(row.phone),
       email: row.email || '',
       active: row.active,
+      tenantSlug: row.tenantSlug || '',
     });
     setShowPw(false);
     setError('');
@@ -154,6 +171,8 @@ export default function StaffPage() {
           phone,
           email: form.email,
           active: form.active,
+          tenantSlug: form.tenantSlug || undefined,
+          previousTenantSlug: editing?.tenantSlug || undefined,
         }),
       });
       const data = await res.json();
@@ -445,6 +464,16 @@ export default function StaffPage() {
                 { value: 'editor', label: 'Editor — kompaniýa dolandyryş' },
                 { value: 'admin', label: 'Admin — doly' },
               ]}
+            />
+            <Select
+              label="Firma (kompaniýa)"
+              value={form.tenantSlug}
+              onChange={(e) => setForm((f) => ({ ...f, tenantSlug: e.target.value }))}
+              options={
+                companies.length
+                  ? companies.map((c) => ({ value: c.slug, label: c.name || c.slug }))
+                  : [{ value: form.tenantSlug || '', label: form.tenantSlug || '— saýlaň —' }]
+              }
             />
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input
