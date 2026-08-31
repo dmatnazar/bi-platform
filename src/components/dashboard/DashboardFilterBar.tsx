@@ -339,7 +339,7 @@ export function DashboardFilterBar({
         </button>
 
         {filtersOpen && filters.some((f) => f.type === 'daterange') && (
-          <div className="flex flex-wrap gap-1 ml-auto">
+          <div className="flex flex-wrap gap-1.5 w-full sm:w-auto sm:ml-auto order-last sm:order-none">
             {PRESETS.map((p) => (
               <button
                 key={p.label}
@@ -352,14 +352,19 @@ export function DashboardFilterBar({
             ))}
           </div>
         )}
-        {!filtersOpen && (
-          <button
-            type="button"
-            onClick={() => setFiltersOpen(true)}
-            className="ml-auto text-[10px] text-indigo-400 hover:text-indigo-300 px-2 py-1"
-          >
-            Aç
-          </button>
+        {!filtersOpen && filters.some((f) => f.type === 'daterange') && (
+          <div className="flex flex-wrap gap-1 ml-auto">
+            {PRESETS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                onClick={() => applyPreset(p)}
+                className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-200 border border-slate-700/80"
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
@@ -368,8 +373,8 @@ export function DashboardFilterBar({
         {filters.map((f) => {
           if (f.type === 'daterange') {
             return (
-              <div key={f.key} className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[140px]">
+              <div key={f.key} className="w-full sm:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-2 p-2 sm:p-0 rounded-xl sm:rounded-none bg-slate-950/40 sm:bg-transparent border border-slate-800/80 sm:border-0">
+                <div className="w-full sm:min-w-[140px] sm:w-auto">
                   <label className="mb-1 block text-[11px] font-medium text-slate-400">
                     {f.label} — başla
                     {f.required && <span className="text-rose-400 ml-0.5">*</span>}
@@ -380,11 +385,11 @@ export function DashboardFilterBar({
                       type="date"
                       value={toDateInputValue(values[f.key])}
                       onChange={(e) => setKey(f.key, e.target.value || null)}
-                      className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950/80 pl-8 pr-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+                      className="w-full h-11 sm:h-9 rounded-xl border border-slate-700 bg-slate-950/80 pl-8 pr-3 text-base sm:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
                     />
                   </div>
                 </div>
-                <div className="min-w-[140px]">
+                <div className="w-full sm:min-w-[140px] sm:w-auto">
                   <label className="mb-1 block text-[11px] font-medium text-slate-400">
                     gutar
                   </label>
@@ -394,7 +399,7 @@ export function DashboardFilterBar({
                       type="date"
                       value={toDateInputValue(values[f.endKey || 'endDate'])}
                       onChange={(e) => setKey(f.endKey || 'endDate', e.target.value || null)}
-                      className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950/80 pl-8 pr-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+                      className="w-full h-11 sm:h-9 rounded-xl border border-slate-700 bg-slate-950/80 pl-8 pr-3 text-base sm:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
                     />
                   </div>
                 </div>

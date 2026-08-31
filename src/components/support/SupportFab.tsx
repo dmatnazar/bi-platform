@@ -135,7 +135,7 @@ export function SupportFab() {
 
   return (
     <div
-      className="fixed z-[100] touch-none select-none"
+      className="fixed z-[80] touch-none select-none"
       style={{ left: pos.x, top: pos.y, width: size, height: size }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -152,7 +152,7 @@ export function SupportFab() {
             moved.current = false;
           }
         }}
-        className="flex h-14 w-14 cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-900/40 hover:bg-indigo-500 transition-colors relative"
+        className="flex h-14 w-14 cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl bg-indigo-600/45 text-white/90 shadow-lg shadow-indigo-900/20 hover:bg-indigo-600/70 hover:text-white backdrop-blur-sm border border-indigo-400/20 transition-colors relative"
         title="Goldaw — süýşürip bolýar"
       >
         <MessageCircle className="h-6 w-6 pointer-events-none" />

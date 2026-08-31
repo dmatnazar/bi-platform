@@ -8,15 +8,16 @@ declare global {
   }
 }
 
+// Prefer local offline assets (from queryEditor), fall back to CDN
 const CM_CSS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css',
+  '/vendor/codemirror/codemirror.min.css',
+  '/vendor/codemirror/material-darker.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css',
 ];
 
 const CM_JS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/sql/sql.min.js',
+  '/vendor/codemirror/codemirror.min.js',
+  '/vendor/codemirror/sql.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/sql-hint.min.js',

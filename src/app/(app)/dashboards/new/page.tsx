@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, FormEvent, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/Input';
 
 export default function NewDashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const companyId = searchParams.get('companyId') || undefined;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +24,7 @@ export default function NewDashboardPage() {
       const res = await fetch('/api/dashboards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description }),
+        body: JSON.stringify({ name, description, companyId }),
       });
       const data = await res.json();
       if (!res.ok) {

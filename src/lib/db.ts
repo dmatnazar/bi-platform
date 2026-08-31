@@ -278,6 +278,16 @@ export async function upsertSupportTicket(ticket: SupportTicket): Promise<void> 
   writeDb(data);
 }
 
+export async function deleteSupportTicket(id: string): Promise<SupportTicket | null> {
+  const data = await getData();
+  if (!data.supportTickets) return null;
+  const idx = data.supportTickets.findIndex((t) => t.id === id);
+  if (idx < 0) return null;
+  const [removed] = data.supportTickets.splice(idx, 1);
+  writeDb(data);
+  return removed;
+}
+
 export async function appendSupportMessage(
   ticketId: string,
   message: SupportMessage,

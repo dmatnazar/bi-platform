@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X } from 'lucide-react';
+import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X, Building2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
@@ -47,6 +47,8 @@ export default function ApisPage() {
   const [loading, setLoading] = useState(true);
   const [gatewayBase, setGatewayBase] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string | null>(null);
+  const [metaSheetOpen, setMetaSheetOpen] = useState(false);
 
   async function load(refresh = false) {
     setLoading(true);
@@ -72,7 +74,22 @@ export default function ApisPage() {
       .catch(() => {});
   }, []);
 
+  const tenantCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of endpoints) m.set(e.tenantSlug, (m.get(e.tenantSlug) || 0) + 1);
+    return m;
+  }, [endpoints]);
+
+  const visibleEndpoints = useMemo(() => {
+    if (!selectedTenantSlug) return [];
+    return endpoints.filter((e) => e.tenantSlug === selectedTenantSlug);
+  }, [endpoints, selectedTenantSlug]);
+
+  const selectedTenantName =
+    tenants.find((t) => t.slug === selectedTenantSlug)?.name || selectedTenantSlug || '';
+
   function fullUrl(e: Endpoint) {
+
     return buildFullApiUrl({
       gatewayBase: gatewayBase || 'http://localhost:4000',
       tenantSlug: e.tenantSlug,
@@ -193,17 +210,19 @@ export default function ApisPage() {
     try { document.body.style.overflow = 'hidden'; } catch { /* */ }
   }
 
-  function openCreate() {
+  function openCreate(prefillSlug?: string) {
     void preloadSqlEditor();
     setIsCreate(true);
-    const slug = tenants[0]?.slug || '';
+    const slug = prefillSlug || selectedTenantSlug || tenants[0]?.slug || '';
+    const tn = tenants.find((t) => t.slug === slug);
+    const firstDb = tn?.connections?.[0]?.dbKey || 'primary';
     setEditEp({
       id: '',
       tenantSlug: slug,
       name: '',
       method: 'GET',
       pathTemplate: '/report',
-      dbKey: 'primary',
+      dbKey: firstDb,
       sqlQuery: 'SELECT 1 AS ok',
       authRequired: true,
       cacheTtlSec: 0,
@@ -212,8 +231,7 @@ export default function ApisPage() {
     setEditPath('/report');
     setEditMethod('GET');
     setEditSql('SELECT 1 AS ok');
-    // params empty for new
-    setEditDbKey('primary');
+    setEditDbKey(firstDb);
     setEditCache(0);
     setEditAuth(true);
     setEditTenantSlug(slug);
@@ -318,20 +336,74 @@ export default function ApisPage() {
     setEditSql('');
   }
   function sqlBeautify() {
-    let s = editSql || '';
-    // simple SQL beautify
-    s = s.replace(/\s+/g, ' ').trim();
-    const keywords = [
-      'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN',
-      'JOIN', 'ON', 'GROUP BY', 'ORDER BY', 'HAVING', 'INSERT INTO', 'VALUES',
-      'UPDATE', 'SET', 'DELETE FROM', 'UNION', 'LIMIT', 'OFFSET',
+    let s = (editSql || '').replace(/\r\n/g, '\n').trim();
+    if (!s) return;
+    // Collapse whitespace but keep string literals roughly
+    s = s.replace(/[ \t]+/g, ' ');
+    s = s.replace(/\s*\n\s*/g, ' ');
+    // Major clause breaks
+    const major = [
+      'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING',
+      'UNION ALL', 'UNION', 'INSERT INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE FROM',
     ];
-    for (const kw of keywords) {
-      const re = new RegExp('\\b' + kw.replace(' ', '\\s+') + '\\b', 'gi');
-      s = s.replace(re, '\n' + kw);
+    for (const kw of major) {
+      const re = new RegExp('\\b' + kw.replace(/ /g, '\\s+') + '\\b', 'gi');
+      s = s.replace(re, (m) => '\n' + m.toUpperCase());
     }
-    s = s.replace(/,\s*/g, ',\n  ');
-    setEditSql(s.trim() + '\n');
+    // JOIN lines
+    s = s.replace(/\b((?:LEFT|RIGHT|INNER|FULL|CROSS)?\s*JOIN)\b/gi, (m) => '\n    ' + m.replace(/\s+/g, ' ').toUpperCase());
+    s = s.replace(/\bON\b/gi, 'ON');
+    // AND/OR under WHERE — keep compact on same indent style
+    s = s.replace(/\bAND\b/gi, '\n      AND');
+    s = s.replace(/\bOR\b/gi, '\n      OR');
+    // SELECT / GROUP BY / ORDER BY list: commas with indent
+    const lines = s.split('\n').map((line) => line.trim()).filter(Boolean);
+    const out: string[] = [];
+    for (const line of lines) {
+      const upper = line.toUpperCase();
+      if (upper.startsWith('SELECT')) {
+        out.push('SELECT');
+        const rest = line.replace(/^SELECT\s+/i, '');
+        const parts = rest.split(',').map((p) => p.trim()).filter(Boolean);
+        parts.forEach((p, i) => out.push('    ' + p + (i < parts.length - 1 ? ',' : '')));
+      } else if (upper.startsWith('GROUP BY')) {
+        out.push('GROUP BY');
+        const rest = line.replace(/^GROUP\s+BY\s+/i, '');
+        const parts = rest.split(',').map((p) => p.trim()).filter(Boolean);
+        parts.forEach((p, i) => out.push('    ' + p + (i < parts.length - 1 ? ',' : '')));
+      } else if (upper.startsWith('ORDER BY')) {
+        out.push('ORDER BY');
+        const rest = line.replace(/^ORDER\s+BY\s+/i, '');
+        const parts = rest.split(',').map((p) => p.trim()).filter(Boolean);
+        parts.forEach((p, i) => out.push('    ' + p + (i < parts.length - 1 ? ',' : '')));
+      } else if (upper.startsWith('FROM')) {
+        out.push('FROM');
+        out.push('    ' + line.replace(/^FROM\s+/i, ''));
+      } else if (/^(LEFT|RIGHT|INNER|FULL|CROSS)?\s*JOIN/i.test(line) || upper.startsWith('JOIN')) {
+        // JOIN ... ON ... on one line
+        out.push('    ' + line.replace(/\s+/g, ' '));
+      } else if (upper.startsWith('WHERE')) {
+        out.push('WHERE');
+        const rest = line.replace(/^WHERE\s+/i, '');
+        if (rest) out.push('      ' + rest);
+      } else if (upper.startsWith('AND') || upper.startsWith('OR')) {
+        out.push('      ' + line.replace(/\s+/g, ' '));
+      } else {
+        out.push(line);
+      }
+    }
+    // Merge JOIN with following ON if split
+    const merged: string[] = [];
+    for (let i = 0; i < out.length; i++) {
+      const cur = out[i];
+      if (/\bJOIN\b/i.test(cur) && i + 1 < out.length && /^\s*ON\b/i.test(out[i + 1])) {
+        merged.push(cur + ' ' + out[i + 1].trim());
+        i++;
+      } else {
+        merged.push(cur);
+      }
+    }
+    setEditSql(merged.join('\n').trim() + '\n');
     toastSuccess('Beautify');
   }
 
@@ -517,8 +589,8 @@ export default function ApisPage() {
             Yza
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-semibold text-white truncate">
-              {isCreate ? 'Täze API' : editName || editEp.name || 'API üýtget'}
+            <h1 className="text-base sm:text-lg font-semibold text-white truncate max-w-[50vw] sm:max-w-none">
+              {isCreate ? (editName.trim() || 'Täze API') : (editName.trim() || editEp.name || 'API üýtget')}
             </h1>
             <p className="text-xs text-slate-500 font-mono truncate">
               {editMethod} /api/v1/{editTenantSlug || editEp.tenantSlug}/{editDbKey || 'primary'}/
@@ -526,6 +598,14 @@ export default function ApisPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="lg:hidden"
+              onClick={() => setMetaSheetOpen(true)}
+            >
+              Meta / Firma
+            </Button>
             {!isCreate && (
               <Button
                 variant="ghost"
@@ -546,10 +626,146 @@ export default function ApisPage() {
           </div>
         </div>
 
+        {/* Mobile meta sheet */}
+        {metaSheetOpen && (
+          <div className="lg:hidden fixed inset-0 z-[330] flex flex-col justify-end">
+            <div className="absolute inset-0 bg-black/60" onClick={() => setMetaSheetOpen(false)} />
+            <div className="relative max-h-[85dvh] overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 p-4 space-y-3 shadow-2xl">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">API meta / Firma</h3>
+                <button type="button" className="text-slate-400 hover:text-white" onClick={() => setMetaSheetOpen(false)}>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Firma</label>
+                <select
+                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+                  value={editTenantSlug}
+                  disabled={!isCreate}
+                  onChange={(e) => {
+                    const slug = e.target.value;
+                    setEditTenantSlug(slug);
+                    const tn = tenants.find((t) => t.slug === slug);
+                    setEditDbKey(tn?.connections?.[0]?.dbKey || 'primary');
+                  }}
+                >
+                  <option value="">— saýlaň —</option>
+                  {tenants.map((tn) => (
+                    <option key={tn.slug} value={tn.slug}>{tn.name} ({tn.slug})</option>
+                  ))}
+                </select>
+              </div>
+              <Input label="Ady" value={editName} onChange={(e) => setEditName(e.target.value)} />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs text-slate-400">Method</label>
+                  <select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={editMethod} onChange={(e) => setEditMethod(e.target.value)}>
+                    {['GET','POST','PUT','PATCH','DELETE'].map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <Input label="Path" value={editPath} onChange={(e) => setEditPath(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Connection (dbKey)</label>
+                <select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={editDbKey} onChange={(e) => setEditDbKey(e.target.value)}>
+                  {(() => {
+                    const tn = tenants.find((t) => t.slug === (editTenantSlug || editEp?.tenantSlug));
+                    const conns = tn?.connections || [];
+                    return (
+                      <>
+                        {conns.map((c: any) => (
+                          <option key={c.dbKey || c.id} value={c.dbKey || 'primary'}>
+                            {(c.label || c.dbKey || 'primary')} ({c.dbKey || 'primary'})
+                          </option>
+                        ))}
+                        <option value="__custom">— el bilen ýaz —</option>
+                      </>
+                    );
+                  })()}
+                </select>
+              </div>
+              <Input label="Cache TTL (sek)" type="number" value={String(editCache)} onChange={(e) => setEditCache(Number(e.target.value) || 0)} />
+              <label className="flex items-center gap-2 text-sm text-slate-200">
+                <input type="checkbox" checked={editAuth} onChange={(e) => setEditAuth(e.target.checked)} />
+                Auth required
+              </label>
+              <div className="border-t border-slate-800 pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-slate-300">Parametrler (mobile)</p>
+                  <button
+                    type="button"
+                    className="text-[11px] text-indigo-400"
+                    onClick={() =>
+                      setEditParams((rows) => [
+                        ...rows,
+                        { name: '', type: 'nvarchar', required: false, source: 'query' as const },
+                      ])
+                    }
+                  >
+                    + Param
+                  </button>
+                </div>
+                {editParams.map((p, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
+                    <input
+                      className="col-span-4 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white"
+                      placeholder="ady"
+                      value={p.name}
+                      onChange={(e) =>
+                        setEditParams((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, name: e.target.value } : r))
+                        )
+                      }
+                    />
+                    <select
+                      className="col-span-3 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
+                      value={p.type}
+                      onChange={(e) =>
+                        setEditParams((rows) =>
+                          rows.map((r, j) => (j === i ? { ...r, type: e.target.value } : r))
+                        )
+                      }
+                    >
+                      {['nvarchar','int','bigint','date','datetime','bit','float'].map((t) => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="col-span-3 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
+                      value={p.source}
+                      onChange={(e) =>
+                        setEditParams((rows) =>
+                          rows.map((r, j) =>
+                            j === i ? { ...r, source: e.target.value as any } : r
+                          )
+                        )
+                      }
+                    >
+                      <option value="query">query</option>
+                      <option value="url">url</option>
+                      <option value="body">body</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="col-span-2 text-rose-400 text-xs"
+                      onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
+                    >
+                      Poz
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <Button className="w-full" size="sm" onClick={() => setMetaSheetOpen(false)}>Ýatda sakla / Ýap</Button>
+            </div>
+          </div>
+        )}
+
+
         <div className="flex-1 min-h-0 overflow-y-auto">
           <div className="max-w-[1600px] mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 h-full">
-            {/* Left: meta */}
-            <div className="space-y-4 lg:col-span-3 overflow-y-auto max-h-[calc(100vh-5rem)]">
+            {/* Left: meta — desktop only; mobile uses sheet */}
+            <div className="hidden lg:block space-y-4 lg:col-span-3 overflow-y-auto max-h-[calc(100vh-5rem)]">
               <div>
                 <label className="text-xs text-slate-400">Firma</label>
                 <select
@@ -819,11 +1035,11 @@ export default function ApisPage() {
         </div>
 
         {showResultModal && execResult && (
-          <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[400] flex items-stretch sm:items-center justify-center p-0 sm:p-4">
             <div className="absolute inset-0 bg-slate-950/90" onClick={() => setShowResultModal(false)} />
-            <div className="relative w-full max-w-6xl max-h-[90vh] flex flex-col rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden">
-              <div className="shrink-0 flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-slate-900">
-                <h3 className="text-sm font-semibold text-white flex-1">
+            <div className="relative w-full h-[100dvh] sm:h-auto sm:max-w-6xl sm:max-h-[90vh] flex flex-col rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden">
+              <div className="shrink-0 flex flex-wrap items-center gap-2 px-3 sm:px-4 py-3 border-b border-slate-800 bg-slate-900">
+                <h3 className="text-sm font-semibold text-white flex-1 min-w-0 truncate">
                   SQL netije
                   {execResult.rowCount != null && (
                     <span className="text-slate-400 font-normal ml-2">{execResult.rowCount} setir</span>
@@ -834,13 +1050,13 @@ export default function ApisPage() {
                 </h3>
                 <button
                   type="button"
-                  className="p-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+                  className="p-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white shrink-0"
                   onClick={() => setShowResultModal(false)}
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex-1 min-h-0 overflow-auto p-3">
+              <div className="flex-1 min-h-0 overflow-auto p-2 sm:p-3">
                 {execResult.error ? (
                   <p className="p-4 text-sm text-rose-400 font-mono whitespace-pre-wrap">{execResult.error}</p>
                 ) : execResult.rows && execResult.rows.length > 0 ? (
@@ -880,9 +1096,23 @@ export default function ApisPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">API-lar</h1>
+          {selectedTenantSlug && (
+            <button
+              type="button"
+              onClick={() => setSelectedTenantSlug(null)}
+              className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 mb-1"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Firmalara dolan
+            </button>
+          )}
+          <h1 className="text-2xl font-bold text-white">
+            {selectedTenantSlug ? `${selectedTenantName} — API-lar` : 'API-lar · Firmalar'}
+          </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Doly URL · basyp aç · copy
+            {selectedTenantSlug
+              ? 'Doly URL · basyp aç · copy'
+              : 'Ilki firma saýlaň — soň bagly API-lar'}
             {syncedAt && (
               <span className="text-slate-500">
                 {' '}
@@ -904,22 +1134,60 @@ export default function ApisPage() {
             <RefreshCw className="h-4 w-4" />
             Sync
           </Button>
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            Täze API
-          </Button>
+          {selectedTenantSlug && (
+            <Button size="sm" onClick={() => openCreate(selectedTenantSlug)}>
+              <Plus className="h-4 w-4" />
+              Täze API
+            </Button>
+          )}
         </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={endpoints}
-        rowKey={(r) => r.id}
-        storageKey="bi-apis"
-        searchPlaceholder="Gözle: ady, path, slug..."
-        emptyMessage={loading ? 'Ýüklenýär...' : 'Endpoint ýok — «Täze API» bilen goşuň'}
-        onRowClick={openEdit}
-      />
+      {!selectedTenantSlug ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {tenants.length === 0 && !loading ? (
+            <div className="col-span-full rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400 text-sm">
+              Firma ýok. Catalog sync ediň ýa-da tenant goşuň.
+            </div>
+          ) : (
+            tenants.map((tn) => {
+              const count = tenantCounts.get(tn.slug) || 0;
+              return (
+                <button
+                  key={tn.slug}
+                  type="button"
+                  onClick={() => setSelectedTenantSlug(tn.slug)}
+                  className="group text-left rounded-2xl border border-slate-700/80 bg-slate-900/70 hover:border-indigo-500/50 hover:bg-slate-900 p-5 transition"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="h-11 w-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center shrink-0">
+                      <Building2 className="h-5 w-5 text-violet-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-white truncate group-hover:text-violet-200">{tn.name}</h3>
+                        <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-violet-400 shrink-0" />
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1 truncate">{tn.slug}</p>
+                      <p className="text-xs text-slate-400 mt-2">{count} API</p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={visibleEndpoints}
+          rowKey={(r) => r.id}
+          storageKey="bi-apis"
+          searchPlaceholder="Gözle: ady, path..."
+          emptyMessage={loading ? 'Ýüklenýär...' : 'Bu firma üçin endpoint ýok — «Täze API» bilen goşuň'}
+          onRowClick={openEdit}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import {
   upsertSupportTicket,
   appendSupportMessage,
   markSupportRead,
+  deleteSupportTicket,
 } from '@/lib/db';
 import type { SupportMessage, SupportTicketStatus } from '@/lib/types';
 import { z } from 'zod';
@@ -39,12 +40,40 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const admin = isAdminRole(user.role) || isSuperAdmin(user);
   await markSupportRead(id, admin ? 'admin' : 'user');
 
-  const fresh = await getSupportTicket(id);
+  let fresh = await getSupportTicket(id);
+  if (fresh) {
+    const now = new Date().toISOString();
+    let changed = false;
+    const msgs = (fresh.messages || []).map((m) => {
+      const isOther = admin ? !m.isStaffReply : m.isStaffReply;
+      if (isOther && !m.readAt) {
+        changed = true;
+        return { ...m, readAt: now, deliveredAt: m.deliveredAt || m.createdAt || now };
+      }
+      return m;
+    });
+    if (changed) {
+      fresh = { ...fresh, messages: msgs, updatedAt: now };
+      await upsertSupportTicket(fresh);
+    }
+  }
   return NextResponse.json({ ticket: fresh, isAdmin: admin });
 }
 
 const messageSchema = z.object({
-  body: z.string().min(1).max(5000),
+  body: z.string().optional().default(''),
+  attachments: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        mime: z.string(),
+        size: z.number(),
+        url: z.string(),
+        compressed: z.boolean().optional(),
+      })
+    )
+    .optional(),
 });
 
 export async function POST(req: NextRequest, ctx: Ctx) {
@@ -58,8 +87,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
-  if (ticket.status === 'closed') {
-    return NextResponse.json({ error: 'Ticket ýapyk' }, { status: 400 });
+  if (ticket.status === 'closed' || ticket.status === 'trashed') {
+    return NextResponse.json({ error: 'Ticket ýapyk / pozulan' }, { status: 400 });
   }
 
   const admin = isAdminRole(user.role) || isSuperAdmin(user);
@@ -78,6 +107,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const now = new Date().toISOString();
     // Users write to admins; admin replies are staff replies
     const asStaff = admin;
+    const bodyText = (parsed.data.body || '').trim();
+    const attachments = parsed.data.attachments || [];
+    if (!bodyText && attachments.length === 0) {
+      return NextResponse.json({ error: 'Hat boş' }, { status: 400 });
+    }
     const msg: SupportMessage = {
       id: crypto.randomUUID(),
       ticketId: id,
@@ -85,7 +119,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       authorName: user.fullName,
       authorRole: user.role,
       isStaffReply: asStaff,
-      body: parsed.data.body.trim(),
+      body: bodyText,
+      attachments: attachments.length ? attachments : undefined,
+      deliveredAt: now,
       createdAt: now,
     };
 
@@ -98,7 +134,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 }
 
 const patchSchema = z.object({
-  status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+  status: z.enum(['open', 'in_progress', 'resolved', 'closed', 'trashed']).optional(),
   assignedAdminId: z.string().optional(),
 });
 
@@ -123,9 +159,57 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   const now = new Date().toISOString();
-  if (parsed.data.status) ticket.status = parsed.data.status as SupportTicketStatus;
+  if (parsed.data.status) {
+    ticket.status = parsed.data.status as SupportTicketStatus;
+    if (parsed.data.status === 'trashed') {
+      (ticket as any).trashedAt = now;
+    }
+  }
   if (parsed.data.assignedAdminId) ticket.assignedAdminId = parsed.data.assignedAdminId;
   ticket.updatedAt = now;
   await upsertSupportTicket(ticket);
   return NextResponse.json({ ticket });
+}
+
+
+export async function DELETE(_req: NextRequest, ctx: Ctx) {
+  const user = await getSession();
+  if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
+
+  const admin = isAdminRole(user.role) || isSuperAdmin(user);
+  if (!admin) return NextResponse.json({ error: 'Diňe admin' }, { status: 403 });
+
+  const { id } = await ctx.params;
+  const ticket = await getSupportTicket(id);
+  if (!ticket) return NextResponse.json({ error: 'Tapyimady' }, { status: 404 });
+  if (!canAccess(user, ticket)) {
+    return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+  }
+
+  // Only allow permanent delete from trash (or force)
+  // Soft rule: prefer trashed first, but allow hard delete always for admin
+  const removed = await deleteSupportTicket(id);
+  if (!removed) return NextResponse.json({ error: 'Pozup bolmady' }, { status: 500 });
+
+  // Delete attachment files from disk
+  try {
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const uploadDir = path.join(process.cwd(), 'data', 'support-uploads');
+    for (const m of removed.messages || []) {
+      for (const a of m.attachments || []) {
+        const name = path.basename(String(a.url || '').split('/').pop() || '');
+        if (!name) continue;
+        try {
+          await fs.unlink(path.join(uploadDir, name));
+        } catch {
+          /* file may already be gone */
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('attachment cleanup', e);
+  }
+
+  return NextResponse.json({ ok: true, id });
 }

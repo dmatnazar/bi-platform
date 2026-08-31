@@ -20,7 +20,7 @@ export function ModalPortal({
   if (!open || !mounted) return null;
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[290] pointer-events-none opacity-40">
+      <div className="fixed inset-0 z-[2147482800] pointer-events-none opacity-40">
         <ParticlesBackground />
       </div>
       {children}

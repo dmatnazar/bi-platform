@@ -42,6 +42,30 @@ interface TenantOpt {
   name: string;
 }
 
+/** Online if last sync/heartbeat < 5 minutes, else Offline */
+function isDeviceOnline(lastSeenAt?: string): 'online' | 'offline' {
+  if (!lastSeenAt) return 'offline';
+  const ms = Date.now() - Date.parse(lastSeenAt);
+  if (!Number.isFinite(ms)) return 'offline';
+  return ms < 5 * 60 * 1000 ? 'online' : 'offline';
+}
+
+function formatLastSync(lastSeenAt?: string): string {
+  if (!lastSeenAt) return 'Sync: —';
+  const t = Date.parse(lastSeenAt);
+  if (!Number.isFinite(t)) return 'Sync: —';
+  const d = new Date(t);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `Sync: ${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const onlineStyle = {
+  online: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  offline: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+} as const;
+
+const onlineLabel = { online: 'Online', offline: 'Offline' } as const;
+
 const statusStyle: Record<string, string> = {
   pending: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
   approved: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
@@ -312,6 +336,27 @@ export default function DevicesPage() {
                       >
                         {d.status}
                       </span>
+                      {(() => {
+                        const o = isDeviceOnline(d.lastSeenAt);
+                        return (
+                          <span className="inline-flex flex-col sm:flex-row sm:items-center gap-1">
+                            <span
+                              className={`text-[11px] px-2 py-0.5 rounded-md border font-medium inline-flex items-center gap-1 ${onlineStyle[o]}`}
+                              title={d.lastSeenAt || 'lastSeen ýok'}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  o === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
+                                }`}
+                              />
+                              {onlineLabel[o]}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {formatLastSync(d.lastSeenAt)}
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </div>
                     <p className="text-xs font-mono text-slate-500 break-all">{d.id}</p>
                     <div className="flex flex-wrap gap-3 text-[11px] text-slate-400 mt-1">

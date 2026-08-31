@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
 import type { Dashboard, DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import { LiveWidget } from './LiveWidget';
 import { cn } from '@/lib/utils';
-import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown, RotateCcw, Download } from 'lucide-react';
 
 interface Props {
   dashboard: Dashboard;
@@ -211,6 +212,38 @@ export function DashboardCanvas({
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
+                {['bar', 'line', 'pie', 'area'].includes(widget.type) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.dispatchEvent(
+                          new CustomEvent('bi-chart-cmd', {
+                            detail: { id: widget.id, action: 'reset' },
+                          })
+                        )
+                      }
+                      className="p-1 rounded-lg text-slate-500 hover:text-sky-300 hover:bg-sky-500/10"
+                      title="Reset zoom"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.dispatchEvent(
+                          new CustomEvent('bi-chart-cmd', {
+                            detail: { id: widget.id, action: 'png' },
+                          })
+                        )
+                      }
+                      className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10"
+                      title="PNG ýükle"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   onClick={() => setExpandedId(widget.id)}
@@ -254,43 +287,78 @@ export function DashboardCanvas({
         ))}
       </GridLayout>
 
-      {/* Fullscreen widget view — full-height/width on mobile, large centered panel on desktop */}
-      {expandedWidget && (
-        <div className="fixed inset-0 z-[200] flex items-stretch sm:items-center justify-center sm:p-6">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
-          <div className="relative w-full h-full sm:h-[85vh] sm:max-w-6xl rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
-            <div className="flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 border-b border-slate-800 shrink-0">
-              <h3 className="text-sm sm:text-base font-semibold text-white flex-1 truncate">
-                {expandedWidget.title}
-              </h3>
-              <button
-                type="button"
-                onClick={() => bumpRefresh(expandedWidget.id)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800"
-                title="Täzele"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setExpandedId(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                title="Ýap"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            {/* Fullscreen via portal — avoids transform/overflow parents breaking fixed positioning */}
+      {expandedWidget &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[2147481500] flex items-stretch sm:items-center justify-center p-0 sm:p-4">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
+            <div className="relative w-full h-[100dvh] sm:h-[min(92dvh,900px)] sm:max-w-6xl rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
+              <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-3 border-b border-slate-800 shrink-0">
+                <h3 className="text-sm sm:text-base font-semibold text-white flex-1 truncate min-w-0">
+                  {expandedWidget.title}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => bumpRefresh(expandedWidget.id)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800"
+                  title="Täzele"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                {['bar', 'line', 'pie', 'area'].includes(expandedWidget.type) && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.dispatchEvent(
+                          new CustomEvent('bi-chart-cmd', {
+                            detail: { id: expandedWidget.id, action: 'reset' },
+                          })
+                        )
+                      }
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800"
+                      title="Reset zoom"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.dispatchEvent(
+                          new CustomEvent('bi-chart-cmd', {
+                            detail: { id: expandedWidget.id, action: 'png' },
+                          })
+                        )
+                      }
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-300 hover:bg-slate-800"
+                      title="PNG"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  title="Ýap"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 p-2 sm:p-4 overflow-auto">
+                <LiveWidget
+                  widget={expandedWidget}
+                  editable={false}
+                  globalFilters={globalFilters}
+                  refreshToken={refreshTokens[expandedWidget.id]}
+                />
+              </div>
             </div>
-            <div className="flex-1 min-h-0 p-2 sm:p-4">
-              <LiveWidget
-                widget={expandedWidget}
-                editable={false}
-                globalFilters={globalFilters}
-                refreshToken={refreshTokens[expandedWidget.id]}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

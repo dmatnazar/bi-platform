@@ -46,6 +46,9 @@ export default function SettingsPage() {
   const [mailFromEmail, setMailFromEmail] = useState('');
   const [mailTestTo, setMailTestTo] = useState('');
   const [showMailPass, setShowMailPass] = useState(false);
+  const [supportTrashDays, setSupportTrashDays] = useState(
+    () => (typeof window !== 'undefined' && localStorage.getItem('bi-support-trash-days')) || '30'
+  );
 
   async function load() {
     setLoading(true);
@@ -90,6 +93,12 @@ export default function SettingsPage() {
           setMailFromName(m.fromName || 'BI Platform');
           setMailFromEmail(m.fromEmail || m.user || '');
         }
+      } catch {
+        /* */
+      }
+      try {
+        const days = typeof window !== 'undefined' ? localStorage.getItem('bi-support-trash-days') : null;
+        if (days) setSupportTrashDays(days);
       } catch {
         /* */
       }
@@ -403,8 +412,12 @@ export default function SettingsPage() {
                 type={showMailPass ? 'text' : 'password'}
                 value={mailPass}
                 onChange={(e) => setMailPass(e.target.value)}
+                onFocus={() => {
+                  // Masked placeholder from server — clear so user can type & eye toggle works
+                  if (mailPass === '••••••••') setMailPass('');
+                }}
                 className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                placeholder="••••••••"
+                placeholder="App Password giriziň"
                 autoComplete="new-password"
               />
               <button
@@ -412,9 +425,10 @@ export default function SettingsPage() {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  if (mailPass === '••••••••') setMailPass('');
                   setShowMailPass((v) => !v);
                 }}
-                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1 text-slate-400 hover:text-white"
+                className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"
                 tabIndex={-1}
                 aria-label={showMailPass ? 'Gizle' : 'Görkez'}
               >
@@ -441,6 +455,28 @@ export default function SettingsPage() {
           </Button>
         </div>
       </section>
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">Goldaw · Pozulanlar (Trash)</h2>
+        <p className="text-[11px] text-slate-500">
+          Admin ticket-i «trashed» edensoň, şu gün sanawyndan soň awtomatik doly pozulmagy üçin (klient tarapynda ýatda saklanýar; VPS job soň goşulyp bilner).
+        </p>
+        <label className="text-xs text-slate-400">Nace günden soň doly pozulsın?</label>
+        <input
+          type="number"
+          min={1}
+          max={365}
+          value={supportTrashDays}
+          onChange={(e) => {
+            setSupportTrashDays(e.target.value);
+            try {
+              localStorage.setItem('bi-support-trash-days', e.target.value);
+            } catch { /* */ }
+          }}
+          className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100"
+        />
+      </section>
+
       </div>
     </div>
   );

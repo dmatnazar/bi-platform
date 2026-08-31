@@ -292,7 +292,16 @@ export type GlobalFilterValues = Record<string, string | number | boolean | null
 
 /** Support chat: users write only to admins */
 export type SupportCategory = 'error' | 'suggestion' | 'question' | 'feedback' | 'other';
-export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export interface SupportAttachment {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  /** relative path under data/support-uploads or public URL */
+  url: string;
+  /** true if client-compressed image */
+  compressed?: boolean;
+}
 
 export interface SupportMessage {
   id: string;
@@ -304,8 +313,14 @@ export interface SupportMessage {
   /** true if author is admin/super_admin/editor acting as support */
   isStaffReply: boolean;
   body: string;
+  attachments?: SupportAttachment[];
+  /** delivery / read receipts (ticks) */
+  deliveredAt?: string;
+  readAt?: string;
   createdAt: string;
 }
+
+export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'trashed';
 
 export interface SupportTicket {
   id: string;
@@ -324,6 +339,8 @@ export interface SupportTicket {
   unreadForUser: number;
   unreadForAdmin: number;
   assignedAdminId?: string;
+  /** soft-delete / trash */
+  trashedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

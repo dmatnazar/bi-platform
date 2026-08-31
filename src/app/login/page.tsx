@@ -96,13 +96,13 @@ export default function LoginPage() {
         <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
       </div>
 
-      <div className="relative w-full max-w-md animate-fade-in">
-        <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-4">
-            <BarChart3 className="h-7 w-7 text-white" />
+      <div className="relative w-full max-w-md animate-fade-in px-1 sm:px-0">
+        <div className="flex flex-col items-center mb-6 sm:mb-8 text-center">
+          <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-3 sm:mb-4">
+            <BarChart3 className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">BI Platform</h1>
-          <p className="text-slate-300 text-sm mt-1">Hasabat we analitika merkezi</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white leading-tight">BI Platform</h1>
+          <p className="text-slate-300 text-xs sm:text-sm mt-1 px-2 leading-relaxed">Hasabat we analitika merkezi</p>
         </div>
 
         {/* Notifications for this username */}
@@ -136,11 +136,11 @@ export default function LoginPage() {
 
         <form
           onSubmit={onSubmit}
-          className="bg-slate-900/85 border border-slate-700 rounded-2xl p-6 sm:p-8 shadow-xl backdrop-blur-md space-y-5 ring-1 ring-white/5"
+          className="bg-slate-900/85 border border-slate-700 rounded-2xl p-4 sm:p-8 shadow-xl backdrop-blur-md space-y-4 sm:space-y-5 ring-1 ring-white/5"
         >
-          <div>
-            <h2 className="text-lg font-semibold text-white">Giriş</h2>
-            <p className="text-sm text-slate-300 mt-0.5">Öz login we parolyňyz bilen giriň</p>
+          <div className="text-center sm:text-left">
+            <h2 className="text-base sm:text-lg font-semibold text-white">Giriş</h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-0.5 leading-relaxed">Öz login we parolyňyz bilen giriň</p>
           </div>
 
           {error && (
@@ -200,7 +200,7 @@ export default function LoginPage() {
             {loading ? 'Garaşyň...' : 'Girmek'}
           </Button>
 
-          <p className="text-center text-sm text-slate-400">
+          <p className="text-center text-xs sm:text-sm text-slate-400 leading-relaxed">
             Hasabyňyz ýokmy?{' '}
             <Link href="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">
               Hasaba al
@@ -208,7 +208,7 @@ export default function LoginPage() {
           </p>
         </form>
 
-        <p className="text-center text-xs text-slate-600 mt-6">
+        <p className="text-center text-[11px] sm:text-xs text-slate-600 mt-4 sm:mt-6 px-2">
           Demo: <span className="text-slate-400">admin / admin123</span>
         </p>
       </div>

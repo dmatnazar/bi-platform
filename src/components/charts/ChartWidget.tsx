@@ -13,6 +13,7 @@ import {
   Filter,
   GripVertical,
   Loader2,
+  RotateCcw,
   Search,
   X,
 } from 'lucide-react';
@@ -138,6 +139,8 @@ function TableWidgetBody({
   const [sorts, setSorts] = useState<SortSpec[]>(widget.dataSource?.orderBy || []);
   const enableSearch = widget.dataSource?.enableSearch !== false;
   const dragCol = useRef<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const tableRootRef = useRef<HTMLDivElement | null>(null);
 
   function csvEscape(v: unknown): string {
     const s = v == null ? '' : String(v);
@@ -161,6 +164,106 @@ function TableWidgetBody({
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function safeFileName() {
+    return (widget.title || 'table').trim().replace(/[^\p{L}\p{N}_-]+/gu, '_').slice(0, 60) || 'table';
+  }
+
+  async function exportTable(
+    fmt: 'csv' | 'xlsx' | 'pdf' | 'png',
+    rowsToExport: Record<string, unknown>[],
+    cols: string[]
+  ) {
+    if (!rowsToExport.length || !cols.length) return;
+    const name = safeFileName();
+    if (fmt === 'csv') {
+      exportCsv(rowsToExport, cols);
+      return;
+    }
+    if (fmt === 'xlsx') {
+      // Simple SpreadsheetML so Excel opens without extra libs
+      const sheetRows = [
+        `<Row>${cols.map((c) => `<Cell><Data ss:Type="String">${String(c).replace(/[<>&]/g, '')}</Data></Cell>`).join('')}</Row>`,
+        ...rowsToExport.map(
+          (r) =>
+            `<Row>${cols
+              .map((c) => {
+                const v = r[c];
+                const n = typeof v === 'number' || (typeof v === 'string' && v !== '' && !Number.isNaN(Number(v)));
+                const t = n ? 'Number' : 'String';
+                const cell = v == null ? '' : String(v).replace(/[<>&]/g, '');
+                return `<Cell><Data ss:Type="${t}">${cell}</Data></Cell>`;
+              })
+              .join('')}</Row>`
+        ),
+      ].join('');
+      const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="Data"><Table>${sheetRows}</Table></Worksheet></Workbook>`;
+      const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}.xls`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    if (fmt === 'pdf') {
+      const w = window.open('', '_blank');
+      if (!w) return;
+      const head = cols.map((c) => `<th style="border:1px solid #ccc;padding:4px;font-size:11px">${String(c)}</th>`).join('');
+      const body = rowsToExport
+        .map(
+          (r) =>
+            `<tr>${cols
+              .map((c) => `<td style="border:1px solid #eee;padding:4px;font-size:11px">${r[c] == null ? '' : String(r[c])}</td>`)
+              .join('')}</tr>`
+        )
+        .join('');
+      w.document.write(`<html><head><title>${name}</title></head><body><h3>${name}</h3><table style="border-collapse:collapse;width:100%"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table><script>window.onload=()=>window.print()<\/script></body></html>`);
+      w.document.close();
+      return;
+    }
+    if (fmt === 'png') {
+      const node = tableRootRef.current;
+      if (!node) return;
+      try {
+        const { default: html2canvas } = await import('html2canvas').catch(() => ({ default: null as any }));
+        if (!html2canvas) {
+          // Fallback: draw simple canvas from text
+          const canvas = document.createElement('canvas');
+          canvas.width = 1200;
+          canvas.height = Math.min(2000, 40 + rowsToExport.length * 24);
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '12px monospace';
+          ctx.fillText(cols.join(' | '), 10, 24);
+          rowsToExport.slice(0, 80).forEach((r, i) => {
+            ctx.fillText(cols.map((c) => String(r[c] ?? '')).join(' | ').slice(0, 140), 10, 48 + i * 22);
+          });
+          const url = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${name}.png`;
+          a.click();
+          return;
+        }
+        const canvas = await html2canvas(node, { backgroundColor: '#0f172a', scale: 2 });
+        const url = canvas.toDataURL('image/png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${name}.png`;
+        a.click();
+      } catch (e) {
+        console.warn('png export failed', e);
+      }
+    }
   }
 
   // Drill-down state
@@ -504,16 +607,38 @@ function TableWidgetBody({
               Arassala
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => exportCsv(sorted, visibleCols)}
-            disabled={!sorted.length}
-            className="h-8 px-2 rounded-lg border border-slate-700 bg-slate-950/80 text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1 shrink-0 disabled:opacity-40 disabled:hover:text-slate-400"
-            title="CSV ýükle"
-          >
-            <Download className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">CSV</span>
-          </button>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              disabled={!sorted.length}
+              className="h-8 px-2 rounded-lg border border-slate-700 bg-slate-950/80 text-xs text-slate-400 hover:text-slate-200 inline-flex items-center gap-1 disabled:opacity-40"
+              title="Export"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+            {exportMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 w-40 rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1 text-xs">
+                  {(['csv', 'xlsx', 'pdf', 'png'] as const).map((fmt) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-slate-200 hover:bg-slate-800 uppercase"
+                      onClick={() => {
+                        setExportMenuOpen(false);
+                        void exportTable(fmt, sorted, visibleCols);
+                      }}
+                    >
+                      {fmt === 'xlsx' ? 'Excel (.xlsx)' : fmt === 'pdf' ? 'PDF' : fmt === 'png' ? 'PNG' : 'CSV'}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
           </div>
         </div>
 
@@ -618,14 +743,15 @@ function TableWidgetBody({
           </p>
         ) : (
           sorted.slice(0, 200).map((row, i) => (
-            <div
+            <button
+              type="button"
               key={i}
               className={cn(
-                'rounded-lg border border-slate-800/80 bg-slate-900/50 px-2 py-1.5',
-                dd?.enabled && 'active:bg-indigo-500/10'
+                'w-full text-left rounded-lg border border-slate-800/80 bg-slate-900/50 px-2 py-1.5 transition',
+                dd?.enabled && 'active:bg-indigo-500/15 hover:border-indigo-500/40 cursor-pointer'
               )}
               onClick={() => {
-                if (dd?.enabled) openDrillDown(row);
+                if (dd?.enabled) void openDrillDown(row);
               }}
             >
               {/* Column names hidden — values only, 2-row compact grid */}
@@ -642,7 +768,10 @@ function TableWidgetBody({
                   </div>
                 ))}
               </div>
-            </div>
+              {dd?.enabled && (
+                <p className="text-[9px] text-indigo-400/80 mt-1">Basyp detal aç</p>
+              )}
+            </button>
           ))
         )}
       </div>
@@ -673,12 +802,12 @@ function TableWidgetBody({
 
       {/* Drill-down modal */}
       {drillOpen && (
-        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[2147482000] flex items-center justify-center p-0 sm:p-4">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setDrillOpen(false)}
           />
-          <div className="relative w-full h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-w-4xl sm:max-h-[90dvh] rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden z-10">
+          <div className="relative w-full h-[100dvh] sm:h-auto sm:max-w-4xl sm:max-h-[90dvh] rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-900 shadow-2xl flex flex-col overflow-hidden z-10">
             <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
               <h3 className="text-sm font-semibold text-white truncate">{drillTitle}</h3>
               <button
@@ -903,11 +1032,25 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       return {
         backgroundColor: 'transparent',
         color: palette,
-        grid: { left: 48, right: 16, top: 28, bottom: showLegend && series.length > 1 ? 48 : 36 },
+        grid: { left: 48, right: 16, top: 36, bottom: showLegend && series.length > 1 ? 72 : 56 },
+        dataZoom: [
+          { type: 'inside', zoomOnMouseWheel: true, moveOnMouseMove: true },
+          {
+            type: 'slider',
+            height: 28,
+            bottom: 6,
+            borderColor: '#475569',
+            fillerColor: 'rgba(99,102,241,0.35)',
+            handleSize: '110%',
+            handleStyle: { color: '#818cf8', borderColor: '#a5b4fc' },
+            textStyle: { color: '#94a3b8', fontSize: 11 },
+            dataBackground: { lineStyle: { color: '#64748b' }, areaStyle: { color: '#334155' } },
+          },
+        ],
         tooltip: { trigger: 'axis' },
         legend:
           showLegend && series.length > 1
-            ? { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 11 } }
+            ? { bottom: 38, textStyle: { color: '#94a3b8', fontSize: 11 } }
             : undefined,
         xAxis: horizontal ? valueAxis : categoryAxis,
         yAxis: horizontal ? categoryAxis : valueAxis,
@@ -946,12 +1089,13 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         backgroundColor: 'transparent',
         tooltip: { trigger: 'item' },
         legend: showLegend
-          ? { bottom: 0, textStyle: { color: '#94a3b8', fontSize: 11 } }
+          ? { bottom: 0, type: 'scroll', textStyle: { color: '#94a3b8', fontSize: 11 } }
           : undefined,
+        // Reset / PNG live in widget chrome toolbar (same design as refresh/fullscreen)
         series: [
           {
             type: 'pie',
-            radius: ['42%', '68%'],
+            radius: ['36%', '62%'],
             center: ['50%', showLegend ? '44%' : '50%'],
             data: rows.map((r, i) => ({
               name: String(r[catKey] ?? ''),
@@ -968,6 +1112,16 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               show: widget.config?.showDataLabels !== false,
             },
             itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 },
+            emphasis: {
+              scale: true,
+              scaleSize: 12,
+              itemStyle: { shadowBlur: 16, shadowColor: 'rgba(0,0,0,0.35)' },
+              label: { show: true, fontWeight: 'bold', fontSize: 13 },
+            },
+            selectedMode: 'single',
+            select: {
+              itemStyle: { shadowBlur: 12, borderWidth: 3, borderColor: '#fff' },
+            },
           },
         ],
         graphic:
@@ -1041,11 +1195,83 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
   if (!option) return null;
 
   return (
-    <ReactECharts
+    <ChartCanvas
       option={option}
-      style={{ height: '100%', width: '100%' }}
-      opts={{ renderer: 'canvas' }}
-      notMerge
+      className={className}
+      chartKind={widget.type}
+      widgetId={widget.id}
     />
+  );
+}
+
+/** Chart canvas — listens for header toolbar events (reset / PNG) */
+function ChartCanvas({
+  option,
+  className,
+  chartKind,
+  widgetId,
+}: {
+  option: any;
+  className?: string;
+  chartKind: string;
+  widgetId: string;
+}) {
+  const chartRef = useRef<any>(null);
+
+  function getChart() {
+    return chartRef.current?.getEchartsInstance?.() || null;
+  }
+
+  function onReset() {
+    const inst = getChart();
+    if (!inst) return;
+    try {
+      inst.dispatchAction({ type: 'restore' });
+      inst.setOption(option, true);
+    } catch {
+      /* */
+    }
+  }
+
+  function onPng() {
+    const inst = getChart();
+    if (!inst) return;
+    try {
+      const url = inst.getDataURL({
+        type: 'png',
+        pixelRatio: 2,
+        backgroundColor: '#0f172a',
+      });
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${chartKind || 'chart'}.png`;
+      a.click();
+    } catch {
+      /* */
+    }
+  }
+
+  useEffect(() => {
+    const onCmd = (e: Event) => {
+      const ce = e as CustomEvent<{ id: string; action: string }>;
+      if (!ce.detail || ce.detail.id !== widgetId) return;
+      if (ce.detail.action === 'reset') onReset();
+      if (ce.detail.action === 'png') onPng();
+    };
+    window.addEventListener('bi-chart-cmd', onCmd as EventListener);
+    return () => window.removeEventListener('bi-chart-cmd', onCmd as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widgetId, option, chartKind]);
+
+  return (
+    <div className={cn('relative h-full w-full', className)}>
+      <ReactECharts
+        ref={chartRef}
+        option={option}
+        style={{ height: '100%', width: '100%' }}
+        opts={{ renderer: 'canvas' }}
+        notMerge
+      />
+    </div>
   );
 }

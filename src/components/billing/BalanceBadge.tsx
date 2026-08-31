@@ -126,7 +126,7 @@ function TariffCard({
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] text-slate-300 pt-2 border-t border-slate-800/80">
         <span className="flex items-center gap-1">
           <Wallet className="h-3 w-3 text-emerald-400" />
-          Aýda <strong className="text-white">{t.includedCredits.toLocaleString()}</strong> REQ (sorgu)
+          Aýda <strong className="text-white">{t.includedCredits.toLocaleString()}</strong> REQ (sorag)
         </span>
         <span className="flex items-center gap-1">
           <Zap className="h-3 w-3 text-amber-400" />
@@ -368,11 +368,11 @@ export function BalanceBadge({
                 </p>
                 <ul className="text-[11px] text-slate-400 space-y-1.5 leading-relaxed list-disc pl-4">
                   <li>
-                    <strong className="text-slate-300">Balans</strong> — firmanyň hasabyndaky sorgu birligi (REQ).
+                    <strong className="text-slate-300">Balans</strong> — firmanyň hasabyndaky sorag birligi (REQ).
                   </li>
                   <li>
-                    Her <strong className="text-slate-300">API sorgu</strong> (hasabat, maglumat çekmek) gapdan
-                    aýrylýar. Häzir: <strong className="text-slate-300">1 API sorgu = 1 REQ</strong>.
+                    Her <strong className="text-slate-300">API sorag</strong> (hasabat, maglumat çekmek) gapdan
+                    aýrylýar. Häzir: <strong className="text-slate-300">1 API sorag = 1 REQ</strong>.
                   </li>
                   <li>
                     Tarif aýda <strong className="text-slate-300">mugt REQ</strong> berýär (mysal: Free = 500 REQ).

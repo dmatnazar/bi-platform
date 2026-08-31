@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupportTicket, SupportCategory, SupportTicketStatus } from '@/lib/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -15,6 +15,8 @@ import {
   HelpCircle,
   MessageSquare,
   CircleDot,
+  Paperclip,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +33,7 @@ const STATUS_LABEL: Record<SupportTicketStatus, string> = {
   in_progress: 'Işlenýär',
   resolved: 'Çözüldi',
   closed: 'Ýapyk',
+  trashed: 'Pozulanlar',
 };
 
 const STATUS_COLOR: Record<SupportTicketStatus, string> = {
@@ -38,7 +41,17 @@ const STATUS_COLOR: Record<SupportTicketStatus, string> = {
   in_progress: 'bg-sky-500/15 text-sky-300',
   resolved: 'bg-emerald-500/15 text-emerald-300',
   closed: 'bg-slate-500/15 text-slate-400',
+  trashed: 'bg-rose-500/15 text-rose-300',
 };
+
+const STATUS_TABS: { key: 'all' | SupportTicketStatus; label: string }[] = [
+  { key: 'all', label: 'Ählisi' },
+  { key: 'open', label: 'Açyk' },
+  { key: 'in_progress', label: 'Işlenýär' },
+  { key: 'resolved', label: 'Çözüldi' },
+  { key: 'closed', label: 'Ýapyk' },
+  { key: 'trashed', label: 'Pozulanlar' },
+];
 
 interface Props {
   mode: 'user' | 'admin';
@@ -57,6 +70,9 @@ export function SupportChat({ mode }: Props) {
   const [category, setCategory] = useState<SupportCategory>('question');
   const [body, setBody] = useState('');
   const [reply, setReply] = useState('');
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; preview?: string; compressed?: boolean }[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | SupportTicketStatus>('all');
+  const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -66,6 +82,31 @@ export function SupportChat({ mode }: Props) {
     if (res.ok) setTickets(data.tickets || []);
     setLoading(false);
   }, []);
+
+  const statusCounts = useMemo(() => {
+    const c: Record<string, number> = {
+      all: 0,
+      open: 0,
+      in_progress: 0,
+      resolved: 0,
+      closed: 0,
+      trashed: 0,
+    };
+    for (const t of tickets) {
+      c.all += 1;
+      const s = t.status || 'open';
+      c[s] = (c[s] || 0) + 1;
+    }
+    return c;
+  }, [tickets]);
+
+  const visibleTickets = useMemo(() => {
+    if (statusFilter === 'all') {
+      // default list: everything except trash
+      return tickets.filter((t) => t.status !== 'trashed');
+    }
+    return tickets.filter((t) => t.status === statusFilter);
+  }, [tickets, statusFilter]);
 
   const loadTicket = useCallback(async (id: string) => {
     const res = await fetch(`/api/support/tickets/${id}`);
@@ -132,18 +173,68 @@ export function SupportChat({ mode }: Props) {
     }
   }
 
+  async function compressImage(file: File): Promise<{ blob: Blob; compressed: boolean }> {
+    if (!file.type.startsWith('image/')) return { blob: file, compressed: false };
+    try {
+      const bitmap = await createImageBitmap(file);
+      const max = 1600;
+      let { width, height } = bitmap;
+      if (width > max || height > max) {
+        const scale = Math.min(max / width, max / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return { blob: file, compressed: false };
+      ctx.drawImage(bitmap, 0, 0, width, height);
+      const blob: Blob = await new Promise((resolve) =>
+        canvas.toBlob((b) => resolve(b || file), 'image/jpeg', 0.82)
+      );
+      return { blob, compressed: true };
+    } catch {
+      return { blob: file, compressed: false };
+    }
+  }
+
+  async function onPickFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const next: { file: File; preview?: string; compressed?: boolean }[] = [];
+    for (const f of Array.from(list).slice(0, 5)) {
+      const { blob, compressed } = await compressImage(f);
+      const file = new File([blob], f.name.replace(/\.(png|webp|gif)$/i, '.jpg'), {
+        type: blob.type || f.type,
+      });
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+      next.push({ file, preview, compressed });
+    }
+    setPendingFiles((p) => [...p, ...next].slice(0, 8));
+  }
+
   async function sendReply() {
-    if (!activeId || !reply.trim()) return;
+    if (!activeId || (!reply.trim() && pendingFiles.length === 0)) return;
     setSending(true);
     try {
+      const attachments: any[] = [];
+      for (const pf of pendingFiles) {
+        const fd = new FormData();
+        fd.append('file', pf.file);
+        if (pf.compressed) fd.append('compressed', '1');
+        const up = await fetch('/api/support/upload', { method: 'POST', body: fd });
+        const ud = await up.json();
+        if (up.ok && ud.attachment) attachments.push(ud.attachment);
+      }
       const res = await fetch(`/api/support/tickets/${activeId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ body: reply }),
+        body: JSON.stringify({ body: reply, attachments }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
       setReply('');
+      setPendingFiles([]);
       setActive(data.ticket);
       loadList();
     } catch (e) {
@@ -164,6 +255,37 @@ export function SupportChat({ mode }: Props) {
     if (res.ok) {
       setActive(data.ticket);
       loadList();
+    }
+  }
+
+  async function hardDeleteTicket(id: string) {
+    if (!confirm('Bu ticket we ähli faýllary doly pozular. Dowam?')) return;
+    const res = await fetch(`/api/support/tickets/${id}`, { method: 'DELETE' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.error || 'Pozup bolmady');
+      return;
+    }
+    if (activeId === id) {
+      setActiveId(null);
+      setActive(null);
+    }
+    await loadList();
+  }
+
+  async function moveToTrash(id: string) {
+    const res = await fetch(`/api/support/tickets/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'trashed' }),
+    });
+    if (res.ok) {
+      if (activeId === id) {
+        setActiveId(null);
+        setActive(null);
+      }
+      await loadList();
+      setStatusFilter('trashed');
     }
   }
 
@@ -194,48 +316,106 @@ export function SupportChat({ mode }: Props) {
           )}
         </div>
 
+        {/* Status sections with counts */}
+        <div className="px-2 pt-2 pb-1 border-b border-slate-800/80 flex flex-wrap gap-1">
+          {STATUS_TABS.map((tab) => {
+            const count =
+              tab.key === 'all'
+                ? statusCounts.all - (statusCounts.trashed || 0)
+                : statusCounts[tab.key] || 0;
+            const active = statusFilter === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(tab.key);
+                  setActiveId(null);
+                  setActive(null);
+                }}
+                className={cn(
+                  'text-[10px] px-2 py-1 rounded-lg border transition-colors inline-flex items-center gap-1',
+                  active
+                    ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-200'
+                    : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                )}
+              >
+                <span>{tab.label}</span>
+                <span
+                  className={cn(
+                    'min-w-[1.1rem] h-4 px-1 rounded-full text-[9px] font-bold inline-flex items-center justify-center',
+                    active ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <p className="p-4 text-sm text-slate-500">Ýüklenýär...</p>
-          ) : tickets.length === 0 ? (
+          ) : visibleTickets.length === 0 ? (
             <div className="p-6 text-center text-sm text-slate-500">
-              {mode === 'user'
-                ? 'Heniz ýüzlenme ýok. Teklip, säwlik ýa-da sorag ýazyň.'
-                : 'Açyk ticket ýok.'}
+              {statusFilter === 'trashed'
+                ? 'Pozulan ticket ýok'
+                : mode === 'user'
+                  ? 'Heniz ýüzlenme ýok. Teklip, säwlik ýa-da sorag ýazyň.'
+                  : 'Bu bölümde ticket ýok.'}
             </div>
           ) : (
-            tickets.map((t) => (
-              <button
+            visibleTickets.map((t) => (
+              <div
                 key={t.id}
-                type="button"
-                onClick={() => setActiveId(t.id)}
                 className={cn(
-                  'w-full text-left px-3 py-3 border-b border-slate-800/80 hover:bg-slate-800/40 transition-colors',
+                  'border-b border-slate-800/80 hover:bg-slate-800/40 transition-colors',
                   activeId === t.id && 'bg-indigo-500/10'
                 )}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-slate-100 truncate">{t.subject}</p>
-                  {unread(t) > 0 && (
-                    <span className="shrink-0 h-5 min-w-5 px-1 rounded-full bg-indigo-500 text-[10px] font-bold text-white flex items-center justify-center">
-                      {unread(t)}
+                <button
+                  type="button"
+                  onClick={() => setActiveId(t.id)}
+                  className="w-full text-left px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-slate-100 truncate">{t.subject}</p>
+                    {unread(t) > 0 && (
+                      <span className="shrink-0 h-5 min-w-5 px-1 rounded-full bg-indigo-500 text-[10px] font-bold text-white flex items-center justify-center">
+                        {unread(t)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded-md', STATUS_COLOR[t.status])}>
+                      {STATUS_LABEL[t.status]}
                     </span>
+                    <span className="text-[10px] text-slate-500">
+                      {CATEGORIES.find((c) => c.value === t.category)?.label}
+                    </span>
+                    <span className="text-[10px] text-slate-600">
+                      {(t.messageCount ?? t.messages?.length ?? 0)} hat
+                    </span>
+                  </div>
+                  {mode === 'admin' && (
+                    <p className="mt-1 text-[11px] text-slate-500 truncate">
+                      {t.userName} · @{t.userUsername}
+                    </p>
                   )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <span className={cn('text-[10px] px-1.5 py-0.5 rounded-md', STATUS_COLOR[t.status])}>
-                    {STATUS_LABEL[t.status]}
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    {CATEGORIES.find((c) => c.value === t.category)?.label}
-                  </span>
-                </div>
-                {mode === 'admin' && (
-                  <p className="mt-1 text-[11px] text-slate-500 truncate">
-                    {t.userName} · @{t.userUsername}
-                  </p>
+                </button>
+                {mode === 'admin' && t.status === 'trashed' && (
+                  <div className="px-3 pb-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void hardDeleteTicket(t.id)}
+                      className="text-[10px] px-2 py-1 rounded-md border border-rose-500/40 text-rose-300 hover:bg-rose-500/15"
+                    >
+                      Düýbünden poz
+                    </button>
+                  </div>
                 )}
-              </button>
+              </div>
             ))
           )}
         </div>
@@ -326,17 +506,38 @@ export function SupportChat({ mode }: Props) {
                 {STATUS_LABEL[active.status]}
               </span>
               {mode === 'admin' && (
-                <select
-                  value={active.status}
-                  onChange={(e) => setStatus(e.target.value as SupportTicketStatus)}
-                  className="h-8 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-300 px-2"
-                >
-                  {(Object.keys(STATUS_LABEL) as SupportTicketStatus[]).map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABEL[s]}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    value={active.status}
+                    onChange={(e) => setStatus(e.target.value as SupportTicketStatus)}
+                    className="h-8 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-300 px-2"
+                  >
+                    {(Object.keys(STATUS_LABEL) as SupportTicketStatus[]).map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABEL[s]}
+                      </option>
+                    ))}
+                  </select>
+                  {active.status !== 'trashed' ? (
+                    <button
+                      type="button"
+                      onClick={() => void moveToTrash(active.id)}
+                      className="h-8 px-2 rounded-lg border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800"
+                      title="Pozulanlara geçir"
+                    >
+                      Trash
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void hardDeleteTicket(active.id)}
+                      className="h-8 px-2 rounded-lg border border-rose-500/40 text-[11px] text-rose-300 hover:bg-rose-500/15"
+                      title="Faýllar bilen doly poz"
+                    >
+                      Düýbünden poz
+                    </button>
+                  )}
+                </>
               )}
             </div>
 
@@ -363,7 +564,42 @@ export function SupportChat({ mode }: Props) {
                           {m.isStaffReply ? ' · Admin' : ''}
                         </span>
                       </div>
-                      <p className="whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                      {m.body && (
+                        <p className="whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                      )}
+                      {m.attachments && m.attachments.length > 0 && (
+                        <div className="mt-2 space-y-1.5">
+                          {m.attachments.map((a) =>
+                            a.mime?.startsWith('image/') ? (
+                              <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="block">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={a.url} alt={a.name} className="max-h-40 rounded-lg border border-white/10" />
+                              </a>
+                            ) : (
+                              <a
+                                key={a.id}
+                                href={a.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[11px] text-indigo-300 underline break-all"
+                              >
+                                {a.name}
+                              </a>
+                            )
+                          )}
+                        </div>
+                      )}
+                      {mine && (
+                        <div className="mt-1 flex justify-end text-[10px] opacity-80">
+                          {m.readAt ? (
+                            <span className="text-sky-300" title="Okaldy">✓✓</span>
+                          ) : m.deliveredAt ? (
+                            <span title="Baryp ýetdi">✓✓</span>
+                          ) : (
+                            <span title="Ugradyldy">✓</span>
+                          )}
+                        </div>
+                      )}
                       <p className="text-[10px] opacity-60 mt-1 text-right">
                         {new Date(m.createdAt).toLocaleString()}
                       </p>
@@ -374,24 +610,96 @@ export function SupportChat({ mode }: Props) {
               <div ref={bottomRef} />
             </div>
 
-            {active.status !== 'closed' ? (
-              <div className="p-3 border-t border-slate-800 flex gap-2 items-end">
-                <textarea
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  rows={2}
-                  placeholder={mode === 'admin' ? 'Jogap ýazyň...' : 'Adminlere ýazyň...'}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      sendReply();
-                    }
+            {active.status !== 'closed' && active.status !== 'trashed' ? (
+              <div className="p-3 border-t border-slate-800 space-y-2">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  multiple
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+                  className="hidden"
+                  onChange={(e) => {
+                    void onPickFiles(e.target.files);
+                    e.target.value = '';
                   }}
                 />
-                <Button size="sm" loading={sending} onClick={sendReply} disabled={!reply.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
+                {pendingFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {pendingFiles.map((pf, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] px-1.5 py-0.5 rounded-lg bg-slate-800 text-slate-300 inline-flex items-center gap-1 border border-slate-700"
+                      >
+                        {pf.preview ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={pf.preview} alt="" className="h-6 w-6 rounded object-cover" />
+                        ) : (
+                          <Paperclip className="h-3 w-3" />
+                        )}
+                        <span className="max-w-[100px] truncate">{pf.file.name}</span>
+                        <button
+                          type="button"
+                          className="text-slate-500 hover:text-rose-400"
+                          onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-1.5 sm:gap-2 items-end">
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <button
+                      type="button"
+                      title="Faýl"
+                      onClick={() => {
+                        if (fileRef.current) {
+                          fileRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,image/*';
+                          fileRef.current.click();
+                        }
+                      }}
+                      className="h-9 w-9 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 inline-flex items-center justify-center"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Surat"
+                      onClick={() => {
+                        if (fileRef.current) {
+                          fileRef.current.accept = 'image/*';
+                          fileRef.current.click();
+                        }
+                      }}
+                      className="h-9 w-9 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 inline-flex items-center justify-center"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <textarea
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    rows={2}
+                    placeholder={mode === 'admin' ? 'Jogap ýazyň...' : 'Adminlere ýazyň...'}
+                    className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void sendReply();
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    loading={sending}
+                    onClick={() => void sendReply()}
+                    disabled={!reply.trim() && pendingFiles.length === 0}
+                    className="h-9 w-9 p-0 shrink-0"
+                  >
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="p-3 border-t border-slate-800 text-center text-xs text-slate-500">

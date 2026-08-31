@@ -21,13 +21,28 @@ import {
   Upload,
   X,
   Users,
+  Building2,
+  ArrowLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 
+interface CompanyBrief {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 interface Props {
   initial: Dashboard[];
   canEdit: boolean;
+  companies?: CompanyBrief[];
+  userRole?: string;
+  isSuperAdmin?: boolean;
+  userCompanyId?: string;
+  /** VPS slug → canonical company id for matching dashboards */
+  companyIdBySlug?: Record<string, string>;
 }
 
 function downloadJson(filename: string, data: unknown) {
@@ -44,10 +59,20 @@ function remapWidgetIds(widgets: DashboardWidget[]): DashboardWidget[] {
   return widgets.map((w) => ({ ...w, id: generateId() }));
 }
 
-export function DashboardListClient({ initial, canEdit }: Props) {
+export function DashboardListClient({
+  initial,
+  canEdit,
+  companies = [],
+  userRole = 'viewer',
+  isSuperAdmin = false,
+  userCompanyId = '',
+  companyIdBySlug = {},
+}: Props) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState(initial);
+  // Company drill-down: null = company list (admin/multi), set = dashboards of that company
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
   // Soft restore: if user navigates back to /dashboards list after viewing one, keep list;
   // deep-links already open /dashboards/[id]. Remember last id for "soňky" badge only.
@@ -76,15 +101,106 @@ export function DashboardListClient({ initial, canEdit }: Props) {
     setTimeout(() => setToast(''), 2800);
   }
 
+  // Companies that have at least one visible dashboard (or all companies for admin)
+  function matchesCompany(d: Dashboard, companyId: string, slug?: string) {
+    if (d.companyId === companyId) return true;
+    if (slug && (d.companyId === slug || d.companyId === companyIdBySlug[slug])) return true;
+    // reverse: dashboard stores slug, selected is id
+    const dashSlug = Object.entries(companyIdBySlug).find(([, id]) => id === d.companyId)?.[0];
+    if (dashSlug && (dashSlug === slug || companyIdBySlug[dashSlug] === companyId)) return true;
+    return false;
+  }
+
+  const companyMap = useMemo(() => {
+    const m = new Map<string, CompanyBrief>();
+    for (const c of companies) m.set(c.id, c);
+    return m;
+  }, [companies]);
+
+  const companiesWithCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const resolveId = (companyId: string) => {
+      if (companyMap.has(companyId)) return companyId;
+      if (companyIdBySlug[companyId]) return companyIdBySlug[companyId];
+      // companyId might already be VPS id
+      return companyId;
+    };
+    for (const d of items) {
+      const id = resolveId(d.companyId);
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    const seenIds = new Set<string>();
+    const seenSlugs = new Set<string>();
+    const pushUnique = (
+      list: { id: string; name: string; slug: string; count: number }[],
+      c: { id: string; name: string; slug: string; count: number }
+    ) => {
+      const slugKey = (c.slug || '').toLowerCase();
+      if (seenIds.has(c.id)) return;
+      if (slugKey && seenSlugs.has(slugKey)) return;
+      seenIds.add(c.id);
+      if (slugKey) seenSlugs.add(slugKey);
+      list.push(c);
+    };
+    const out: { id: string; name: string; slug: string; count: number }[] = [];
+    // Admin/super: all companies (deduped), even empty
+    if (isSuperAdmin || userRole === 'admin' || userRole === 'super_admin') {
+      if (companies.length) {
+        for (const c of companies) {
+          pushUnique(out, { id: c.id, name: c.name, slug: c.slug, count: counts.get(c.id) || 0 });
+        }
+      }
+      // Include companyIds from dashboards not in companies list
+      for (const [id, count] of counts.entries()) {
+        pushUnique(out, {
+          id,
+          name: companyMap.get(id)?.name || id,
+          slug: companyMap.get(id)?.slug || id,
+          count,
+        });
+      }
+      return out.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    for (const [id, count] of counts.entries()) {
+      pushUnique(out, {
+        id,
+        name: companyMap.get(id)?.name || id,
+        slug: companyMap.get(id)?.slug || id,
+        count,
+      });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }, [items, companies, companyMap, isSuperAdmin, userRole]);
+
+  // Auto-select if only one company (viewer of single firm)
+  const showCompanyPicker = companiesWithCounts.length > 1 || isSuperAdmin || userRole === 'admin' || userRole === 'super_admin';
+
+  const effectiveCompanyId = showCompanyPicker
+    ? selectedCompanyId
+    : companiesWithCounts[0]?.id || userCompanyId || null;
+
   const filtered = useMemo(() => {
+    let list = items;
+    if (effectiveCompanyId) {
+      const slug = companyMap.get(effectiveCompanyId)?.slug;
+      list = list.filter((d) => matchesCompany(d, effectiveCompanyId, slug));
+    } else if (showCompanyPicker) {
+      // Still on company list view — don't show dashboards yet
+      list = [];
+    }
     const s = q.trim().toLowerCase();
-    if (!s) return items;
-    return items.filter(
+    if (!s) return list;
+    return list.filter(
       (d) =>
         d.name.toLowerCase().includes(s) ||
         (d.description || '').toLowerCase().includes(s)
     );
-  }, [items, q]);
+  }, [items, q, effectiveCompanyId, showCompanyPicker]);
+
+  const selectedCompanyName =
+    companiesWithCounts.find((c) => c.id === effectiveCompanyId)?.name ||
+    companyMap.get(effectiveCompanyId || '')?.name ||
+    '';
 
   async function persistUpdate(id: string, patch: Partial<Dashboard>) {
     setBusy(true);
@@ -248,13 +364,24 @@ export function DashboardListClient({ initial, canEdit }: Props) {
       const res = await fetch('/api/staff');
       const data = await res.json();
       if (res.ok) {
+        const co = companyMap.get(d.companyId);
+        const slug = co?.slug;
         setStaffOpts(
-          (data.staff || []).map((s: any) => ({
-            id: s.id,
-            fullName: s.fullName,
-            username: s.username,
-            role: s.role,
-          }))
+          (data.staff || [])
+            .filter((s: any) => {
+              // Prefer same company: by companyId or tenantSlug
+              if (s.companyId && s.companyId === d.companyId) return true;
+              if (slug && (s.tenantSlug === slug || s.companySlug === slug)) return true;
+              // If no company info on staff, include for admin
+              if (!s.companyId && !s.tenantSlug) return true;
+              return false;
+            })
+            .map((s: any) => ({
+              id: s.id,
+              fullName: s.fullName,
+              username: s.username,
+              role: s.role,
+            }))
         );
       }
     } catch {
@@ -295,10 +422,30 @@ export function DashboardListClient({ initial, canEdit }: Props) {
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Dashboardlar</h1>
-          <p className="text-slate-400 text-sm mt-1">Hasabatlar we analitika</p>
+          {showCompanyPicker && effectiveCompanyId ? (
+            <button
+              type="button"
+              onClick={() => { setSelectedCompanyId(null); setQ(''); }}
+              className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 mb-1"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Firmalara dolan
+            </button>
+          ) : null}
+          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+            {showCompanyPicker && !effectiveCompanyId
+              ? 'Firmalar'
+              : selectedCompanyName
+                ? `${selectedCompanyName} — Dashboardlar`
+                : 'Dashboardlar'}
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">
+            {showCompanyPicker && !effectiveCompanyId
+              ? 'Firma saýlaň — onuň dashboardlary açylar'
+              : 'Hasabatlar we analitika'}
+          </p>
         </div>
-        {canEdit && (
+        {canEdit && effectiveCompanyId && (
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileRef}
@@ -318,10 +465,9 @@ export function DashboardListClient({ initial, canEdit }: Props) {
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="h-4 w-4" />
-              <span className="hidden xs:inline">Import</span>
               Import
             </Button>
-            <Link href="/dashboards/new">
+            <Link href={`/dashboards/new${effectiveCompanyId ? `?companyId=${encodeURIComponent(effectiveCompanyId)}` : ''}`}>
               <Button size="sm" disabled={busy}>
                 <Plus className="h-4 w-4" />
                 Täze
@@ -331,6 +477,62 @@ export function DashboardListClient({ initial, canEdit }: Props) {
         )}
       </div>
 
+      {/* Company picker for admin / multi-company */}
+      {showCompanyPicker && !effectiveCompanyId && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {companiesWithCounts.length === 0 ? (
+            <div className="col-span-full rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400 text-sm">
+              Firma ýok ýa-da siziň üçin görünýän dashboard ýok.
+            </div>
+          ) : (
+            companiesWithCounts.map((c) => (
+              <div
+                key={c.id}
+                className="group relative text-left rounded-2xl border border-slate-700/80 bg-slate-900/70 hover:border-indigo-500/50 hover:bg-slate-900 p-5 transition shadow-sm"
+              >
+              <button
+                type="button"
+                onClick={() => setSelectedCompanyId(c.id)}
+                className="w-full text-left"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="h-11 w-11 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                    <Building2 className="h-5 w-5 text-indigo-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-white truncate group-hover:text-indigo-200">{c.name}</h3>
+                      <ChevronRight className="h-4 w-4 text-slate-600 group-hover:text-indigo-400 shrink-0" />
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1 truncate">{c.slug}</p>
+                    <p className="text-xs text-slate-400 mt-2">
+                      {c.count} dashboard
+                    </p>
+                  </div>
+                </div>
+              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  title="Firma dashboardlary üçin ulanyjy dostupy"
+                  className="absolute top-3 right-3 p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const first = items.find((d) => d.companyId === c.id);
+                    if (first) openAccess(first);
+                    else flash('Bu firma üçin dashboard ýok — ilki dörediň');
+                  }}
+                >
+                  <Users className="h-4 w-4" />
+                </button>
+              )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {effectiveCompanyId && (
       <div className="relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 pointer-events-none" />
         <input
@@ -349,15 +551,17 @@ export function DashboardListClient({ initial, canEdit }: Props) {
           </button>
         )}
       </div>
+      )}
 
-      {filtered.length === 0 ? (
+      {effectiveCompanyId ? (
+        filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-16 text-center">
           <LayoutDashboard className="h-10 w-10 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-400">
             {items.length === 0 ? 'Heniz dashboard ýok' : 'Gözleg boýunça netije ýok'}
           </p>
           {canEdit && items.length === 0 && (
-            <Link href="/dashboards/new" className="inline-block mt-4">
+            <Link href={`/dashboards/new${effectiveCompanyId ? `?companyId=${encodeURIComponent(effectiveCompanyId)}` : ''}`} className="inline-block mt-4">
               <Button variant="secondary" size="sm">
                 Ilkinji dashboardy döret
               </Button>
@@ -468,13 +672,14 @@ export function DashboardListClient({ initial, canEdit }: Props) {
             </div>
           ))}
         </div>
-      )}
+      )
+      ) : null}
 
       {/* Edit modal */}
       {editTarget && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[2147482500] flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditTarget(null)} />
-          <div className="relative w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-4 sm:p-5 shadow-2xl space-y-4 max-h-[min(90dvh,640px)] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold text-white">Dashboard üýtget</h3>
               <button type="button" onClick={() => setEditTarget(null)} className="text-slate-500 hover:text-white">
@@ -505,9 +710,9 @@ export function DashboardListClient({ initial, canEdit }: Props) {
       )}
 
       {accessTarget && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[2147482500] flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAccessTarget(null)} />
-          <div className="relative w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4 max-h-[85dvh] flex flex-col">
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-4 sm:p-5 shadow-2xl space-y-4 max-h-[min(90dvh,640px)] flex flex-col overflow-hidden">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-white">Dashboard dostup</h3>

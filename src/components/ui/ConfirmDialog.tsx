@@ -60,7 +60,7 @@ export function ConfirmDialogHost() {
   const { open, title, message, confirmLabel, danger, close } = useConfirmStore();
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[2147482900] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="absolute inset-0 bg-slate-950/80" onClick={() => close(false)} />
       <div className="relative w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-950 p-5 border-slate-700 shadow-2xl space-y-4">
         <div className="flex gap-3">

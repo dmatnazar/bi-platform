@@ -36,4 +36,3 @@ next-env.d.ts
 /data/*.json
 !/data/.gitkeep
 bi-platform.zip
-bi-platform.zip
