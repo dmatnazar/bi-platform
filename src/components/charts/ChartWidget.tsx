@@ -228,33 +228,26 @@ function TableWidgetBody({
       return;
     }
     if (fmt === 'png') {
-      const node = tableRootRef.current;
-      if (!node) return;
       try {
-        const { default: html2canvas } = await import('html2canvas').catch(() => ({ default: null as any }));
-        if (!html2canvas) {
-          // Fallback: draw simple canvas from text
-          const canvas = document.createElement('canvas');
-          canvas.width = 1200;
-          canvas.height = Math.min(2000, 40 + rowsToExport.length * 24);
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          ctx.fillStyle = '#0f172a';
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          ctx.fillStyle = '#e2e8f0';
-          ctx.font = '12px monospace';
-          ctx.fillText(cols.join(' | '), 10, 24);
-          rowsToExport.slice(0, 80).forEach((r, i) => {
-            ctx.fillText(cols.map((c) => String(r[c] ?? '')).join(' | ').slice(0, 140), 10, 48 + i * 22);
-          });
-          const url = canvas.toDataURL('image/png');
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${name}.png`;
-          a.click();
-          return;
-        }
-        const canvas = await html2canvas(node, { backgroundColor: '#0f172a', scale: 2 });
+        // Native canvas export — no html2canvas dependency
+        const canvas = document.createElement('canvas');
+        canvas.width = 1400;
+        canvas.height = Math.min(2400, 48 + Math.max(rowsToExport.length, 1) * 22);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '12px monospace';
+        ctx.fillText(cols.join(' | ').slice(0, 160), 12, 28);
+        ctx.fillStyle = '#e2e8f0';
+        rowsToExport.slice(0, 100).forEach((r, i) => {
+          ctx.fillText(
+            cols.map((c) => String(r[c] ?? '')).join(' | ').slice(0, 160),
+            12,
+            52 + i * 22
+          );
+        });
         const url = canvas.toDataURL('image/png');
         const a = document.createElement('a');
         a.href = url;
