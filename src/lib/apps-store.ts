@@ -190,16 +190,43 @@ export function parseLatestYml(text: string): { version?: string; path?: string;
   return { version, path: pathMatch, fileUrl: urlMatch || pathMatch };
 }
 
+// export function resolveDownloadFromFeed(
+//   feedUrl: string,
+//   ymlText: string
+// ): { version?: string; downloadUrl: string } | null {
+//   const parsed = parseLatestYml(ymlText);
+//   const fileName = parsed.fileUrl || parsed.path;
+//   if (!fileName) return null;
+//   if (/^https?:\/\//i.test(fileName)) {
+//     return { version: parsed.version, downloadUrl: fileName };
+//   }
+//   const base = feedUrl.replace(/\/?latest\.yml$/i, '').replace(/\/$/, '');
+//   return { version: parsed.version, downloadUrl: `${base}/${fileName.replace(/^\//, '')}` };
+// }
+
 export function resolveDownloadFromFeed(
   feedUrl: string,
   ymlText: string
-): { version?: string; downloadUrl: string } | null {
+): { version?: string; downloadUrl: string; fileName: string } | null {
   const parsed = parseLatestYml(ymlText);
   const fileName = parsed.fileUrl || parsed.path;
   if (!fileName) return null;
+
+  // Diňe faýlyň adyny (path-syz) bölüp almak üçin:
+  const cleanFileName = fileName.split('/').pop() || fileName;
+
   if (/^https?:\/\//i.test(fileName)) {
-    return { version: parsed.version, downloadUrl: fileName };
+    return {
+      version: parsed.version,
+      downloadUrl: fileName,
+      fileName: cleanFileName,
+    };
   }
+
   const base = feedUrl.replace(/\/?latest\.yml$/i, '').replace(/\/$/, '');
-  return { version: parsed.version, downloadUrl: `${base}/${fileName.replace(/^\//, '')}` };
+  return {
+    version: parsed.version,
+    downloadUrl: `${base}/${fileName.replace(/^\//, '')}`,
+    fileName: cleanFileName,
+  };
 }
