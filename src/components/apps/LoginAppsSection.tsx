@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import {
   Monitor,
   Smartphone,
-  Tablet,
+  Apple,
   Terminal,
   Download,
   X,
@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createPortal } from 'react-dom';
+import { toastWarning } from '@/components/ui/Toast';
 
 type PlatformSummary = {
   id: string;
@@ -33,8 +34,8 @@ type AppDoc = {
 
 const ICONS: Record<string, typeof Monitor> = {
   windows: Monitor,
-  ios: Smartphone,
-  android: Tablet,
+  ios: Apple,
+  android: Smartphone,
   linux: Terminal,
 };
 
@@ -57,7 +58,10 @@ export function LoginAppsSection() {
   }, []);
 
   async function openPlatform(id: string, name: string, status: string) {
-    if (status !== 'available') return;
+    if (status !== 'available') {
+      toastWarning(name, `${name} wersiýasy taýýarlanýar · ýakyn wagtda elýeterli bolar`);
+      return;
+    }
     setOpenId(id);
     setPlatformName(name);
     setLoadingDocs(true);
@@ -98,13 +102,12 @@ export function LoginAppsSection() {
               <button
                 key={p.id}
                 type="button"
-                disabled={!available}
                 onClick={() => openPlatform(p.id, p.name, p.status)}
                 className={cn(
                   'group relative flex flex-col items-center gap-1.5 w-[72px] sm:w-[84px] p-2.5 rounded-2xl border transition-all',
                   available
                     ? 'border-slate-600/80 bg-slate-900/70 hover:border-indigo-500/50 hover:bg-indigo-500/10 cursor-pointer shadow-lg shadow-black/20'
-                    : 'border-slate-800/60 bg-slate-900/40 opacity-55 cursor-not-allowed'
+                    : 'border-slate-800/60 bg-slate-900/40 opacity-70 cursor-pointer hover:opacity-90'
                 )}
                 title={available ? `${p.name} — gurnama` : `${p.name} — ýakyn wagtda`}
               >
@@ -208,7 +211,7 @@ export function LoginAppsSection() {
                     className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm py-3 shadow-lg shadow-indigo-900/40 transition-colors"
                   >
                     <Download className="h-4 w-4" />
-                    Windows programmasyny ýükle
+                    {platformName} programmasyny ýükle
                     <ExternalLink className="h-3.5 w-3.5 opacity-70" />
                   </a>
                 ) : (

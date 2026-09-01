@@ -3,10 +3,12 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X, Download, Monitor, Smartphone, Apple, Terminal } from 'lucide-react';
+import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
+import { ToastHost } from '@/components/ui/Toast';
+import { LoginAppsSection } from '@/components/apps/LoginAppsSection';
 
 interface Notif {
   id: string;
@@ -25,48 +27,6 @@ export default function LoginPage() {
   const [warning, setWarning] = useState('');
   const [loading, setLoading] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
-  const [winDocsOpen, setWinDocsOpen] = useState(false);
-  const [release, setRelease] = useState<{
-    version?: string;
-    downloadUrl?: string;
-    fileName?: string;
-    releaseNotes?: string;
-    releaseDate?: string;
-    size?: number;
-    error?: string;
-  } | null>(null);
-  const [releaseLoading, setReleaseLoading] = useState(false);
-
-  async function openWindowsDocs() {
-    setWinDocsOpen(true);
-    setReleaseLoading(true);
-    setRelease(null);
-    try {
-      const res = await fetch('/api/client-release', { cache: 'no-store' });
-      const data = await res.json();
-      if (!res.ok) {
-        setRelease({ error: data.error || data.hint || 'Release maglumaty ýok' });
-      } else {
-        setRelease(data);
-      }
-    } catch (e) {
-      setRelease({ error: String(e) });
-    } finally {
-      setReleaseLoading(false);
-    }
-  }
-
-  function downloadWindows() {
-    const url = release?.downloadUrl;
-    if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = release?.fileName || 'BI-Platform-Client-Setup.exe';
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
 
   // Check notifications when username typed (debounce)
   useEffect(() => {
@@ -258,139 +218,16 @@ export default function LoginPage() {
           </p>
         </form>
 
-        <p className="text-center text-[11px] sm:text-xs text-slate-500 mt-4 sm:mt-6 px-2">
-          Demo: <span className="text-slate-300">admin / admin123</span>
-        </p>
-
-        {/* Programmalar — OS clients */}
-        <div className="mt-6 sm:mt-8">
-          <p className="text-center text-[10px] sm:text-xs uppercase tracking-wider text-slate-400 mb-3">
-            Programmalar
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5">
-            <button
-              type="button"
-              onClick={() => void openWindowsDocs()}
-              className="flex flex-col items-center gap-1 min-w-[56px] sm:min-w-[64px] group"
-            >
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center shadow-lg backdrop-blur-sm group-hover:bg-sky-500/30 transition">
-                <Monitor className="h-5 w-5 text-sky-200" strokeWidth={1.75} />
-              </div>
-              <span className="text-[9px] sm:text-[10px] text-slate-200 text-center leading-tight">Windows</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => alert('iOS wersiýasy taýýarlanýar')}
-              className="flex flex-col items-center gap-1 min-w-[56px] sm:min-w-[64px] group opacity-80"
-            >
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-slate-500/20 border border-white/15 flex items-center justify-center shadow-lg backdrop-blur-sm group-hover:bg-white/15 transition">
-                <Apple className="h-5 w-5 text-white" strokeWidth={1.75} />
-              </div>
-              <span className="text-[9px] sm:text-[10px] text-slate-300 text-center leading-tight">iOS</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => alert('Android wersiýasy taýýarlanýar')}
-              className="flex flex-col items-center gap-1 min-w-[56px] sm:min-w-[64px] group opacity-80"
-            >
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-500/15 border border-emerald-400/25 flex items-center justify-center shadow-lg backdrop-blur-sm group-hover:bg-emerald-500/25 transition">
-                <Smartphone className="h-5 w-5 text-emerald-200" strokeWidth={1.75} />
-              </div>
-              <span className="text-[9px] sm:text-[10px] text-slate-300 text-center leading-tight">Android</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => alert('Linux wersiýasy taýýarlanýar')}
-              className="flex flex-col items-center gap-1 min-w-[56px] sm:min-w-[64px] group opacity-80"
-            >
-              <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-amber-500/15 border border-amber-400/25 flex items-center justify-center shadow-lg backdrop-blur-sm group-hover:bg-amber-500/25 transition">
-                <Terminal className="h-5 w-5 text-amber-200" strokeWidth={1.75} />
-              </div>
-              <span className="text-[9px] sm:text-[10px] text-slate-300 text-center leading-tight">Linux</span>
-            </button>
-          </div>
+        {/* Decorative divider */}
+        <div className="mt-5 sm:mt-6 flex items-center gap-3 px-2" aria-hidden>
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-600/70 to-transparent" />
+          <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/50 shadow-[0_0_8px_rgba(129,140,248,0.45)]" />
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-600/70 to-transparent" />
         </div>
 
-        {/* Windows documentation + download modal */}
-        {winDocsOpen && (
-          <div className="fixed inset-0 z-[2147483000] flex items-end sm:items-center justify-center p-0 sm:p-4">
-            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setWinDocsOpen(false)} />
-            <div className="relative w-full sm:max-w-lg max-h-[min(92dvh,640px)] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-600/80 bg-slate-900/95 shadow-2xl p-5 sm:p-6 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <Monitor className="h-5 w-5 text-sky-300" />
-                    Windows · BI Platform Client
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Electron admin programma — firma, API, işgär we sync
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setWinDocsOpen(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="rounded-xl border border-slate-700/80 bg-slate-950/60 p-3.5 space-y-2 text-sm text-slate-300">
-                <p className="font-medium text-white text-xs uppercase tracking-wide">Dokumentasiýa</p>
-                <ul className="list-disc list-inside space-y-1.5 text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  <li>Windows Server 2012 / 2019 / 2022 we Windows 10/11 goldawly</li>
-                  <li>Gurnalan soň VPS Gateway URL we device tassyklamasy gerek</li>
-                  <li>Awto-täzeleýiş: Sazlamalar → Update feed (`/updates`)</li>
-                  <li>Administrator hukugy diňe gurnamak / täzeleýiş üçin gerek bolup biler</li>
-                  <li>Köp ulanyjy: her Windows user öz sessiýasynda açyp biler</li>
-                </ul>
-              </div>
-
-              {releaseLoading && (
-                <p className="text-sm text-slate-400">Wersiýa ýüklenýär...</p>
-              )}
-              {release?.error && (
-                <p className="text-sm text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-xl px-3 py-2">
-                  {release.error}
-                </p>
-              )}
-              {release && !release.error && (
-                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3.5 space-y-1">
-                  <p className="text-sm text-white">
-                    Soňky wersiýa:{' '}
-                    <span className="font-semibold text-indigo-200">v{release.version}</span>
-                  </p>
-                  {release.fileName && (
-                    <p className="text-[11px] text-slate-400 font-mono break-all">{release.fileName}</p>
-                  )}
-                  {release.releaseDate && (
-                    <p className="text-[11px] text-slate-500">{release.releaseDate}</p>
-                  )}
-                  {release.releaseNotes && (
-                    <pre className="text-[11px] text-slate-300 whitespace-pre-wrap mt-2 leading-relaxed">
-                      {release.releaseNotes}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                <Button
-                  className="flex-1"
-                  size="lg"
-                  disabled={!release?.downloadUrl || releaseLoading}
-                  onClick={downloadWindows}
-                >
-                  <Download className="h-4 w-4" />
-                  Download .exe
-                </Button>
-                <Button variant="ghost" onClick={() => setWinDocsOpen(false)}>
-                  Ýap
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Programmalar — docs + download from Admin → Programmalar (apps.json) */}
+        <LoginAppsSection />
+        <ToastHost />
       </div>
     </div>
   );

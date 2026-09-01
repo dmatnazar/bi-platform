@@ -232,15 +232,16 @@ export async function deleteDashboard(id: string): Promise<void> {
 export async function getSettings() {
   const data = await getData();
   const s = data.settings || defaultData().settings;
-  // Prefer process.env (from .env / .env.local) over stored JSON
+  // Prefer stored JSON (UI Settings) over process.env so Save is not overwritten
+  // by stale .env.local / startup env. Env is only the bootstrap fallback.
   return {
     ...s,
-    gatewayUrl: process.env.GATEWAY_URL || s.gatewayUrl,
+    gatewayUrl: (s.gatewayUrl && String(s.gatewayUrl).trim()) || process.env.GATEWAY_URL || 'http://localhost:4000',
     jwtSecret: process.env.JWT_SECRET || s.jwtSecret,
     gatewayAdminSecret:
+      (s.gatewayAdminSecret && String(s.gatewayAdminSecret).trim()) ||
       process.env.GATEWAY_ADMIN_SECRET ||
       process.env.ADMIN_SYNC_SECRET ||
-      s.gatewayAdminSecret ||
       '',
   };
 }

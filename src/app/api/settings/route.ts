@@ -39,11 +39,10 @@ export async function GET() {
   if (!user || (!canManageCompany(user.role) && !isSuperAdmin(user))) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
-  // Prefer env, fall back to stored settings
+  // Stored settings (JSON) are source of truth after UI save; env is bootstrap only
   const s = await getSettings();
-  const gatewayUrl = process.env.GATEWAY_URL || s.gatewayUrl;
-  const actualSecret =
-    process.env.GATEWAY_ADMIN_SECRET || s.gatewayAdminSecret || '';
+  const gatewayUrl = s.gatewayUrl;
+  const actualSecret = s.gatewayAdminSecret || '';
   const hasSecret = !!actualSecret;
   const online = await checkGatewayHealth();
   return NextResponse.json({
@@ -60,11 +59,28 @@ export async function GET() {
 }
 
 const patchSchema = z.object({
-  gatewayUrl: z.string().url().optional(),
+  gatewayUrl: z.string().min(1).optional(),
   gatewayAdminSecret: z.string().optional(),
   catalogSyncIntervalSec: z.number().int().min(0).max(3600).optional(),
   clearSecret: z.boolean().optional(),
 });
+
+function normalizeGatewayUrl(raw: string): string | null {
+  let u = raw.trim().replace(/\/$/, '');
+  if (!u) return null;
+  // Allow host:port without scheme → default http
+  if (!/^https?:\/\//i.test(u)) {
+    u = `http://${u}`;
+  }
+  try {
+    // Validate
+    // eslint-disable-next-line no-new
+    new URL(u);
+    return u;
+  } catch {
+    return null;
+  }
+}
 
 export async function PUT(req: NextRequest) {
   const user = await getSession();
@@ -76,7 +92,16 @@ export async function PUT(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: 'nädogry' }, { status: 400 });
 
   const patch: Record<string, unknown> = {};
-  if (parsed.data.gatewayUrl) patch.gatewayUrl = parsed.data.gatewayUrl.replace(/\/$/, '');
+  if (parsed.data.gatewayUrl) {
+    const normalized = normalizeGatewayUrl(parsed.data.gatewayUrl);
+    if (!normalized) {
+      return NextResponse.json(
+        { error: 'Gateway URL nädogry. Mysal: http://216.250.13.39:4000 ýa-da localhost:4000' },
+        { status: 400 }
+      );
+    }
+    patch.gatewayUrl = normalized;
+  }
   if (parsed.data.catalogSyncIntervalSec !== undefined) {
     patch.catalogSyncIntervalSec = parsed.data.catalogSyncIntervalSec;
   }
@@ -88,11 +113,23 @@ export async function PUT(req: NextRequest) {
   await updateSettings(patch as any);
   const s = await getSettings();
 
-  // Persist critical settings to .env.local so they survive restart
+  // Persist critical settings to .env.local so they survive restart.
+  // Use the values we just wrote (patch + stored), never stale process.env.
+  const urlToWrite =
+    (typeof patch.gatewayUrl === 'string' && patch.gatewayUrl) || s.gatewayUrl;
+  const secretToWrite =
+    patch.gatewayAdminSecret !== undefined
+      ? String(patch.gatewayAdminSecret ?? '')
+      : s.gatewayAdminSecret;
   writeEnvFile({
-    gatewayUrl: s.gatewayUrl,
-    gatewayAdminSecret: s.gatewayAdminSecret,
+    gatewayUrl: urlToWrite,
+    gatewayAdminSecret: secretToWrite,
   });
+  // Keep in-memory env in sync for this process
+  if (urlToWrite) process.env.GATEWAY_URL = urlToWrite;
+  if (patch.gatewayAdminSecret !== undefined) {
+    process.env.GATEWAY_ADMIN_SECRET = secretToWrite || '';
+  }
 
   return NextResponse.json({
     ok: true,
