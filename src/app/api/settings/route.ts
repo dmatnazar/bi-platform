@@ -52,6 +52,8 @@ export async function GET() {
       gatewayAdminSecret: actualSecret,
       hasSecret,
       catalogSyncIntervalSec: s.catalogSyncIntervalSec ?? 0,
+      authAnimations: s.authAnimations !== false,
+      appAnimations: s.appAnimations !== false,
     },
     gatewayOnline: online,
     version: '1.0.0',
@@ -63,6 +65,8 @@ const patchSchema = z.object({
   gatewayAdminSecret: z.string().optional(),
   catalogSyncIntervalSec: z.number().int().min(0).max(3600).optional(),
   clearSecret: z.boolean().optional(),
+  authAnimations: z.boolean().optional(),
+  appAnimations: z.boolean().optional(),
 });
 
 function normalizeGatewayUrl(raw: string): string | null {
@@ -105,6 +109,12 @@ export async function PUT(req: NextRequest) {
   if (parsed.data.catalogSyncIntervalSec !== undefined) {
     patch.catalogSyncIntervalSec = parsed.data.catalogSyncIntervalSec;
   }
+  if (parsed.data.authAnimations !== undefined) {
+    patch.authAnimations = parsed.data.authAnimations;
+  }
+  if (parsed.data.appAnimations !== undefined) {
+    patch.appAnimations = parsed.data.appAnimations;
+  }
   if (parsed.data.clearSecret) patch.gatewayAdminSecret = '';
   else if (parsed.data.gatewayAdminSecret && parsed.data.gatewayAdminSecret !== '••••••••') {
     patch.gatewayAdminSecret = parsed.data.gatewayAdminSecret;
@@ -129,6 +139,18 @@ export async function PUT(req: NextRequest) {
   if (urlToWrite) process.env.GATEWAY_URL = urlToWrite;
   if (patch.gatewayAdminSecret !== undefined) {
     process.env.GATEWAY_ADMIN_SECRET = secretToWrite || '';
+  }
+
+  // Publish gateway URL to VPS so Electrons pull it on sync
+  if (urlToWrite) {
+    try {
+      const { putPublicGatewayUrlOnGateway, checkGatewayHealth } = await import('@/lib/gateway');
+      if (await checkGatewayHealth()) {
+        await putPublicGatewayUrlOnGateway(String(urlToWrite));
+      }
+    } catch (e) {
+      console.warn('[settings] publish gateway URL to VPS failed', e);
+    }
   }
 
   return NextResponse.json({

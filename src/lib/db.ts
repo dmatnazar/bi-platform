@@ -22,6 +22,8 @@ const defaultData = (): DbSchema => ({
     jwtSecret: process.env.JWT_SECRET || 'bi-platform-dev-secret-change-in-production-32chars',
     gatewayAdminSecret: process.env.GATEWAY_ADMIN_SECRET || process.env.ADMIN_SYNC_SECRET || '',
     catalogSyncIntervalSec: 0,
+    authAnimations: true,
+    appAnimations: true,
   },
 });
 

@@ -27,6 +27,28 @@ export default function LoginPage() {
   const [warning, setWarning] = useState('');
   const [loading, setLoading] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [authAnim, setAuthAnim] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = localStorage.getItem('bi-auth-animations');
+        if (cached === '0') setAuthAnim(false);
+        const res = await fetch('/api/settings/public', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && typeof data.authAnimations === 'boolean') {
+          setAuthAnim(data.authAnimations);
+          localStorage.setItem('bi-auth-animations', data.authAnimations ? '1' : '0');
+        }
+      } catch {
+        /* keep default / cache */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Check notifications when username typed (debounce)
   useEffect(() => {
@@ -89,18 +111,23 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-10 relative overflow-hidden">
-      {/* Animated orbs + tsParticles network (reporting / analytics vibe) */}
+      {/* Animated orbs + tsParticles — optional via Settings */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
-        <div className="login-orb login-orb-a" />
-        <div className="login-orb login-orb-b" />
-        <div className="login-orb login-orb-c" />
-        <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
-        {/* Stronger veil on mobile so text stays readable over particles */}
+        {authAnim && (
+          <>
+            <div className="login-orb login-orb-a" />
+            <div className="login-orb login-orb-b" />
+            <div className="login-orb login-orb-c" />
+            <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+          </>
+        )}
         <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_35%,rgb(2_6_23)_90%)] sm:bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
         <div className="absolute inset-0 z-[2] bg-slate-950/15 sm:bg-transparent" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md animate-fade-in px-0.5 sm:px-0">
+      <div
+        className={`relative z-10 w-full max-w-md px-0.5 sm:px-0 ${authAnim ? 'animate-fade-in' : ''}`}
+      >
         <div className="flex flex-col items-center mb-5 sm:mb-8 text-center drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
           <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 mb-3 sm:mb-4">
             <BarChart3 className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
@@ -217,13 +244,6 @@ export default function LoginPage() {
             </Link>
           </p>
         </form>
-
-        {/* Decorative divider */}
-        <div className="mt-5 sm:mt-6 flex items-center gap-3 px-2" aria-hidden>
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-600/70 to-transparent" />
-          <div className="h-1.5 w-1.5 rounded-full bg-indigo-400/50 shadow-[0_0_8px_rgba(129,140,248,0.45)]" />
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-600/70 to-transparent" />
-        </div>
 
         {/* Programmalar — docs + download from Admin → Programmalar (apps.json) */}
         <LoginAppsSection />

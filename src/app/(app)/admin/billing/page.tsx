@@ -348,7 +348,7 @@ export default function BillingPage() {
                   {t.includedCredits.toLocaleString()} REQ
                 </span>
                 <span>{t.maxStaff} işgär</span>
-                <span>{t.maxApiCallsDay}/gün API</span>
+                <span>{t.maxApiCallsDay}/gün REQ</span>
                 <span>{t.maxConnections} DB</span>
               </div>
             </div>
@@ -599,7 +599,7 @@ export default function BillingPage() {
                   ['priceMonthly', 'Aýlyk baha (TMT)', '50'],
                   ['includedCredits', 'Aýlyk REQ', '5000'],
                   ['maxStaff', 'Max işgär', '10'],
-                  ['maxApiCallsDay', 'Günde max API', '1000'],
+                  ['maxApiCallsDay', 'Günde max REQ (sorag)', '1000'],
                   ['maxConnections', 'Max DB baglanyşyk', '3'],
                 ] as const
               ).map(([key, label, ph]) => (

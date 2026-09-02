@@ -95,6 +95,11 @@ export function DashboardListClient({
   const [editDesc, setEditDesc] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
+  /** Copy/move dashboard to another company */
+  const [xferTarget, setXferTarget] = useState<Dashboard | null>(null);
+  const [xferMode, setXferMode] = useState<'copy' | 'move'>('copy');
+  const [xferCompanyId, setXferCompanyId] = useState('');
+  const [xferBusy, setXferBusy] = useState(false);
 
   function flash(msg: string) {
     setToast(msg);
@@ -262,11 +267,11 @@ export function DashboardListClient({
           description: d.description,
           widgets: remapWidgetIds(d.widgets),
           globalFilters: d.globalFilters || [],
+          companyId: d.companyId,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Nusga alynmady');
-      // ensure globalFilters if API stripped them
       if (d.globalFilters?.length && !data.dashboard.globalFilters?.length) {
         await fetch(`/api/dashboards/${data.dashboard.id}`, {
           method: 'PUT',
@@ -282,6 +287,81 @@ export function DashboardListClient({
     } finally {
       setBusy(false);
       setMenuId(null);
+    }
+  }
+
+  function openXfer(d: Dashboard, mode: 'copy' | 'move') {
+    setXferTarget(d);
+    setXferMode(mode);
+    setXferCompanyId('');
+    setMenuId(null);
+  }
+
+  async function confirmXfer() {
+    if (!xferTarget || !xferCompanyId) {
+      flash('Maksat firma saýlaň');
+      return;
+    }
+    setXferBusy(true);
+    try {
+      const sameName = items.find(
+        (x) =>
+          x.id !== xferTarget.id &&
+          matchesCompany(x, xferCompanyId) &&
+          x.name.trim().toLowerCase() === xferTarget.name.trim().toLowerCase()
+      );
+      if (sameName) {
+        const ok = await confirmDialog({
+          title: 'Dashboard eýýäm bar',
+          message: `«${xferTarget.name}» bu firmada eýýäm bar. Replace — köne pozlup täze ýazylar. Skip — hiç zat üýtgemeýär.`,
+          confirmLabel: 'Replace',
+          cancelLabel: 'Skip',
+        });
+        if (!ok) {
+          flash('Geçirildi (skip)');
+          setXferTarget(null);
+          return;
+        }
+        // delete existing same-name
+        await fetch(`/api/dashboards/${sameName.id}`, { method: 'DELETE' });
+        setItems((prev) => prev.filter((x) => x.id !== sameName.id));
+      }
+
+      if (xferMode === 'move') {
+        const res = await fetch(`/api/dashboards/${xferTarget.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ companyId: xferCompanyId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Göçürilmedi');
+        setItems((prev) =>
+          prev.map((x) => (x.id === xferTarget.id ? { ...x, companyId: xferCompanyId } : x))
+        );
+        flash('Dashboard firmaya göçürildi');
+      } else {
+        const res = await fetch('/api/dashboards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: xferTarget.name,
+            description: xferTarget.description,
+            widgets: remapWidgetIds(xferTarget.widgets || []),
+            globalFilters: xferTarget.globalFilters || [],
+            companyId: xferCompanyId,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Nusga alynmady');
+        setItems((prev) => [data.dashboard, ...prev]);
+        flash('Dashboard beýleki firmaya nusga alyndy');
+      }
+      setXferTarget(null);
+      router.refresh();
+    } catch (e) {
+      flash(String(e));
+    } finally {
+      setXferBusy(false);
     }
   }
 
@@ -636,8 +716,30 @@ export function DashboardListClient({
                           disabled={busy}
                         >
                           <Copy className="h-3.5 w-3.5 text-slate-400" />
-                          Nusga al
+                          Nusga al (şol firma)
                         </button>
+                        {isSuperAdmin && companies.length > 1 && (
+                          <>
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
+                              onClick={() => openXfer(d, 'copy')}
+                              disabled={busy}
+                            >
+                              <Copy className="h-3.5 w-3.5 text-indigo-400" />
+                              Firma-a nusga
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
+                              onClick={() => openXfer(d, 'move')}
+                              disabled={busy}
+                            >
+                              <Building2 className="h-3.5 w-3.5 text-amber-400" />
+                              Firma-a göçür
+                            </button>
+                          </>
+                        )}
                         <button
                           type="button"
                           className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
@@ -676,6 +778,46 @@ export function DashboardListClient({
       ) : null}
 
       {/* Edit modal */}
+      {xferTarget && (
+        <div className="fixed inset-0 z-[2147482500] flex items-center justify-center p-3 sm:p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => !xferBusy && setXferTarget(null)} />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+            <h3 className="text-lg font-semibold text-white text-center">
+              {xferMode === 'move' ? 'Firma-a göçür' : 'Firma-a nusga'}
+            </h3>
+            <p className="text-xs text-slate-400 text-center truncate">{xferTarget.name}</p>
+            <label className="block space-y-1.5">
+              <span className="text-xs text-slate-400">Maksat firma</span>
+              <select
+                value={xferCompanyId}
+                onChange={(e) => setXferCompanyId(e.target.value)}
+                className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+              >
+                <option value="">— Saýlaň —</option>
+                {companies
+                  .filter((c) => c.id !== xferTarget.companyId && c.slug !== xferTarget.companyId)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.slug})
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <p className="text-[11px] text-slate-500">
+              Maksat firmada şol atly dashboard bar bolsa Replace ýa-da Skip soralar.
+            </p>
+            <div className="flex gap-2 pt-1">
+              <Button variant="ghost" className="flex-1" disabled={xferBusy} onClick={() => setXferTarget(null)}>
+                Ýatyr
+              </Button>
+              <Button className="flex-1" loading={xferBusy} disabled={!xferCompanyId} onClick={() => void confirmXfer()}>
+                {xferMode === 'move' ? 'Göçür' : 'Nusga al'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editTarget && (
         <div className="fixed inset-0 z-[2147482500] flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditTarget(null)} />

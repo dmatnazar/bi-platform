@@ -103,30 +103,53 @@ export function DashboardCanvas({
     minH: 2,
   }));
 
-  // On small phones, a 12-col desktop grid squeezes every widget into an
-  // unreadably thin sliver. Force a single full-width column instead —
-  // widgets simply stack in their existing top-to-bottom order — while
-  // keeping the original desktop x/y/w/h untouched in `dashboard.widgets`
-  // so switching back to a bigger screen (or editing on desktop) is unaffected.
-  const mobileLayout: Layout[] = [...dashboard.widgets]
-    .sort((a, b) => a.y - b.y || a.x - b.x)
-    .map((w) => ({
-      i: w.id,
-      x: 0,
-      y: 0, // vertical compaction stacks these in array order automatically
-      w: 1,
-      h: Math.max(w.h, 5),
-      minW: 1,
-      minH: 3,
-    }));
+  // Mobile: single column with stable sequential y (order = mobileOrder or desktop y).
+  // Desktop x/y/w/h never overwritten by the forced 1-col view.
+  const mobileLayout: Layout[] = (() => {
+    const ordered = [...dashboard.widgets].sort((a, b) => {
+      const ao = a.mobileOrder ?? a.y;
+      const bo = b.mobileOrder ?? b.y;
+      if (ao !== bo) return ao - bo;
+      return a.x - b.x;
+    });
+    let y = 0;
+    return ordered.map((w) => {
+      const h = Math.max(w.mobileH ?? w.h, 4);
+      const item: Layout = {
+        i: w.id,
+        x: 0,
+        y,
+        w: 1,
+        h,
+        minW: 1,
+        minH: 3,
+      };
+      y += h;
+      return item;
+    });
+  })();
 
   const effectiveCols = isMobile ? 1 : cols;
   const effectiveLayout = isMobile ? mobileLayout : layout;
 
   function onLayoutChange(next: Layout[]) {
-    // Never persist the forced single-column mobile layout back onto the
-    // dashboard — only real (desktop) drag/resize edits should be saved.
-    if (!editable || !onChange || isMobile) return;
+    if (!editable || !onChange) return;
+    if (isMobile) {
+      // Persist only mobileOrder + mobileH — keep desktop grid intact
+      const sorted = [...next].sort((a, b) => a.y - b.y || a.x - b.x);
+      const widgets = dashboard.widgets.map((w) => {
+        const idx = sorted.findIndex((l) => l.i === w.id);
+        const l = sorted[idx];
+        if (!l) return w;
+        return {
+          ...w,
+          mobileOrder: idx,
+          mobileH: Math.max(l.h, 3),
+        };
+      });
+      onChange(widgets);
+      return;
+    }
     const widgets = dashboard.widgets.map((w) => {
       const l = next.find((x) => x.i === w.id);
       if (!l) return w;
@@ -140,23 +163,34 @@ export function DashboardCanvas({
     onChange(dashboard.widgets.filter((w) => w.id !== id));
   }
 
-  // Touch dragging on a forced single-column mobile grid is fiddly, so
-  // reordering on mobile is done with simple up/down buttons instead —
-  // swapping x/y with the neighbor keeps desktop layout consistent too.
   function moveWidgetMobile(id: string, dir: -1 | 1) {
     if (!onChange) return;
-    const ordered = [...dashboard.widgets].sort((a, b) => a.y - b.y || a.x - b.x);
+    const ordered = [...dashboard.widgets].sort((a, b) => {
+      const ao = a.mobileOrder ?? a.y;
+      const bo = b.mobileOrder ?? b.y;
+      if (ao !== bo) return ao - bo;
+      return a.x - b.x;
+    });
     const idx = ordered.findIndex((w) => w.id === id);
     const swapIdx = idx + dir;
     if (idx < 0 || swapIdx < 0 || swapIdx >= ordered.length) return;
     const a = ordered[idx];
     const b = ordered[swapIdx];
     const widgets = dashboard.widgets.map((w) => {
-      if (w.id === a.id) return { ...w, x: b.x, y: b.y };
-      if (w.id === b.id) return { ...w, x: a.x, y: a.y };
+      if (w.id === a.id) return { ...w, mobileOrder: swapIdx };
+      if (w.id === b.id) return { ...w, mobileOrder: idx };
       return w;
     });
-    onChange(widgets);
+    // Normalize orders 0..n-1
+    const reOrdered = [...widgets].sort(
+      (x, y) => (x.mobileOrder ?? x.y) - (y.mobileOrder ?? y.y)
+    );
+    onChange(
+      widgets.map((w) => {
+        const i = reOrdered.findIndex((x) => x.id === w.id);
+        return { ...w, mobileOrder: i };
+      })
+    );
   }
 
   if (dashboard.widgets.length === 0) {
@@ -180,8 +214,8 @@ export function DashboardCanvas({
         width={width}
         margin={isMobile ? [0, 10] : [12, 12]}
         containerPadding={[0, 0]}
-        isDraggable={editable && !isMobile}
-        isResizable={editable && !isMobile}
+        isDraggable={editable}
+        isResizable={editable}
         compactType="vertical"
         onLayoutChange={onLayoutChange}
         draggableHandle=".drag-handle"
@@ -195,10 +229,10 @@ export function DashboardCanvas({
             )}
           >
             <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 border-b border-slate-800/80 shrink-0">
-              {editable && !isMobile && (
+              {editable && (
                 <button
                   type="button"
-                  className="drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5"
+                  className="drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 touch-none"
                 >
                   <GripVertical className="h-4 w-4" />
                 </button>

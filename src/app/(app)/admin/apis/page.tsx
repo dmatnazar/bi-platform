@@ -123,11 +123,24 @@ export default function ApisPage() {
 
 
   function pathFromName(name: string) {
-    const slug = name
-      .trim()
+    // Turkmen / Latin extras → ASCII so path always usable in URLs
+    const map: Record<string, string> = {
+      ý: 'y', Ý: 'y', ä: 'a', Ä: 'a', ö: 'o', Ö: 'o', ü: 'u', Ü: 'u',
+      ň: 'n', Ň: 'n', ş: 's', Ş: 's', ç: 'c', Ç: 'c', ž: 'z', Ž: 'z',
+      ə: 'e', Ə: 'e', ı: 'i', İ: 'i', ğ: 'g', Ğ: 'g',
+    };
+    let s = (name || '').trim();
+    s = s
+      .split('')
+      .map((ch) => map[ch] ?? ch)
+      .join('');
+    const slug = s
       .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/^-+|-+$/g, '')
+      .replace(/-{2,}/g, '-');
     return slug ? `/${slug}` : '/';
   }
 
@@ -239,12 +252,72 @@ export default function ApisPage() {
     setExecResult(null);
   }
 
-  function closeEdit() {
+  function isEditorDirty(): boolean {
+    if (!editEp) return false;
+    if (isCreate) {
+      return Boolean(
+        editName.trim() ||
+          (editSql && editSql !== 'SELECT 1 AS ok') ||
+          (editPath && editPath !== '/report')
+      );
+    }
+    const ps = editEp.paramsSchema as any;
+    const origParams: ParamRow[] = [];
+    if (ps && typeof ps === 'object') {
+      for (const source of ['urlParams', 'queryParams', 'bodyParams'] as const) {
+        const arr = ps[source];
+        if (Array.isArray(arr)) {
+          for (const p of arr) {
+            origParams.push({
+              name: String(p.name || ''),
+              type: String(p.type || 'string'),
+              required: Boolean(p.required),
+              source: source === 'urlParams' ? 'url' : source === 'bodyParams' ? 'body' : 'query',
+            });
+          }
+        }
+      }
+    }
+    return (
+      editName !== (editEp.name || '') ||
+      editPath !== (editEp.pathTemplate || '') ||
+      editMethod !== (editEp.method || 'GET') ||
+      editSql !== (editEp.sqlQuery || '') ||
+      editDbKey !== (editEp.dbKey || 'primary') ||
+      editCache !== (editEp.cacheTtlSec || 0) ||
+      editAuth !== (editEp.authRequired !== false) ||
+      JSON.stringify(editParams) !== JSON.stringify(origParams)
+    );
+  }
+
+  async function closeEdit() {
+    if (isEditorDirty()) {
+      const choice = await confirmDialog({
+        title: 'Saklanmadyk üýtgeşmeler',
+        message:
+          'API redaktorynda saklanmadyk üýtgeşmeler bar.\n\n• Sakla we çyk — üýtgeşmeleri VPS-e ýazyp çykýar\n• Saklamazdan çyk — üýtgeşmeler ýitýär\n• Ýatda sakla — redaktorda galýarsyňyz',
+        confirmLabel: 'Sakla we çyk',
+        cancelLabel: 'Saklamazdan çyk',
+        stayLabel: 'Ýatda sakla',
+        danger: false,
+      });
+      if (choice === 'stay') return;
+      if (choice === true) {
+        await saveEdit();
+        // saveEdit closes on success; if validation failed stay open
+        return;
+      }
+      // false → discard and close
+    }
     setEditEp(null);
     setExecResult(null);
     setShowResultModal(false);
     setIsCreate(false);
-    try { document.body.style.overflow = ''; } catch { /* */ }
+    try {
+      document.body.style.overflow = '';
+    } catch {
+      /* */
+    }
   }
 
   async function saveEdit() {
@@ -656,7 +729,15 @@ export default function ApisPage() {
                   ))}
                 </select>
               </div>
-              <Input label="Ady" value={editName} onChange={(e) => setEditName(e.target.value)} />
+              <Input
+                label="Ady"
+                value={editName}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setEditName(v);
+                  setEditPath(pathFromName(v));
+                }}
+              />
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs text-slate-400">Method</label>
@@ -806,7 +887,8 @@ export default function ApisPage() {
                     onChange={(e) => {
                       const v = e.target.value;
                       setEditName(v);
-                      if (isCreate) setEditPath(pathFromName(v));
+                      // Ady üýtgände path-i hem täzele (create + edit)
+                      setEditPath(pathFromName(v));
                     }}
                   />
                 </div>

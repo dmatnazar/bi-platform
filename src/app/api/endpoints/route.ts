@@ -5,6 +5,7 @@ import {
   updateEndpointOnGateway,
   createEndpointOnGateway,
   deleteEndpointOnGateway,
+  invalidateCatalogCache,
 } from '@/lib/gateway';
 import { z } from 'zod';
 
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
         { status }
       );
     }
+    invalidateCatalogCache();
     return NextResponse.json({ ok: true, endpoint: res.data?.endpoint });
   }
 
@@ -62,6 +64,7 @@ export async function POST(req: NextRequest) {
       { status }
     );
   }
+  invalidateCatalogCache();
   return NextResponse.json({ ok: true, endpoint: res.data?.endpoint });
 }
 
@@ -90,5 +93,6 @@ export async function DELETE(req: NextRequest) {
       { status }
     );
   }
+  invalidateCatalogCache();
   return NextResponse.json({ ok: true, deleted: true, id: res.data?.id });
 }

@@ -26,12 +26,44 @@ type SubmitPhase =
   | 'error';
 
 export default function RegisterPage() {
+  const [authAnim, setAuthAnim] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cached = localStorage.getItem('bi-auth-animations');
+        if (cached === '0') setAuthAnim(false);
+        const res = await fetch('/api/settings/public', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && typeof data.authAnimations === 'boolean') {
+          setAuthAnim(data.authAnimations);
+          localStorage.setItem('bi-auth-animations', data.authAnimations ? '1' : '0');
+        }
+      } catch { /* */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+
   const [companies, setCompanies] = useState<CompanyOpt[]>([]);
   const [tenantSlug, setTenantSlug] = useState('');
   const [companyModal, setCompanyModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSlug, setNewSlug] = useState('');
-  const [tariffs, setTariffs] = useState<{ id: string; name: string; priceMonthly: number; includedCredits: number; description?: string; code: string }[]>([]);
+  const [tariffs, setTariffs] = useState<
+    {
+      id: string;
+      name: string;
+      priceMonthly: number;
+      includedCredits: number;
+      description?: string;
+      code: string;
+      currency?: string;
+      maxStaff?: number;
+      maxApiCallsDay?: number;
+      maxConnections?: number;
+    }[]
+  >([]);
   const [newTariffId, setNewTariffId] = useState('tariff_free');
   const [creatingCompany, setCreatingCompany] = useState(false);
   const [companyErr, setCompanyErr] = useState('');
@@ -64,11 +96,22 @@ export default function RegisterPage() {
   }, []);
 
   function slugifyName(name: string) {
-    return name
+    const map: Record<string, string> = {
+      ý: 'y', Ý: 'y', ä: 'a', Ä: 'a', ö: 'o', Ö: 'o', ü: 'u', Ü: 'u',
+      ň: 'n', Ň: 'n', ş: 's', Ş: 's', ç: 'c', Ç: 'c', ž: 'z', Ž: 'z',
+      ə: 'e', Ə: 'e', ı: 'i', İ: 'i', ğ: 'g', Ğ: 'g',
+    };
+    const s = name
+      .split('')
+      .map((ch) => map[ch] ?? ch)
+      .join('');
+    return s
       .toLowerCase()
-      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
+      .replace(/-{2,}/g, '-')
       .slice(0, 60);
   }
 
@@ -193,10 +236,20 @@ export default function RegisterPage() {
   if (phase === 'approved' || phase === 'rejected' || phase === 'delivered' || phase === 'on_vps') {
     const ok = phase === 'approved' || phase === 'delivered';
     return (
-      <div className="min-h-dvh flex relative items-center justify-center px-4">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950"><ParticlesBackground theme="login" className="absolute inset-0" /><div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgb(2_6_23)_75%)]" /></div>
+      <div className="min-h-dvh flex relative items-center justify-center px-4 overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
+        {authAnim && (
+          <>
+            <div className="login-orb login-orb-a" />
+            <div className="login-orb login-orb-b" />
+            <div className="login-orb login-orb-c" />
+            <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+          </>
+        )}
+        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
+      </div>
 
-        <div className="max-w-md w-full text-center space-y-4 animate-fade-in">
+        <div className={`max-w-md w-full text-center space-y-4 ${authAnim ? 'animate-fade-in' : ''}`}>
           <div
             className={`mx-auto h-16 w-16 rounded-full flex items-center justify-center ${
               phase === 'approved'
@@ -250,12 +303,20 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-10 relative">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-violet-600/15 rounded-full blur-[120px]" />
+    <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
+        {authAnim && (
+          <>
+            <div className="login-orb login-orb-a" />
+            <div className="login-orb login-orb-b" />
+            <div className="login-orb login-orb-c" />
+            <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+          </>
+        )}
+        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_25%,rgb(2_6_23)_88%)]" />
       </div>
 
-      <div className="relative w-full max-w-lg animate-fade-in">
+      <div className={`relative z-10 w-full max-w-lg ${authAnim ? 'animate-fade-in' : ''}`}>
         <div className="flex flex-col items-center mb-6">
           <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-3">
             <BarChart3 className="h-6 w-6 text-white" />
@@ -329,25 +390,37 @@ export default function RegisterPage() {
                     }}
                     placeholder="Mysal: Acme LLC"
                   />
-                  <Input
-                    label="Slug (URL) *"
-                    value={newSlug}
-                    onChange={(e) =>
-                      setNewSlug(
-                        e.target.value
-                          .toLowerCase()
-                          .replace(/[^a-z0-9-]/g, '')
-                          .slice(0, 60)
-                      )
-                    }
-                    placeholder="acme-llc"
-                  />
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-slate-300">Slug (URL)</label>
+                    <input
+                      readOnly
+                      value={newSlug}
+                      className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/50 px-3 text-sm text-slate-400 font-mono cursor-not-allowed outline-none"
+                      placeholder="firma-adyndan awto"
+                      title="Slug firma adyndan awtomatiki emele gelýär — el bilen üýtgedip bolmaýar"
+                    />
+                    <p className="text-[10px] text-slate-500">Firma adyndan awto — üýtgedip bolmaýar</p>
+                  </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-slate-300">Tarif</label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {(tariffs.length ? tariffs : [
-                        { id: 'tariff_free', code: 'free', name: 'Free', priceMonthly: 0, includedCredits: 500, description: 'Başlangyç' },
-                      ]).map((t) => (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {(tariffs.length
+                        ? tariffs
+                        : [
+                            {
+                              id: 'tariff_free',
+                              code: 'free',
+                              name: 'Free',
+                              priceMonthly: 0,
+                              includedCredits: 500,
+                              description: 'Başlangyç',
+                              maxStaff: 3,
+                              maxApiCallsDay: 100,
+                              maxConnections: 1,
+                              currency: 'TMT',
+                            },
+                          ]
+                      ).map((t) => (
                         <button
                           key={t.id}
                           type="button"
@@ -358,15 +431,42 @@ export default function RegisterPage() {
                               : 'border-slate-700 bg-slate-950/80 hover:border-slate-600'
                           }`}
                         >
-                          <div className="flex justify-between gap-2">
-                            <span className="font-medium text-white">{t.name}</span>
-                            <span className="text-indigo-300 text-xs">
-                              {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} REQ/aý`}
+                          <div className="flex justify-between gap-2 items-start">
+                            <div className="min-w-0">
+                              <span className="font-medium text-white">{t.name}</span>
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-slate-500 font-mono">
+                                {t.code}
+                              </span>
+                            </div>
+                            <span className="text-indigo-300 text-xs shrink-0">
+                              {t.priceMonthly === 0
+                                ? 'Mugt'
+                                : `${t.priceMonthly} ${t.currency || 'TMT'}/aý`}
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
-                            Aýda {t.includedCredits?.toLocaleString?.() ?? t.includedCredits} REQ · {t.description || ''}
-                          </p>
+                          {t.description ? (
+                            <p className="text-[11px] text-slate-400 mt-1">{t.description}</p>
+                          ) : null}
+                          <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-slate-500">
+                            <span>
+                              Aýlyk REQ:{' '}
+                              <strong className="text-slate-300">
+                                {(t.includedCredits ?? 0).toLocaleString?.() ?? t.includedCredits}
+                              </strong>
+                            </span>
+                            <span>
+                              Max işgär:{' '}
+                              <strong className="text-slate-300">{t.maxStaff ?? '—'}</strong>
+                            </span>
+                            <span>
+                              Günde max REQ (sorag):{' '}
+                              <strong className="text-slate-300">{t.maxApiCallsDay ?? '—'}</strong>
+                            </span>
+                            <span>
+                              Max DB baglanyşyk:{' '}
+                              <strong className="text-slate-300">{t.maxConnections ?? '—'}</strong>
+                            </span>
+                          </div>
                         </button>
                       ))}
                     </div>

@@ -170,6 +170,15 @@ function writeCache(catalog: Catalog) {
   }
 }
 
+/** Drop catalog cache so next fetch sees BI endpoint edits immediately */
+export function invalidateCatalogCache() {
+  try {
+    if (fs.existsSync(CACHE_FILE)) fs.unlinkSync(CACHE_FILE);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function fetchCatalog(force = false): Promise<Catalog> {
   const cached = readCache();
   if (!force && cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
@@ -385,6 +394,12 @@ export async function upsertDeviceSettingsOnGateway(payload: {
   return gatewayFetch('PUT', '/api/admin/device-settings', payload);
 }
 
+export async function deviceCommandOnGateway(payload: {
+  deviceId: string;
+  action: 'restart' | 'check_update';
+}) {
+  return gatewayFetch('POST', '/api/admin/device-command', payload);
+}
 
 export async function entityLockOnGateway(payload: {
   entityType: 'tenant' | 'staff' | 'endpoint';
@@ -451,6 +466,11 @@ export async function putUpdateFeedOnGateway(payload: {
   password?: string;
 }) {
   return gatewayFetch('PUT', '/api/admin/client-config/update-feed', payload);
+}
+
+/** Publish BI GATEWAY_URL so Electrons can pull it via /api/client-config/update-feed */
+export async function putPublicGatewayUrlOnGateway(gatewayUrl: string) {
+  return gatewayFetch('PUT', '/api/admin/client-config/gateway-url', { gatewayUrl });
 }
 
 export async function upsertConnectionOnGateway(payload: Record<string, unknown>) {

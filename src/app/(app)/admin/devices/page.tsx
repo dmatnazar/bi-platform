@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
-import { toastSuccess, toastError } from '@/components/ui/Toast';
+import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface Device {
@@ -85,15 +85,19 @@ export default function DevicesPage() {
     autostart: false,
     startMinimized: false,
     autoSync: true,
-    syncIntervalMin: 5,
+    /** Seconds — same as Electron Settings (15, 30, 60, 120, 300, 0=manual) */
+    syncIntervalSec: 30,
     autoLogin: false,
+    autoLoginUsername: '',
     trayMinimize: true,
     notifyOnSync: true,
     offlineQueue: true,
-    theme: 'dark' as 'dark' | 'light' | 'system',
-    language: 'tk',
+    /** 0 = off; minutes of idle before admin auto sign-out */
+    autoSignOutMin: 0,
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [cmdActing, setCmdActing] = useState<'restart' | 'check_update' | null>(null);
+  const [staffOpts, setStaffOpts] = useState<{ username: string; fullName: string; tenantSlug?: string }[]>([]);
 
   async function openFirmaSazlamalary(d: Device) {
     setSettingsDevice(d);
@@ -101,14 +105,15 @@ export default function DevicesPage() {
       autostart: false,
       startMinimized: false,
       autoSync: true,
-      syncIntervalMin: 5,
+      syncIntervalSec: 30,
       autoLogin: false,
+      autoLoginUsername: '',
       trayMinimize: true,
       notifyOnSync: true,
       offlineQueue: true,
-      theme: 'dark',
-      language: 'tk',
+      autoSignOutMin: 0,
     });
+    setStaffOpts([]);
     try {
       const res = await fetch(
         `/api/device-settings?deviceId=${encodeURIComponent(d.id)}&tenantSlug=${encodeURIComponent(d.tenantSlug || '')}`
@@ -116,22 +121,78 @@ export default function DevicesPage() {
       const data = await res.json();
       const row = (data.settings || [])[0];
       if (row?.settings) {
+        let sec = Number(row.settings.syncIntervalSec ?? 0);
+        if (!sec || sec <= 0) {
+          const min = Number(row.settings.syncIntervalMin ?? 0);
+          if (min > 0 && min <= 14) sec = Math.round(min * 60);
+          else if (min > 14) sec = Math.round(min);
+          else sec = 30;
+        }
         setSettingsForm((f) => ({
           ...f,
           autostart: Boolean(row.settings.autostart),
           startMinimized: Boolean(row.settings.startMinimized),
           autoSync: row.settings.autoSync !== false,
-          syncIntervalMin: Number(row.settings.syncIntervalMin) || 5,
+          syncIntervalSec: sec,
           autoLogin: Boolean(row.settings.autoLogin),
+          autoLoginUsername: String(row.settings.autoLoginUsername || ''),
           trayMinimize: row.settings.trayMinimize !== false,
           notifyOnSync: row.settings.notifyOnSync !== false,
           offlineQueue: row.settings.offlineQueue !== false,
-          theme: (row.settings.theme as any) || 'dark',
-          language: String(row.settings.language || 'tk'),
+          autoSignOutMin: Math.max(0, Number(row.settings.autoSignOutMin) || 0),
         }));
       }
     } catch {
       /* defaults */
+    }
+    // Firma işgärleri — auto login saýlawy
+    try {
+      const slug = d.tenantSlug || '';
+      const sRes = await fetch('/api/staff');
+      const sData = await sRes.json().catch(() => ({}));
+      let list = (sData.staff || []) as { username: string; fullName: string; tenantSlug?: string; active?: boolean }[];
+      if (slug) {
+        list = list.filter((s) => !s.tenantSlug || s.tenantSlug === slug || s.active !== false);
+      }
+      setStaffOpts(
+        list
+          .filter((s) => s.username)
+          .map((s) => ({ username: s.username, fullName: s.fullName || s.username, tenantSlug: s.tenantSlug }))
+      );
+    } catch {
+      setStaffOpts([]);
+    }
+  }
+
+  async function sendDeviceCommand(action: 'restart' | 'check_update') {
+    if (!settingsDevice) return;
+    setCmdActing(action);
+    try {
+      const res = await fetch('/api/device-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId: settingsDevice.id, action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toastError('Buýruk', data.error || 'şowsuz');
+        return;
+      }
+      if (data.delivered) {
+        toastSuccess(
+          action === 'restart' ? 'Restart ugradyldy' : 'Check update ugradyldy',
+          data.message || 'Electron kabul etdi'
+        );
+      } else {
+        toastWarning(
+          'Enjam offline?',
+          data.message || 'Device-events bagly däl — Electron açyk we online bolmaly'
+        );
+      }
+    } catch (e) {
+      toastError('Buýruk', e instanceof Error ? e.message : String(e));
+    } finally {
+      setCmdActing(null);
     }
   }
 
@@ -541,6 +602,29 @@ export default function DevicesPage() {
                       />
                     </label>
                   ))}
+                  {settingsForm.autoLogin && (
+                    <label className="block pt-2 space-y-1.5">
+                      <span className="text-xs text-slate-400">Awto login ulanyjy (firma işgäri)</span>
+                      <select
+                        value={settingsForm.autoLoginUsername}
+                        onChange={(e) =>
+                          setSettingsForm((f) => ({ ...f, autoLoginUsername: e.target.value }))
+                        }
+                        className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-sm text-white"
+                      >
+                        <option value="">— Saýlaň —</option>
+                        {staffOpts.map((s) => (
+                          <option key={s.username} value={s.username}>
+                            {s.fullName} ({s.username})
+                            {s.tenantSlug ? ` · ${s.tenantSlug}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-500">
+                        Electron açylanda şu ulanyjy bilen awto giriş (parol Electron-da saklanan bolmaly).
+                      </p>
+                    </label>
+                  )}
                 </div>
               </div>
               <div>
@@ -565,37 +649,78 @@ export default function DevicesPage() {
                       className="h-4 w-4 rounded border-slate-600 accent-indigo-500" />
                   </label>
                   <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
-                    <span>Sync interval (min)</span>
-                    <input type="number" min={1} max={1440} value={settingsForm.syncIntervalMin}
-                      onChange={(e) => setSettingsForm((f) => ({ ...f, syncIntervalMin: Math.max(1, Number(e.target.value) || 5) }))}
-                      className="w-20 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white" />
+                    <span>Sync interval</span>
+                    <select
+                      value={String(settingsForm.syncIntervalSec ?? 30)}
+                      onChange={(e) =>
+                        setSettingsForm((f) => ({
+                          ...f,
+                          syncIntervalSec: Number(e.target.value),
+                        }))
+                      }
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white"
+                    >
+                      <option value="15">Her 15 sekunt</option>
+                      <option value="30">Her 30 sekunt</option>
+                      <option value="60">Her 1 minut</option>
+                      <option value="120">Her 2 minut</option>
+                      <option value="300">Her 5 minut</option>
+                      <option value="0">Diňe el bilen</option>
+                    </select>
                   </label>
                 </div>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Görnüş</p>
-                <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                  <label className="text-xs text-slate-400 space-y-1.5 block">
-                    <span>Tema</span>
-                    <select value={(settingsForm as any).theme || 'dark'}
-                      onChange={(e) => setSettingsForm((f) => ({ ...f, theme: e.target.value as any }))}
-                      className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-sm text-white">
-                      <option value="dark">Dark</option>
-                      <option value="light">Light</option>
-                      <option value="system">System</option>
-                    </select>
-                  </label>
-                  <label className="text-xs text-slate-400 space-y-1.5 block">
-                    <span>Dil</span>
-                    <select value={(settingsForm as any).language || 'tk'}
-                      onChange={(e) => setSettingsForm((f) => ({ ...f, language: e.target.value }))}
-                      className="w-full h-9 rounded-lg border border-slate-700 bg-slate-900 px-2 text-sm text-white">
-                      <option value="tk">Türkmen</option>
-                      <option value="ru">Русский</option>
-                      <option value="en">English</option>
-                    </select>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Howpsuzlyk</p>
+                <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+                    <span className="min-w-0">
+                      Auto sign-out (min)
+                      <span className="block text-[10px] text-slate-500 font-normal">
+                        Admin girişde işsizlik timer — 0 = öçürilen
+                      </span>
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={480}
+                      value={settingsForm.autoSignOutMin}
+                      onChange={(e) =>
+                        setSettingsForm((f) => ({
+                          ...f,
+                          autoSignOutMin: Math.max(0, Math.min(480, Number(e.target.value) || 0)),
+                        }))
+                      }
+                      className="w-20 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white"
+                    />
                   </label>
                 </div>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Remote amallar</p>
+                <div className="flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={cmdActing === 'restart'}
+                    disabled={!!cmdActing}
+                    onClick={() => void sendDeviceCommand('restart')}
+                  >
+                    Restart Electron
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={cmdActing === 'check_update'}
+                    disabled={!!cmdActing}
+                    onClick={() => void sendDeviceCommand('check_update')}
+                  >
+                    Check update
+                  </Button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1.5">
+                  Electron açyk we device-events ONLINE bolmaly. Update bar bolsa Electron-da modal çykýar.
+                </p>
               </div>
               <div className="flex gap-2 pt-1">
                 <Button className="flex-1" loading={settingsSaving} onClick={saveFirmaSazlamalary}>

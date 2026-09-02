@@ -1022,8 +1022,24 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
                 [widget.dataSource?.valueField || 'value']: d.value,
               }));
       const catKey = widget.dataSource?.categoryField || 'name';
-      const valKey = widget.dataSource?.valueField || 'value';
-      const seriesKey = widget.dataSource?.seriesField;
+      const valueKeys: string[] =
+        widget.dataSource?.valueFields?.length
+          ? widget.dataSource.valueFields
+          : widget.dataSource?.valueField
+            ? [widget.dataSource.valueField]
+            : ['value'];
+      const valKey = valueKeys[0] || 'value';
+      const seriesFieldList: string[] =
+        widget.dataSource?.seriesFields?.length
+          ? widget.dataSource.seriesFields
+          : widget.dataSource?.seriesField
+            ? [widget.dataSource.seriesField]
+            : [];
+      const seriesKey = seriesFieldList[0];
+      const seriesKeyFn = (r: Record<string, unknown>) =>
+        seriesFieldList.length
+          ? seriesFieldList.map((f) => String(r[f] ?? '')).filter(Boolean).join(' / ') || 'Series'
+          : '';
       const palette = widget.config?.colors?.length
         ? widget.config.colors
         : [color, '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
@@ -1036,18 +1052,21 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       let cats: string[] = [];
       let series: any[] = [];
 
-      if (seriesKey) {
-        // Group by category, one series per seriesField value
+      if (seriesFieldList.length > 0) {
+        // Group by category, one chart series per series field combination × value field
         const catSet: string[] = [];
         const seriesSet: string[] = [];
         const matrix = new Map<string, Map<string, number>>();
         for (const r of rows) {
           const cat = String(r[catKey] ?? '');
-          const ser = String(r[seriesKey] ?? 'Series');
           if (!catSet.includes(cat)) catSet.push(cat);
-          if (!seriesSet.includes(ser)) seriesSet.push(ser);
-          if (!matrix.has(ser)) matrix.set(ser, new Map());
-          matrix.get(ser)!.set(cat, Number(r[valKey] ?? 0));
+          for (const vk of valueKeys) {
+            const base = seriesKeyFn(r);
+            const ser = valueKeys.length > 1 ? `${base}${base ? ' · ' : ''}${vk}` : base || vk;
+            if (!seriesSet.includes(ser)) seriesSet.push(ser);
+            if (!matrix.has(ser)) matrix.set(ser, new Map());
+            matrix.get(ser)!.set(cat, Number(r[vk] ?? 0));
+          }
         }
         cats = catSet;
         series = seriesSet.map((ser, i) => ({
@@ -1067,15 +1086,8 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             : undefined,
         }));
       } else {
-        // Single or multi value fields via columns config (numeric extras)
+        // Multi value fields → one series each
         cats = rows.map((r) => String(r[catKey] ?? ''));
-        const extraVals = (widget.dataSource?.columns || []).filter(
-          (c) => c !== catKey && c !== seriesKey
-        );
-        const valueKeys =
-          extraVals.length > 0
-            ? extraVals
-            : [valKey];
         series = valueKeys.map((vk, i) => ({
           name: vk,
           type: seriesType,
@@ -1161,33 +1173,52 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
                 [widget.dataSource?.valueField || 'value']: d.value,
               }));
       const catKey = widget.dataSource?.categoryField || 'name';
-      const valKey = widget.dataSource?.valueField || 'value';
+      const valueKeys: string[] =
+        widget.dataSource?.valueFields?.length
+          ? widget.dataSource.valueFields
+          : widget.dataSource?.valueField
+            ? [widget.dataSource.valueField]
+            : ['value'];
+      const valKey = valueKeys[0] || 'value';
+      const palette = widget.config?.colors?.length
+        ? widget.config.colors
+        : [color, '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
+      const showLabels = widget.config?.showDataLabels !== false;
+      const showPercent = widget.config?.showPercent !== false;
+      // Multi value fields → sum into one pie slice value, or first field
+      const pieData = rows.map((r, i) => {
+        const value =
+          valueKeys.length > 1
+            ? valueKeys.reduce((sum, k) => sum + Number(r[k] ?? 0), 0)
+            : Number(r[valKey] ?? 0);
+        return {
+          name: String(r[catKey] ?? ''),
+          value,
+          itemStyle: { color: palette[i % palette.length] },
+        };
+      });
       return {
         backgroundColor: 'transparent',
-        tooltip: { trigger: 'item' },
+        tooltip: {
+          trigger: 'item',
+          formatter: showPercent ? '{b}: {c} ({d}%)' : '{b}: {c}',
+        },
         legend: showLegend
           ? { bottom: 0, type: 'scroll', textStyle: { color: '#94a3b8', fontSize: 11 } }
           : undefined,
-        // Reset / PNG live in widget chrome toolbar (same design as refresh/fullscreen)
         series: [
           {
             type: 'pie',
             radius: ['36%', '62%'],
             center: ['50%', showLegend ? '44%' : '50%'],
-            data: rows.map((r, i) => ({
-              name: String(r[catKey] ?? ''),
-              value: Number(r[valKey] ?? 0),
-              itemStyle: {
-                color: (widget.config?.colors?.length
-                  ? widget.config.colors
-                  : [color, '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399'])[i % 6],
-              },
-            })),
+            data: pieData,
             label: {
               color: '#cbd5e1',
               fontSize: 11,
-              show: widget.config?.showDataLabels !== false,
+              show: showLabels,
+              formatter: showPercent ? '{b}\n{d}%' : '{b}\n{c}',
             },
+            labelLine: { show: showLabels },
             itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 },
             emphasis: {
               scale: true,

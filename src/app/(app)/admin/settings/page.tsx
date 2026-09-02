@@ -40,7 +40,7 @@ export default function SettingsPage() {
   const [syncSec, setSyncSec] = useState('0');
   const [online, setOnline] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | null>(null);
+  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | 'anim' | null>(null);
   const [version, setVersion] = useState('1.0.0');
 
   const [upProtocol, setUpProtocol] = useState<'http' | 'https'>('https');
@@ -67,6 +67,8 @@ export default function SettingsPage() {
   const [supportTrashDays, setSupportTrashDays] = useState(
     () => (typeof window !== 'undefined' && localStorage.getItem('bi-support-trash-days')) || '30'
   );
+  const [authAnimations, setAuthAnimations] = useState(true);
+  const [appAnimations, setAppAnimations] = useState(true);
 
   const loadGateway = useCallback(async () => {
     const res = await fetch('/api/settings');
@@ -77,6 +79,8 @@ export default function SettingsPage() {
       setSyncSec(String(data.settings?.catalogSyncIntervalSec ?? 0));
       setOnline(!!data.gatewayOnline);
       if (data.version) setVersion(data.version);
+      setAuthAnimations(data.settings?.authAnimations !== false);
+      setAppAnimations(data.settings?.appAnimations !== false);
     }
   }, []);
 
@@ -175,6 +179,31 @@ export default function SettingsPage() {
       await loadGateway();
     } catch (e) {
       toastError('Sync', e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveAnimations() {
+    setSaving('anim');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authAnimations, appAnimations }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      toastSuccess('Animasiýa sazlamalary saklandy');
+      try {
+        localStorage.setItem('bi-auth-animations', authAnimations ? '1' : '0');
+        localStorage.setItem('bi-app-animations', appAnimations ? '1' : '0');
+      } catch {
+        /* */
+      }
+      await loadGateway();
+    } catch (e) {
+      toastError('Animasiýa', e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(null);
     }
@@ -389,6 +418,45 @@ export default function SettingsPage() {
           </Button>
         </section>
 
+        {/* Animations */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4">
+          <h2 className="text-sm font-semibold text-white">Animasiýalar</h2>
+          <p className="text-[11px] text-slate-500">
+            Particles we sahypa geçiş animasiýalary. Öçürileninde UI has ýeňil işleýär.
+          </p>
+          <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+            <span>
+              Login / Hasaba al / Täze firma
+              <span className="block text-[10px] text-slate-500 font-normal">
+                Particles, orb, fade-in
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-600 accent-indigo-500"
+              checked={authAnimations}
+              onChange={(e) => setAuthAnimations(e.target.checked)}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+            <span>
+              Login soň (app içi)
+              <span className="block text-[10px] text-slate-500 font-normal">
+                Sidebar fon particles, sahypa fade-in
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-600 accent-indigo-500"
+              checked={appAnimations}
+              onChange={(e) => setAppAnimations(e.target.checked)}
+            />
+          </label>
+          <Button size="sm" loading={saving === 'anim'} onClick={() => void saveAnimations()}>
+            Animasiýa sakla
+          </Button>
+        </section>
+
         {/* Update feed */}
         <section className="rounded-2xl border border-indigo-500/30 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
@@ -409,7 +477,12 @@ export default function SettingsPage() {
               ]}
             />
             <Input label="Host" value={upHost} onChange={(e) => setUpHost(e.target.value)} placeholder="updates.example.com" />
-            <Input label="Port" value={upPort} onChange={(e) => setUpPort(e.target.value)} placeholder="443 (boş = default)" />
+            <Input
+              label="Port"
+              value={upPort}
+              onChange={(e) => setUpPort(e.target.value)}
+              placeholder="boş = standart (https→443 / http→80)"
+            />
             <Input label="Path" value={upPath} onChange={(e) => setUpPath(e.target.value)} placeholder="/updates" />
             <Input label="Username" value={upUsername} onChange={(e) => setUpUsername(e.target.value)} />
             <div>

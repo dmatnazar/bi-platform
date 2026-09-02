@@ -28,6 +28,8 @@ const updateSchema = z.object({
   globalFilters: z.array(z.any()).optional(),
   sharedWith: z.array(z.string()).optional(),
   isPublic: z.boolean().optional(),
+  /** Super-admin: move dashboard to another company */
+  companyId: z.string().optional(),
 });
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
@@ -51,9 +53,15 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       return NextResponse.json({ error: 'Maglumatlar nädogry' }, { status: 400 });
     }
 
+    const nextCompanyId =
+      isSuperAdmin(user) && parsed.data.companyId
+        ? parsed.data.companyId
+        : dash.companyId;
+
     const updated = {
       ...dash,
       ...parsed.data,
+      companyId: nextCompanyId,
       widgets: (parsed.data.widgets as DashboardWidget[]) ?? dash.widgets,
       globalFilters:
         (parsed.data.globalFilters as GlobalFilterDef[] | undefined) ??

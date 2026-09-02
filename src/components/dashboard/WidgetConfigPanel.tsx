@@ -43,6 +43,9 @@ export function WidgetConfigPanel({
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
   const [sampleColumns, setSampleColumns] = useState<string[]>([]);
   const [drillSampleColumns, setDrillSampleColumns] = useState<string[]>([]);
+  const [columnsLoading, setColumnsLoading] = useState(false);
+  const [columnsError, setColumnsError] = useState('');
+  const [columnsTick, setColumnsTick] = useState(0);
   const ds = widget.dataSource;
 
   useEffect(() => {
@@ -52,48 +55,76 @@ export function WidgetConfigPanel({
       .catch(() => {});
   }, []);
 
-  // Probe API once to list available fields for Category/Value/Series dropdowns
+  function extractRows(data: any): Record<string, unknown>[] {
+    if (!data || typeof data !== 'object') return [];
+    if (Array.isArray(data.rows)) return data.rows;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data.result)) return data.result;
+    if (Array.isArray(data.items)) return data.items;
+    if (Array.isArray(data)) return data;
+    if (data.data && Array.isArray(data.data.rows)) return data.data.rows;
+    if (data.data && Array.isArray(data.data.data)) return data.data.data;
+    // Single object payload
+    if (data.row && typeof data.row === 'object') return [data.row];
+    return [];
+  }
+
+  // Probe API to list available fields for Category/Value/Series
   useEffect(() => {
     if (!ds?.tenantSlug || !ds?.path) {
       setSampleColumns([]);
+      setColumnsError('');
       return;
     }
     let cancelled = false;
     (async () => {
+      setColumnsLoading(true);
+      setColumnsError('');
       try {
+        const path = ds.path.startsWith('/') ? ds.path : `/${ds.path}`;
         const res = await fetch('/api/gateway/query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tenantSlug: ds.tenantSlug,
-            path: ds.path,
+            path,
             method: ds.method || 'GET',
             dbKey: ds.dbKey || 'primary',
-            params: { ...(ds.params || {}), beginDate: null, endDate: null },
+            params: { ...(ds.params || {}) },
           }),
         });
         const data = await res.json().catch(() => ({}));
-        const rows: Record<string, unknown>[] = Array.isArray(data.rows)
-          ? data.rows
-          : Array.isArray(data.data)
-            ? data.data
-            : [];
         if (cancelled) return;
-        if (rows[0] && typeof rows[0] === 'object') {
-          setSampleColumns(Object.keys(rows[0]));
+        if (!res.ok) {
+          setColumnsError(data.error || data.detail || `HTTP ${res.status}`);
+          if (ds.columns?.length) setSampleColumns([...ds.columns]);
+          else setSampleColumns([]);
+          return;
+        }
+        const rows = extractRows(data);
+        if (rows[0] && typeof rows[0] === 'object' && !Array.isArray(rows[0])) {
+          const keys = Object.keys(rows[0] as object);
+          setSampleColumns(keys);
         } else if (ds.columns?.length) {
           setSampleColumns([...ds.columns]);
         } else {
           setSampleColumns([]);
+          setColumnsError('Jogapda setir ýok — API parametrleri / agent barlaň');
         }
-      } catch {
-        if (!cancelled) setSampleColumns(ds.columns || []);
+      } catch (e: any) {
+        if (!cancelled) {
+          setSampleColumns(ds.columns || []);
+          setColumnsError(e?.message || 'Sütünler alynmady');
+        }
+      } finally {
+        if (!cancelled) setColumnsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [ds?.tenantSlug, ds?.path, ds?.method, ds?.dbKey, ds?.endpointId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ds?.tenantSlug, ds?.path, ds?.method, ds?.dbKey, ds?.endpointId, columnsTick]);
   // Probe drill-down (child) API for aggregate column list
   useEffect(() => {
     const dd = ds?.drillDown;
@@ -427,69 +458,169 @@ export function WidgetConfigPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <label className="text-[11px] font-medium text-slate-400">Category field</label>
-          <select
-            className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-            value={ds?.categoryField || ''}
-            onChange={(e) => patchDs({ categoryField: e.target.value || undefined })}
-          >
-            <option value="">— saýla —</option>
-            {sampleColumns.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          {sampleColumns.length === 0 && (
-            <Input
-              label=""
-              value={ds?.categoryField || ''}
-              onChange={(e) => patchDs({ categoryField: e.target.value })}
-              placeholder="name / month (el bilen)"
-            />
-          )}
-        </div>
-        <div className="space-y-1">
-          <label className="text-[11px] font-medium text-slate-400">Value field</label>
-          <select
-            className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-            value={ds?.valueField || ''}
-            onChange={(e) => patchDs({ valueField: e.target.value || undefined })}
-          >
-            <option value="">— saýla —</option>
-            {sampleColumns.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          {sampleColumns.length === 0 && (
-            <Input
-              label=""
-              value={ds?.valueField || ''}
-              onChange={(e) => patchDs({ valueField: e.target.value })}
-              placeholder="total / value (el bilen)"
-            />
-          )}
-        </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-slate-500">
+          {columnsLoading
+            ? 'Sütünler ýüklenýär…'
+            : sampleColumns.length
+              ? `${sampleColumns.length} sütün`
+              : 'Sütün ýok'}
+        </p>
+        <button
+          type="button"
+          className="text-[11px] text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+          disabled={!ds?.path || columnsLoading}
+          onClick={() => setColumnsTick((n) => n + 1)}
+        >
+          Täzele
+        </button>
       </div>
+      {columnsError && (
+        <p className="text-[11px] text-amber-400/90">{columnsError}</p>
+      )}
 
       <div className="space-y-1">
-        <label className="text-[11px] font-medium text-slate-400">Series field (optional)</label>
+        <label className="text-[11px] font-medium text-slate-400">Category field</label>
         <select
           className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-          value={ds?.seriesField || ''}
-          onChange={(e) => patchDs({ seriesField: e.target.value || undefined })}
+          value={ds?.categoryField || ''}
+          onChange={(e) => patchDs({ categoryField: e.target.value || undefined })}
         >
-          <option value="">— ýok —</option>
+          <option value="">— saýla —</option>
           {sampleColumns.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
         </select>
+        {sampleColumns.length === 0 && (
+          <Input
+            label=""
+            value={ds?.categoryField || ''}
+            onChange={(e) => patchDs({ categoryField: e.target.value })}
+            placeholder="name / month (el bilen)"
+          />
+        )}
+      </div>
+
+      {/* Multi-select Value fields */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-medium text-slate-400">
+          Value field (birnäçe saýlap bolýar)
+        </label>
+        {sampleColumns.length > 0 ? (
+          <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
+            {sampleColumns.map((c) => {
+              const selected = (ds?.valueFields?.length
+                ? ds.valueFields
+                : ds?.valueField
+                  ? [ds.valueField]
+                  : []
+              ).includes(c);
+              return (
+                <label
+                  key={`vf-${c}`}
+                  className="flex items-center gap-2 text-sm text-slate-200 py-0.5 cursor-pointer hover:bg-slate-900/80 rounded px-1"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-slate-600 accent-indigo-500"
+                    checked={selected}
+                    onChange={() => {
+                      const prev = ds?.valueFields?.length
+                        ? [...ds.valueFields]
+                        : ds?.valueField
+                          ? [ds.valueField]
+                          : [];
+                      const next = selected ? prev.filter((x) => x !== c) : [...prev, c];
+                      patchDs({
+                        valueFields: next.length ? next : undefined,
+                        valueField: next[0] || undefined,
+                      });
+                    }}
+                  />
+                  <span className="truncate">{c}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <Input
+            label=""
+            value={(ds?.valueFields || (ds?.valueField ? [ds.valueField] : [])).join(', ')}
+            onChange={(e) => {
+              const next = e.target.value
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              patchDs({
+                valueFields: next.length ? next : undefined,
+                valueField: next[0] || undefined,
+              });
+            }}
+            placeholder="total, amount (el bilen, comma)"
+          />
+        )}
+      </div>
+
+      {/* Multi-select Series fields */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] font-medium text-slate-400">
+          Series field (optional, birnäçe)
+        </label>
+        {sampleColumns.length > 0 ? (
+          <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
+            {sampleColumns.map((c) => {
+              const selected = (ds?.seriesFields?.length
+                ? ds.seriesFields
+                : ds?.seriesField
+                  ? [ds.seriesField]
+                  : []
+              ).includes(c);
+              return (
+                <label
+                  key={`sf-${c}`}
+                  className="flex items-center gap-2 text-sm text-slate-200 py-0.5 cursor-pointer hover:bg-slate-900/80 rounded px-1"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-slate-600 accent-indigo-500"
+                    checked={selected}
+                    onChange={() => {
+                      const prev = ds?.seriesFields?.length
+                        ? [...ds.seriesFields]
+                        : ds?.seriesField
+                          ? [ds.seriesField]
+                          : [];
+                      const next = selected ? prev.filter((x) => x !== c) : [...prev, c];
+                      patchDs({
+                        seriesFields: next.length ? next : undefined,
+                        seriesField: next[0] || undefined,
+                      });
+                    }}
+                  />
+                  <span className="truncate">{c}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <Input
+            label=""
+            value={(ds?.seriesFields || (ds?.seriesField ? [ds.seriesField] : [])).join(', ')}
+            onChange={(e) => {
+              const next = e.target.value
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+              patchDs({
+                seriesFields: next.length ? next : undefined,
+                seriesField: next[0] || undefined,
+              });
+            }}
+            placeholder="region, type (el bilen)"
+          />
+        )}
       </div>
 
       <Input
@@ -531,62 +662,117 @@ export function WidgetConfigPanel({
         widget.type === 'kpi') && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
           <p className="text-xs font-semibold text-slate-300">Diagramma / KPI sazlamalary</p>
-          <Input
-            label="Goşmaça reňkler (csv hex)"
-            value={(widget.config?.colors || []).join(', ')}
-            onChange={(e) => {
-              const colors = e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-              onChange({
-                ...widget,
-                config: { ...widget.config, colors: colors.length ? colors : undefined },
-              });
-            }}
-            placeholder="#6366f1, #22d3ee, #a78bfa"
-          />
-          {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
-            <>
-              <Input
-                label="Goşmaça value sütünler (csv) — köp series"
-                value={(ds?.columns || []).join(', ')}
-                onChange={(e) => {
-                  const cols = e.target.value
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter(Boolean);
-                  patchDs({ columns: cols.length ? cols : undefined });
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-medium text-slate-400">Goşmaça reňkler</label>
+              <button
+                type="button"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                onClick={() => {
+                  const prev = widget.config?.colors || [];
+                  if (prev.length >= 12) return;
+                  onChange({
+                    ...widget,
+                    config: {
+                      ...widget.config,
+                      colors: [...prev, '#22d3ee'],
+                    },
+                  });
                 }}
-                placeholder="sales, profit, qty"
-              />
+              >
+                + Goş
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(widget.config?.colors || []).map((c, i) => (
+                <div key={`c-${i}`} className="flex items-center gap-1">
+                  <input
+                    type="color"
+                    value={c || '#6366f1'}
+                    onChange={(e) => {
+                      const next = [...(widget.config?.colors || [])];
+                      next[i] = e.target.value;
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, colors: next },
+                      });
+                    }}
+                    className="h-9 w-12 cursor-pointer rounded-lg border border-slate-700 bg-slate-950 p-0.5"
+                  />
+                  <button
+                    type="button"
+                    className="text-[10px] text-rose-400 hover:text-rose-300 px-1"
+                    title="Poz"
+                    onClick={() => {
+                      const next = (widget.config?.colors || []).filter((_, j) => j !== i);
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          colors: next.length ? next : undefined,
+                        },
+                      });
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {(widget.config?.colors || []).length === 0 && (
+                <p className="text-[11px] text-slate-500">Esasy reňk ulanylýar — goşmaça üçin «+ Goş»</p>
+              )}
+            </div>
+          </div>
+          {(widget.type === 'bar' ||
+            widget.type === 'line' ||
+            widget.type === 'area' ||
+            widget.type === 'pie') && (
+            <>
+              {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
+                <Input
+                  label="Goşmaça value sütünler (csv) — köp series"
+                  value={(ds?.columns || []).join(', ')}
+                  onChange={(e) => {
+                    const cols = e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    patchDs({ columns: cols.length ? cols : undefined });
+                  }}
+                  placeholder="sales, profit, qty"
+                />
+              )}
               <div className="flex flex-wrap gap-3 text-xs text-slate-300">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!widget.config?.stacked}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, stacked: e.target.checked },
-                      })
-                    }
-                  />
-                  Stacked
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={widget.config?.smooth !== false}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, smooth: e.target.checked },
-                      })
-                    }
-                  />
-                  Smooth
-                </label>
+                {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
+                  <>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!widget.config?.stacked}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, stacked: e.target.checked },
+                          })
+                        }
+                      />
+                      Stacked
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={widget.config?.smooth !== false}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, smooth: e.target.checked },
+                          })
+                        }
+                      />
+                      Smooth
+                    </label>
+                  </>
+                )}
                 <label className="flex items-center gap-1.5 cursor-pointer">
                   <input
                     type="checkbox"
@@ -613,6 +799,21 @@ export function WidgetConfigPanel({
                   />
                   Legend
                 </label>
+                {widget.type === 'pie' && (
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={widget.config?.showPercent !== false}
+                      onChange={(e) =>
+                        onChange({
+                          ...widget,
+                          config: { ...widget.config, showPercent: e.target.checked },
+                        })
+                      }
+                    />
+                    Prosent (%)
+                  </label>
+                )}
                 {widget.type === 'bar' && (
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input

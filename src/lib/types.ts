@@ -123,6 +123,10 @@ export interface WidgetDataSource {
   categoryField?: string;
   valueField?: string;
   seriesField?: string;
+  /** Multi value columns (chart series) — preferred over singular valueField */
+  valueFields?: string[];
+  /** Multi series group columns — preferred over singular seriesField */
+  seriesFields?: string[];
   /** for table: which columns to show (empty = all) */
   columns?: string[];
   /** Columns hidden in UI (ids used only for filters) */
@@ -198,6 +202,10 @@ export interface DashboardWidget {
   y: number;
   w: number;
   h: number;
+  /** Mobile stack order (0-based). If set, used instead of desktop y on small screens */
+  mobileOrder?: number;
+  /** Mobile height in grid units */
+  mobileH?: number;
   dataSource?: WidgetDataSource;
   /** static KPI value or text content when no dataSource */
   staticValue?: string | number;
@@ -212,6 +220,8 @@ export interface DashboardWidget {
     smooth?: boolean;
     /** Show value labels on points/bars */
     showDataLabels?: boolean;
+    /** Pie: show percentage in labels */
+    showPercent?: boolean;
     unit?: string;
     /** KPI number format decimals */
     decimals?: number;
@@ -379,6 +389,10 @@ export interface DbSchema {
     gatewayAdminSecret?: string;
     /** catalog / sync poll interval seconds (0 = manual only) */
     catalogSyncIntervalSec?: number;
+    /** Login / register particles & fade motion */
+    authAnimations?: boolean;
+    /** App shell particles & page animations after login */
+    appAnimations?: boolean;
     /** Gmail / SMTP for forgot-password */
     mail?: {
       enabled?: boolean;

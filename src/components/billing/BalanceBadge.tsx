@@ -130,7 +130,7 @@ function TariffCard({
         </span>
         <span className="flex items-center gap-1">
           <Zap className="h-3 w-3 text-amber-400" />
-          Günde max <strong className="text-white">{t.maxApiCallsDay}</strong> API
+          Günde max <strong className="text-white">{t.maxApiCallsDay}</strong> REQ (sorag)
         </span>
         <span>
           Max <strong className="text-white">{t.maxStaff}</strong> işgär
@@ -431,7 +431,7 @@ export function BalanceBadge({
                     <p>
                       Aýlyk: {selectedTariff.priceMonthly === 0 ? 'Mugt' : `${selectedTariff.priceMonthly} REQ`} ·
                       Berilýän: {selectedTariff.includedCredits.toLocaleString()} REQ · Günde{' '}
-                      {selectedTariff.maxApiCallsDay} API
+                      {selectedTariff.maxApiCallsDay} REQ
                     </p>
                     <p className="text-indigo-200/70">
                       Tassyklananda: häzirki <strong>{fmtTmt(bal)}</strong> saklanýar + tarifiň aýlyk
