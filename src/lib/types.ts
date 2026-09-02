@@ -222,6 +222,12 @@ export interface DashboardWidget {
     showDataLabels?: boolean;
     /** Pie: show percentage in labels */
     showPercent?: boolean;
+    /** Pie: show numeric value in slice labels */
+    showValueInLabel?: boolean;
+    /** Pie: labels inside slices */
+    labelInside?: boolean;
+    /** Pie center aggregate: sum | count | avg | none */
+    pieCenterAgg?: 'sum' | 'count' | 'avg' | 'none';
     unit?: string;
     /** KPI number format decimals */
     decimals?: number;

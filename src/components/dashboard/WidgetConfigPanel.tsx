@@ -82,6 +82,53 @@ export function WidgetConfigPanel({
       setColumnsError('');
       try {
         const path = ds.path.startsWith('/') ? ds.path : `/${ds.path}`;
+        // Probe params: date → today range; other required → null / empty
+        const probeParams: Record<string, string | number | boolean | null> = {
+          ...(ds.params || {}),
+        };
+        const schema = ds.paramsSchema || endpoints.find((e) => e.id === ds.endpointId)?.paramsSchema;
+        const allDefs = schema
+          ? [
+              ...(schema.urlParams || []),
+              ...(schema.queryParams || []),
+              ...(schema.bodyParams || []),
+            ]
+          : [];
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const today = `${yyyy}-${mm}-${dd}`;
+        const beginDefault = `${today} 00:00:00`;
+        const endDefault = `${today} 23:59:59`;
+
+        for (const def of allDefs) {
+          const name = def.name;
+          if (!name) continue;
+          if (probeParams[name] !== undefined && probeParams[name] !== null && probeParams[name] !== '') {
+            continue;
+          }
+          const n = name.toLowerCase();
+          const isDate =
+            def.type === 'date' ||
+            def.type === 'datetime' ||
+            /date|time|begin|start|from|end|until|gutar/i.test(n);
+          if (isDate) {
+            if (/end|gutar|until|dateto|to$/i.test(n)) probeParams[name] = endDefault;
+            else probeParams[name] = beginDefault;
+          } else {
+            // optional filters → NULL so SQL handles ISNULL
+            probeParams[name] = null;
+          }
+        }
+        // Common names even without schema
+        if (probeParams.beginDate === undefined && probeParams.BeginDate === undefined) {
+          probeParams.beginDate = beginDefault;
+        }
+        if (probeParams.endDate === undefined && probeParams.EndDate === undefined) {
+          probeParams.endDate = endDefault;
+        }
+
         const res = await fetch('/api/gateway/query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -90,7 +137,7 @@ export function WidgetConfigPanel({
             path,
             method: ds.method || 'GET',
             dbKey: ds.dbKey || 'primary',
-            params: { ...(ds.params || {}) },
+            params: probeParams,
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -800,19 +847,47 @@ export function WidgetConfigPanel({
                   Legend
                 </label>
                 {widget.type === 'pie' && (
-                  <label className="flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={widget.config?.showPercent !== false}
-                      onChange={(e) =>
-                        onChange({
-                          ...widget,
-                          config: { ...widget.config, showPercent: e.target.checked },
-                        })
-                      }
-                    />
-                    Prosent (%)
-                  </label>
+                  <>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={widget.config?.showPercent !== false}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, showPercent: e.target.checked },
+                          })
+                        }
+                      />
+                      Prosent (%)
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!widget.config?.showValueInLabel}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, showValueInLabel: e.target.checked },
+                          })
+                        }
+                      />
+                      Value label
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={widget.config?.labelInside !== false}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, labelInside: e.target.checked },
+                          })
+                        }
+                      />
+                      Label içerde
+                    </label>
+                  </>
                 )}
                 {widget.type === 'bar' && (
                   <label className="flex items-center gap-1.5 cursor-pointer">
@@ -830,6 +905,31 @@ export function WidgetConfigPanel({
                   </label>
                 )}
               </div>
+              {widget.type === 'pie' && (
+                <div className="pt-1">
+                  <label className="text-[11px] font-medium text-slate-400 block mb-1">
+                    Merkez (donut) jem
+                  </label>
+                  <select
+                    className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+                    value={widget.config?.pieCenterAgg || 'sum'}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          pieCenterAgg: e.target.value as 'sum' | 'count' | 'avg' | 'none',
+                        },
+                      })
+                    }
+                  >
+                    <option value="sum">Sum (jemi)</option>
+                    <option value="count">Count (sany)</option>
+                    <option value="avg">Avg (orta)</option>
+                    <option value="none">Ýok</option>
+                  </select>
+                </div>
+              )}
             </>
           )}
           {widget.type === 'kpi' && (

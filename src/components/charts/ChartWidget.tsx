@@ -1185,7 +1185,9 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         : [color, '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
       const showLabels = widget.config?.showDataLabels !== false;
       const showPercent = widget.config?.showPercent !== false;
-      // Multi value fields → sum into one pie slice value, or first field
+      const showValueInLabel = !!widget.config?.showValueInLabel;
+      const labelInside = widget.config?.labelInside !== false;
+      const centerAgg = widget.config?.pieCenterAgg || 'sum';
       const pieData = rows.map((r, i) => {
         const value =
           valueKeys.length > 1
@@ -1197,34 +1199,111 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           itemStyle: { color: palette[i % palette.length] },
         };
       });
+      const total = pieData.reduce((s, d) => s + (Number.isFinite(d.value) ? d.value : 0), 0);
+      const centerText =
+        centerAgg === 'none' || pieData.length === 0
+          ? ''
+          : centerAgg === 'count'
+            ? String(pieData.length)
+            : centerAgg === 'avg'
+              ? pieData.length
+                ? (total / pieData.length).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                : '0'
+              : total.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      const centerLabel =
+        centerAgg === 'count' ? 'Sany' : centerAgg === 'avg' ? 'Orta' : centerAgg === 'sum' ? 'Jemi' : '';
+
+      const labelParts: string[] = ['{b}'];
+      if (showValueInLabel) labelParts.push('{c}');
+      if (showPercent) labelParts.push('{d}%');
+      const labelFmt = labelParts.join('\n');
+
+      const pieCenterY = showLegend ? '44%' : '50%';
+      const graphics: any[] = [];
+      if (rows.length === 0) {
+        graphics.push({
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: { text: 'Maglumat tapylmady', fill: '#64748b', fontSize: 13 },
+        });
+      } else if (centerText && centerAgg !== 'none') {
+        graphics.push(
+          {
+            type: 'text',
+            left: 'center',
+            top: showLegend ? '38%' : '44%',
+            style: {
+              text: centerText,
+              fill: '#e2e8f0',
+              fontSize: 15,
+              fontWeight: 600,
+              textAlign: 'center',
+            },
+            z: 10,
+          },
+          {
+            type: 'text',
+            left: 'center',
+            top: showLegend ? '46%' : '52%',
+            style: {
+              text: centerLabel,
+              fill: '#94a3b8',
+              fontSize: 11,
+              textAlign: 'center',
+            },
+            z: 10,
+          }
+        );
+      }
+
       return {
         backgroundColor: 'transparent',
         tooltip: {
           trigger: 'item',
-          formatter: showPercent ? '{b}: {c} ({d}%)' : '{b}: {c}',
+          formatter: (p: any) => {
+            const pct = p.percent != null ? ` (${p.percent}%)` : '';
+            return `${p.name}: ${p.value}${showPercent ? pct : ''}`;
+          },
         },
         legend: showLegend
-          ? { bottom: 0, type: 'scroll', textStyle: { color: '#94a3b8', fontSize: 11 } }
+          ? {
+              bottom: 0,
+              type: 'scroll',
+              textStyle: { color: '#94a3b8', fontSize: 11 },
+              pageTextStyle: { color: '#94a3b8' },
+            }
           : undefined,
         series: [
           {
             type: 'pie',
-            radius: ['36%', '62%'],
-            center: ['50%', showLegend ? '44%' : '50%'],
+            radius: labelInside ? ['42%', '68%'] : ['36%', '58%'],
+            center: ['50%', pieCenterY],
             data: pieData,
+            avoidLabelOverlap: true,
+            minShowLabelAngle: 8,
             label: {
-              color: '#cbd5e1',
-              fontSize: 11,
+              color: labelInside ? '#f1f5f9' : '#cbd5e1',
+              fontSize: 10,
               show: showLabels,
-              formatter: showPercent ? '{b}\n{d}%' : '{b}\n{c}',
+              position: labelInside ? 'inside' : 'outside',
+              formatter: labelFmt,
+              overflow: 'truncate',
+              width: labelInside ? 56 : 72,
+              lineHeight: 13,
             },
-            labelLine: { show: showLabels },
+            labelLine: {
+              show: showLabels && !labelInside,
+              length: 8,
+              length2: 6,
+              smooth: true,
+            },
             itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 },
             emphasis: {
               scale: true,
-              scaleSize: 12,
+              scaleSize: 8,
               itemStyle: { shadowBlur: 16, shadowColor: 'rgba(0,0,0,0.35)' },
-              label: { show: true, fontWeight: 'bold', fontSize: 13 },
+              label: { show: true, fontWeight: 'bold', fontSize: 12 },
             },
             selectedMode: 'single',
             select: {
@@ -1232,23 +1311,10 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             },
           },
         ],
-        graphic:
-          rows.length === 0
-            ? [
-                {
-                  type: 'text',
-                  left: 'center',
-                  top: 'middle',
-                  style: {
-                    text: 'Maglumat tapylmady',
-                    fill: '#64748b',
-                    fontSize: 13,
-                  },
-                },
-              ]
-            : undefined,
+        graphic: graphics.length ? graphics : undefined,
       };
     }
+
 
     return null;
   }, [widget, data]);
