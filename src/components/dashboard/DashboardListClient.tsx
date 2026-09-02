@@ -100,6 +100,33 @@ export function DashboardListClient({
   const [xferMode, setXferMode] = useState<'copy' | 'move'>('copy');
   const [xferCompanyId, setXferCompanyId] = useState('');
   const [xferBusy, setXferBusy] = useState(false);
+  /** 1 = firma saýla, 2 = API deňeşdirme / confirm */
+  const [xferStep, setXferStep] = useState<1 | 2>(1);
+  const [xferDbKey, setXferDbKey] = useState('primary');
+  const [xferDbOptions, setXferDbOptions] = useState<{ dbKey: string; label: string }[]>([
+    { dbKey: 'primary', label: 'primary' },
+  ]);
+  /** Global policy for name conflicts */
+  const [xferConflictPolicy, setXferConflictPolicy] = useState<'replace' | 'skip'>('skip');
+  const [xferApiRows, setXferApiRows] = useState<
+    {
+      key: string;
+      name: string;
+      path: string;
+      method: string;
+      sourceId?: string;
+      sqlQuery?: string;
+      paramsSchema?: unknown;
+      responseSchema?: unknown;
+      cacheTtlSec?: number;
+      authRequired?: boolean;
+      conflict: boolean;
+      targetId?: string;
+      targetPath?: string;
+      policy: 'replace' | 'skip' | 'create';
+    }[]
+  >([]);
+  const [xferAnalyzeMsg, setXferAnalyzeMsg] = useState('');
 
   function flash(msg: string) {
     setToast(msg);
@@ -294,7 +321,138 @@ export function DashboardListClient({
     setXferTarget(d);
     setXferMode(mode);
     setXferCompanyId('');
+    setXferStep(1);
+    setXferApiRows([]);
+    setXferDbKey('primary');
+    setXferConflictPolicy('skip');
+    setXferAnalyzeMsg('');
     setMenuId(null);
+  }
+
+  function closeXfer() {
+    if (xferBusy) return;
+    setXferTarget(null);
+    setXferStep(1);
+    setXferApiRows([]);
+  }
+
+  /** Widget + drillDown dataSource-lardan API salgylary */
+  function collectWidgetApiKeys(widgets: DashboardWidget[]) {
+    const keys: { path: string; method: string; tenantSlug: string; endpointId?: string }[] = [];
+    const push = (ds?: DashboardWidget['dataSource'] | NonNullable<DashboardWidget['dataSource']>['drillDown']) => {
+      if (!ds || !('path' in ds) || !ds.path) return;
+      const path = ds.path.startsWith('/') ? ds.path : `/${ds.path}`;
+      keys.push({
+        path,
+        method: (ds as any).method || 'GET',
+        tenantSlug: (ds as any).tenantSlug || '',
+        endpointId: (ds as any).endpointId,
+      });
+    };
+    for (const w of widgets || []) {
+      push(w.dataSource);
+      push(w.dataSource?.drillDown as any);
+    }
+    return keys;
+  }
+
+  async function analyzeXferApis() {
+    if (!xferTarget || !xferCompanyId) {
+      flash('Maksat firma saýlaň');
+      return;
+    }
+    setXferBusy(true);
+    setXferAnalyzeMsg('API-lar deňeşdirilýär…');
+    try {
+      const targetCo = companies.find((c) => c.id === xferCompanyId);
+      const targetSlug = targetCo?.slug || xferCompanyId;
+      const res = await fetch('/api/catalog?force=1');
+      const cat = await res.json();
+      if (!res.ok) throw new Error(cat.error || 'Catalog alynmady');
+
+      const allEps: any[] = cat.endpoints || [];
+      const sourceKeys = collectWidgetApiKeys(xferTarget.widgets || []);
+      // unique by path+method (prefer source tenant match)
+      const seen = new Set<string>();
+      const uniqueKeys: typeof sourceKeys = [];
+      for (const k of sourceKeys) {
+        const id = `${k.method.toUpperCase()}|${k.path.toLowerCase()}`;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        uniqueKeys.push(k);
+      }
+
+      const targetEps = allEps.filter((e) => e.tenantSlug === targetSlug);
+      const targetByName = new Map<string, any>();
+      for (const e of targetEps) {
+        targetByName.set(String(e.name || '').trim().toLowerCase(), e);
+      }
+
+      const dbOpts =
+        (cat.tenants || [])
+          .find((t: any) => t.slug === targetSlug || t.id === xferCompanyId)
+          ?.connections?.map((c: any) => ({
+            dbKey: c.dbKey || 'primary',
+            label: c.label || c.database || c.dbKey || 'primary',
+          })) || [];
+      setXferDbOptions(dbOpts.length ? dbOpts : [{ dbKey: 'primary', label: 'primary' }]);
+      setXferDbKey(dbOpts[0]?.dbKey || 'primary');
+
+      const rows = uniqueKeys.map((k) => {
+        const src =
+          allEps.find(
+            (e) =>
+              e.id === k.endpointId ||
+              (e.tenantSlug === k.tenantSlug &&
+                String(e.pathTemplate || '').toLowerCase() === k.path.toLowerCase() &&
+                String(e.method || 'GET').toUpperCase() === k.method.toUpperCase())
+          ) ||
+          allEps.find(
+            (e) =>
+              String(e.pathTemplate || '').toLowerCase() === k.path.toLowerCase() &&
+              String(e.method || 'GET').toUpperCase() === k.method.toUpperCase()
+          );
+        const name = String(src?.name || k.path.replace(/^\//, '') || 'API').trim();
+        const conflictEp = targetByName.get(name.toLowerCase());
+        const conflict = !!conflictEp;
+        return {
+          key: `${k.method}|${k.path}`,
+          name,
+          path: k.path,
+          method: k.method.toUpperCase(),
+          sourceId: src?.id,
+          sqlQuery: src?.sqlQuery || '',
+          paramsSchema: src?.paramsSchema,
+          responseSchema: src?.responseSchema,
+          cacheTtlSec: src?.cacheTtlSec,
+          authRequired: src?.authRequired,
+          conflict,
+          targetId: conflictEp?.id,
+          targetPath: conflictEp?.pathTemplate,
+          policy: (conflict ? 'skip' : 'create') as 'replace' | 'skip' | 'create',
+        };
+      });
+
+      setXferApiRows(rows);
+      const nConflict = rows.filter((r) => r.conflict).length;
+      setXferAnalyzeMsg(
+        rows.length
+          ? `${rows.length} API ulanylýar · ${nConflict} sany maksat firmada şol atly bar`
+          : 'Bu dashboardda baglanan API ýok — diňe layout nusga alynar'
+      );
+      setXferStep(2);
+    } catch (e) {
+      flash(String(e));
+    } finally {
+      setXferBusy(false);
+    }
+  }
+
+  function setAllConflictPolicy(policy: 'replace' | 'skip') {
+    setXferConflictPolicy(policy);
+    setXferApiRows((prev) =>
+      prev.map((r) => (r.conflict ? { ...r, policy } : r))
+    );
   }
 
   async function confirmXfer() {
@@ -302,8 +460,16 @@ export function DashboardListClient({
       flash('Maksat firma saýlaň');
       return;
     }
+    if (xferStep === 1) {
+      await analyzeXferApis();
+      return;
+    }
     setXferBusy(true);
     try {
+      const targetCo = companies.find((c) => c.id === xferCompanyId);
+      const targetSlug = targetCo?.slug || xferCompanyId;
+
+      // Dashboard name conflict
       const sameName = items.find(
         (x) =>
           x.id !== xferTarget.id &&
@@ -313,32 +479,153 @@ export function DashboardListClient({
       if (sameName) {
         const ok = await confirmDialog({
           title: 'Dashboard eýýäm bar',
-          message: `«${xferTarget.name}» bu firmada eýýäm bar. Replace — köne pozlup täze ýazylar. Skip — hiç zat üýtgemeýär.`,
+          message: `«${xferTarget.name}» bu firmada eýýäm bar. Replace — köne pozlup täze ýazylar. Skip — işlem ýatyrylýar.`,
           confirmLabel: 'Replace',
           cancelLabel: 'Skip',
         });
         if (!ok) {
           flash('Geçirildi (skip)');
-          setXferTarget(null);
+          closeXfer();
           return;
         }
-        // delete existing same-name
         await fetch(`/api/dashboards/${sameName.id}`, { method: 'DELETE' });
         setItems((prev) => prev.filter((x) => x.id !== sameName.id));
       }
+
+      // Resolve API mapping: old path → new path/tenant/endpointId
+      const pathMap = new Map<
+        string,
+        { path: string; tenantSlug: string; endpointId?: string; method: string }
+      >();
+
+      for (const row of xferApiRows) {
+        const mapKey = `${row.method}|${row.path.toLowerCase()}`;
+        if (row.conflict && row.policy === 'skip' && row.targetId) {
+          pathMap.set(mapKey, {
+            path: row.targetPath || row.path,
+            tenantSlug: targetSlug,
+            endpointId: row.targetId,
+            method: row.method,
+          });
+          continue;
+        }
+        if (row.conflict && row.policy === 'replace' && row.targetId) {
+          const up = await fetch('/api/endpoints', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: row.targetId,
+              tenantSlug: targetSlug,
+              name: row.name,
+              pathTemplate: row.path,
+              method: row.method,
+              dbKey: xferDbKey,
+              sqlQuery: row.sqlQuery || undefined,
+              paramsSchema: row.paramsSchema,
+              responseSchema: row.responseSchema,
+              cacheTtlSec: row.cacheTtlSec,
+              authRequired: row.authRequired,
+            }),
+          });
+          const ud = await up.json().catch(() => ({}));
+          if (!up.ok) throw new Error(ud.error || `API replace şowsuz: ${row.name}`);
+          pathMap.set(mapKey, {
+            path: row.path,
+            tenantSlug: targetSlug,
+            endpointId: row.targetId,
+            method: row.method,
+          });
+          continue;
+        }
+        // create
+        const cr = await fetch('/api/endpoints', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            create: true,
+            tenantSlug: targetSlug,
+            name: row.name,
+            pathTemplate: row.path,
+            method: row.method,
+            dbKey: xferDbKey,
+            sqlQuery: row.sqlQuery || 'SELECT 1 AS ok',
+            paramsSchema: row.paramsSchema,
+            responseSchema: row.responseSchema,
+            cacheTtlSec: row.cacheTtlSec ?? 0,
+            authRequired: row.authRequired ?? true,
+          }),
+        });
+        const cd = await cr.json().catch(() => ({}));
+        if (!cr.ok) {
+          // duplicate path → use existing
+          if (cr.status === 409 && cd.details?.id) {
+            pathMap.set(mapKey, {
+              path: row.path,
+              tenantSlug: targetSlug,
+              endpointId: cd.details.id,
+              method: row.method,
+            });
+          } else {
+            throw new Error(cd.error || `API döredilmedi: ${row.name}`);
+          }
+        } else {
+          pathMap.set(mapKey, {
+            path: row.path,
+            tenantSlug: targetSlug,
+            endpointId: cd.endpoint?.id,
+            method: row.method,
+          });
+        }
+      }
+
+      const remapDs = (ds: any): any => {
+        if (!ds?.path) return ds;
+        const path = ds.path.startsWith('/') ? ds.path : `/${ds.path}`;
+        const method = String(ds.method || 'GET').toUpperCase();
+        const hit = pathMap.get(`${method}|${path.toLowerCase()}`);
+        if (!hit) {
+          return { ...ds, tenantSlug: targetSlug, dbKey: xferDbKey };
+        }
+        return {
+          ...ds,
+          tenantSlug: hit.tenantSlug,
+          path: hit.path,
+          method: hit.method,
+          endpointId: hit.endpointId || ds.endpointId,
+          dbKey: xferDbKey,
+          drillDown: ds.drillDown ? remapDs(ds.drillDown) : ds.drillDown,
+        };
+      };
+
+      const widgetsRemapped = remapWidgetIds(
+        (xferTarget.widgets || []).map((w) => ({
+          ...w,
+          dataSource: w.dataSource ? remapDs(w.dataSource) : w.dataSource,
+        }))
+      );
 
       if (xferMode === 'move') {
         const res = await fetch(`/api/dashboards/${xferTarget.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ companyId: xferCompanyId }),
+          body: JSON.stringify({
+            companyId: xferCompanyId,
+            widgets: widgetsRemapped.map((w, i) => ({
+              ...w,
+              id: (xferTarget.widgets || [])[i]?.id || w.id,
+            })),
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Göçürilmedi');
         setItems((prev) =>
-          prev.map((x) => (x.id === xferTarget.id ? { ...x, companyId: xferCompanyId } : x))
+          prev.map((x) =>
+            x.id === xferTarget.id
+              ? { ...x, companyId: xferCompanyId, widgets: data.dashboard?.widgets || widgetsRemapped }
+              : x
+          )
         );
-        flash('Dashboard firmaya göçürildi');
+        flash('Dashboard firmaya göçürildi (API baglanyşyklar täzelendi)');
       } else {
         const res = await fetch('/api/dashboards', {
           method: 'POST',
@@ -346,7 +633,7 @@ export function DashboardListClient({
           body: JSON.stringify({
             name: xferTarget.name,
             description: xferTarget.description,
-            widgets: remapWidgetIds(xferTarget.widgets || []),
+            widgets: widgetsRemapped,
             globalFilters: xferTarget.globalFilters || [],
             companyId: xferCompanyId,
           }),
@@ -354,9 +641,9 @@ export function DashboardListClient({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Nusga alynmady');
         setItems((prev) => [data.dashboard, ...prev]);
-        flash('Dashboard beýleki firmaya nusga alyndy');
+        flash('Dashboard nusga alyndy · API-lar maksat firmada sazlandy');
       }
-      setXferTarget(null);
+      closeXfer();
       router.refresh();
     } catch (e) {
       flash(String(e));
@@ -780,38 +1067,191 @@ export function DashboardListClient({
       {/* Edit modal */}
       {xferTarget && (
         <div className="fixed inset-0 z-[2147482500] flex items-center justify-center p-3 sm:p-4">
-          <div className="absolute inset-0 bg-black/70" onClick={() => !xferBusy && setXferTarget(null)} />
-          <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => closeXfer()} />
+          <div className="relative w-full max-w-lg max-h-[min(92dvh,720px)] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
             <h3 className="text-lg font-semibold text-white text-center">
               {xferMode === 'move' ? 'Firma-a göçür' : 'Firma-a nusga'}
+              <span className="block text-[11px] font-normal text-slate-500 mt-0.5">
+                Ädim {xferStep}/2
+              </span>
             </h3>
             <p className="text-xs text-slate-400 text-center truncate">{xferTarget.name}</p>
-            <label className="block space-y-1.5">
-              <span className="text-xs text-slate-400">Maksat firma</span>
-              <select
-                value={xferCompanyId}
-                onChange={(e) => setXferCompanyId(e.target.value)}
-                className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
-              >
-                <option value="">— Saýlaň —</option>
-                {companies
-                  .filter((c) => c.id !== xferTarget.companyId && c.slug !== xferTarget.companyId)
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.slug})
-                    </option>
+
+            {xferStep === 1 && (
+              <>
+                <label className="block space-y-1.5">
+                  <span className="text-xs text-slate-400">Maksat firma</span>
+                  <select
+                    value={xferCompanyId}
+                    onChange={(e) => setXferCompanyId(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                  >
+                    <option value="">— Saýlaň —</option>
+                    {companies
+                      .filter((c) => c.id !== xferTarget.companyId && c.slug !== xferTarget.companyId)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.slug})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  Soňky ädimde widget API-lary maksat firmadaky atlar bilen deňeşdiriler (Replace / Skip /
+                  täze döret).
+                </p>
+              </>
+            )}
+
+            {xferStep === 2 && (
+              <div className="space-y-3">
+                {xferAnalyzeMsg && (
+                  <p className="text-xs text-indigo-300/90 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-2">
+                    {xferAnalyzeMsg}
+                  </p>
+                )}
+
+                <label className="block space-y-1.5">
+                  <span className="text-xs text-slate-400">
+                    Täze / replace API-lar üçin DB baglanyşyk (maksat firma)
+                  </span>
+                  <select
+                    value={xferDbKey}
+                    onChange={(e) => setXferDbKey(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                  >
+                    {xferDbOptions.map((o) => (
+                      <option key={o.dbKey} value={o.dbKey}>
+                        {o.label} ({o.dbKey})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {xferApiRows.some((r) => r.conflict) && (
+                  <div className="flex flex-wrap gap-2 items-center text-[11px]">
+                    <span className="text-slate-400">Ähli conflict:</span>
+                    <button
+                      type="button"
+                      className={cn(
+                        'rounded-lg px-2.5 py-1 border',
+                        xferConflictPolicy === 'replace'
+                          ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
+                          : 'border-slate-700 text-slate-400'
+                      )}
+                      onClick={() => setAllConflictPolicy('replace')}
+                    >
+                      Replace
+                    </button>
+                    <button
+                      type="button"
+                      className={cn(
+                        'rounded-lg px-2.5 py-1 border',
+                        xferConflictPolicy === 'skip'
+                          ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                          : 'border-slate-700 text-slate-400'
+                      )}
+                      onClick={() => setAllConflictPolicy('skip')}
+                    >
+                      Skip (sakla)
+                    </button>
+                  </div>
+                )}
+
+                <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800">
+                  {xferApiRows.length === 0 && (
+                    <p className="text-xs text-slate-500 p-3">API ýok</p>
+                  )}
+                  {xferApiRows.map((r) => (
+                    <div key={r.key} className="p-2.5 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm text-white font-medium truncate">{r.name}</p>
+                          <p className="text-[10px] text-slate-500 font-mono truncate">
+                            {r.method} {r.path}
+                          </p>
+                        </div>
+                        {r.conflict ? (
+                          <span className="shrink-0 text-[10px] rounded-md bg-amber-500/15 text-amber-300 px-1.5 py-0.5">
+                            Conflict
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[10px] rounded-md bg-sky-500/15 text-sky-300 px-1.5 py-0.5">
+                            Täze
+                          </span>
+                        )}
+                      </div>
+                      {r.conflict ? (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            className={cn(
+                              'text-[11px] rounded-md px-2 py-1 border',
+                              r.policy === 'replace'
+                                ? 'border-amber-500/40 text-amber-200 bg-amber-500/10'
+                                : 'border-slate-700 text-slate-400'
+                            )}
+                            onClick={() =>
+                              setXferApiRows((prev) =>
+                                prev.map((x) => (x.key === r.key ? { ...x, policy: 'replace' } : x))
+                              )
+                            }
+                          >
+                            Replace
+                          </button>
+                          <button
+                            type="button"
+                            className={cn(
+                              'text-[11px] rounded-md px-2 py-1 border',
+                              r.policy === 'skip'
+                                ? 'border-emerald-500/40 text-emerald-200 bg-emerald-500/10'
+                                : 'border-slate-700 text-slate-400'
+                            )}
+                            onClick={() =>
+                              setXferApiRows((prev) =>
+                                prev.map((x) => (x.key === r.key ? { ...x, policy: 'skip' } : x))
+                              )
+                            }
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500">
+                          Maksat firmada dörediler · DB: {xferDbKey}
+                        </p>
+                      )}
+                    </div>
                   ))}
-              </select>
-            </label>
-            <p className="text-[11px] text-slate-500">
-              Maksat firmada şol atly dashboard bar bolsa Replace ýa-da Skip soralar.
-            </p>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-relaxed">
+                  <b className="text-slate-400">Replace</b> — SQL/sazlama göçürilýär (şol atly API).{' '}
+                  <b className="text-slate-400">Skip</b> — maksatdaky API saklanýar, widget oňa baglanýar.{' '}
+                  <b className="text-slate-400">Täze</b> — saýlanan DB bilen döredilýär.
+                </p>
+              </div>
+            )}
+
             <div className="flex gap-2 pt-1">
-              <Button variant="ghost" className="flex-1" disabled={xferBusy} onClick={() => setXferTarget(null)}>
-                Ýatyr
+              <Button
+                variant="ghost"
+                className="flex-1"
+                disabled={xferBusy}
+                onClick={() => (xferStep === 2 ? setXferStep(1) : closeXfer())}
+              >
+                {xferStep === 2 ? 'Yza' : 'Ýatyr'}
               </Button>
-              <Button className="flex-1" loading={xferBusy} disabled={!xferCompanyId} onClick={() => void confirmXfer()}>
-                {xferMode === 'move' ? 'Göçür' : 'Nusga al'}
+              <Button
+                className="flex-1"
+                loading={xferBusy}
+                disabled={xferStep === 1 ? !xferCompanyId : false}
+                onClick={() => void confirmXfer()}
+              >
+                {xferStep === 1
+                  ? 'Dowam · API barla'
+                  : xferMode === 'move'
+                    ? 'Göçür'
+                    : 'Nusga al'}
               </Button>
             </div>
           </div>
