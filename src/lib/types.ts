@@ -270,6 +270,18 @@ export interface DashboardWidget {
     labelInside?: boolean;
     /** Pie center aggregate: sum | count | avg | none */
     pieCenterAgg?: 'sum' | 'count' | 'avg' | 'none';
+    /** Pie: which column to aggregate in donut center */
+    pieCenterField?: string;
+    /** Chart/KPI label text color */
+    labelColor?: string;
+    /** Axis tick label color */
+    axisLabelColor?: string;
+    /** Chart data label font size (px) */
+    labelFontSize?: number;
+    /** Auto scale font size with widget box */
+    enableAutoTextSize?: boolean;
+    /** KPI text alignment */
+    textAlign?: 'center' | 'left' | 'right';
     unit?: string;
     /** KPI number format decimals */
     decimals?: number;

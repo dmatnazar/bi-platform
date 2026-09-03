@@ -65,9 +65,9 @@ export function WidgetConfigPanel({
   const [showRequiredParamsForm, setShowRequiredParamsForm] = useState(false);
 
   // Task 13: Column selection for aggregate functions
-  const [aggregateColumn, setAggregateColumn] = useState<string>(
-    widget.dataSource?.aggregateColumn || ''
-  );
+  // const [aggregateColumn, setAggregateColumn] = useState<string>(
+  //   widget.dataSource?.aggregateColumn || ''
+  // );
 
   // MUST be before any effect that reads ds (avoid TDZ ReferenceError)
   const ds = widget.dataSource;
@@ -90,11 +90,8 @@ export function WidgetConfigPanel({
       onChange({
         ...widget,
         dataSource: {
-          tenantSlug: ds.tenantSlug || '',
-          path: ds.path || '',
-          method: ds.method || 'GET',
-          ...ds,
-          params: merged,
+          ...ds,        // Ilki ähli ds-i ýaýýarys
+          params: merged, // Soňra params-i üýtgedýäris
         },
       });
     } catch {
@@ -107,7 +104,7 @@ export function WidgetConfigPanel({
     fetch('/api/catalog')
       .then((r) => r.json())
       .then((d) => setEndpoints(d.endpoints || []))
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   function extractRows(data: any): Record<string, unknown>[] {
@@ -152,10 +149,10 @@ export function WidgetConfigPanel({
         const schema = ds.paramsSchema || endpoints.find((e) => e.id === ds.endpointId)?.paramsSchema;
         const allDefs = schema
           ? [
-              ...(schema.urlParams || []),
-              ...(schema.queryParams || []),
-              ...(schema.bodyParams || []),
-            ]
+            ...(schema.urlParams || []),
+            ...(schema.queryParams || []),
+            ...(schema.bodyParams || []),
+          ]
           : [];
         const now = new Date();
         const yyyy = now.getFullYear();
@@ -303,16 +300,54 @@ export function WidgetConfigPanel({
     return flattenParamsSchema(schema);
   }, [ds?.paramsSchema, selectedEp]);
 
+  // function patchDs(patch: Partial<WidgetDataSource>) {
+  //   onChange({
+  //     ...widget,
+  //     dataSource: {
+  //       tenantSlug: ds?.tenantSlug || '',
+  //       path: ds?.path || '',
+  //       method: ds?.method || 'GET',
+  //       ...ds,
+  //       ...patch,
+  //     },
+  //   });
+  // }
+
   function patchDs(patch: Partial<WidgetDataSource>) {
+    // Hazirki ds-däki bahalary sakla
+    const currentDs = ds || {
+      tenantSlug: '',
+      path: '',
+      method: 'GET',
+    };
+
+    // Täze dataSource döret
+    const newDataSource: WidgetDataSource = {
+      tenantSlug: patch.tenantSlug ?? currentDs.tenantSlug ?? '',
+      path: patch.path ?? currentDs.path ?? '',
+      method: patch.method ?? currentDs.method ?? 'GET',
+      dbKey: patch.dbKey ?? currentDs.dbKey ?? 'primary',
+      endpointId: patch.endpointId ?? currentDs.endpointId,
+      refreshSec: patch.refreshSec ?? currentDs.refreshSec ?? 0,
+      params: patch.params ?? currentDs.params ?? {},
+      paramBindings: patch.paramBindings ?? currentDs.paramBindings ?? [],
+      categoryField: patch.categoryField ?? currentDs.categoryField,
+      valueField: patch.valueField ?? currentDs.valueField,
+      valueFields: patch.valueFields ?? currentDs.valueFields,
+      seriesField: patch.seriesField ?? currentDs.seriesField,
+      seriesFields: patch.seriesFields ?? currentDs.seriesFields,
+      columns: patch.columns ?? currentDs.columns,
+      hiddenColumns: patch.hiddenColumns ?? currentDs.hiddenColumns,
+      orderBy: patch.orderBy ?? currentDs.orderBy,
+      enableSearch: patch.enableSearch ?? currentDs.enableSearch,
+      tableAggregates: patch.tableAggregates ?? currentDs.tableAggregates,
+      drillDown: patch.drillDown ?? currentDs.drillDown,
+      paramsSchema: patch.paramsSchema ?? currentDs.paramsSchema,
+    };
+
     onChange({
       ...widget,
-      dataSource: {
-        tenantSlug: ds?.tenantSlug || '',
-        path: ds?.path || '',
-        method: ds?.method || 'GET',
-        ...ds,
-        ...patch,
-      },
+      dataSource: newDataSource,
     });
   }
 
@@ -360,7 +395,6 @@ export function WidgetConfigPanel({
       paramBindings: bindings,
     });
   }
-
   function updateBinding(paramName: string, patch: Partial<ParamBinding>) {
     const current = ds?.paramBindings || [];
     const exists = current.find((b) => b.paramName === paramName);
@@ -518,10 +552,10 @@ export function WidgetConfigPanel({
                       globalKeys.length
                         ? globalKeys
                         : [
-                            { value: p.name, label: p.name },
-                            { value: 'beginDate', label: 'beginDate' },
-                            { value: 'endDate', label: 'endDate' },
-                          ]
+                          { value: p.name, label: p.name },
+                          { value: 'beginDate', label: 'beginDate' },
+                          { value: 'endDate', label: 'endDate' },
+                        ]
                     }
                   />
                 ) : (
@@ -529,9 +563,9 @@ export function WidgetConfigPanel({
                     label="Baha"
                     type={
                       p.type === 'int' ||
-                      p.type === 'bigint' ||
-                      p.type === 'float' ||
-                      p.type === 'number'
+                        p.type === 'bigint' ||
+                        p.type === 'float' ||
+                        p.type === 'number'
                         ? 'number'
                         : p.type === 'date'
                           ? 'date'
@@ -816,460 +850,329 @@ export function WidgetConfigPanel({
         widget.type === 'area' ||
         widget.type === 'pie' ||
         widget.type === 'kpi') && (
-        <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
-          <p className="text-xs font-semibold text-slate-300">Diagramma / KPI sazlamalary</p>
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-medium text-slate-400">Goşmaça reňkler</label>
-              <button
-                type="button"
-                className="text-[11px] text-indigo-400 hover:text-indigo-300"
-                onClick={() => {
-                  const prev = widget.config?.colors || [];
-                  if (prev.length >= 12) return;
-                  onChange({
-                    ...widget,
-                    config: {
-                      ...widget.config,
-                      colors: [...prev, '#22d3ee'],
-                    },
-                  });
-                }}
-              >
-                + Goş
-              </button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {(widget.config?.colors || []).map((c, i) => (
-                <div key={`c-${i}`} className="flex items-center gap-1">
-                  <input
-                    type="color"
-                    value={c || '#6366f1'}
-                    onChange={(e) => {
-                      const next = [...(widget.config?.colors || [])];
-                      next[i] = e.target.value;
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, colors: next },
-                      });
-                    }}
-                    className="h-9 w-12 cursor-pointer rounded-lg border border-slate-700 bg-slate-950 p-0.5"
-                  />
-                  <button
-                    type="button"
-                    className="text-[10px] text-rose-400 hover:text-rose-300 px-1"
-                    title="Poz"
-                    onClick={() => {
-                      const next = (widget.config?.colors || []).filter((_, j) => j !== i);
-                      onChange({
-                        ...widget,
-                        config: {
-                          ...widget.config,
-                          colors: next.length ? next : undefined,
-                        },
-                      });
-                    }}
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-              {(widget.config?.colors || []).length === 0 && (
-                <p className="text-[11px] text-slate-500">Esasy reňk ulanylýar — goşmaça üçin «+ Goş»</p>
-              )}
-            </div>
-          </div>
-          {(widget.type === 'bar' ||
-            widget.type === 'line' ||
-            widget.type === 'area' ||
-            widget.type === 'pie') && (
-            <>
-              {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
-                <Input
-                  label="Goşmaça value sütünler (csv) — köp series"
-                  value={(ds?.columns || []).join(', ')}
-                  onChange={(e) => {
-                    const cols = e.target.value
-                      .split(',')
-                      .map((s) => s.trim())
-                      .filter(Boolean);
-                    patchDs({ columns: cols.length ? cols : undefined });
+          <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+            <p className="text-xs font-semibold text-slate-300">Diagramma / KPI sazlamalary</p>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-medium text-slate-400">Goşmaça reňkler</label>
+                <button
+                  type="button"
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                  onClick={() => {
+                    const prev = widget.config?.colors || [];
+                    if (prev.length >= 12) return;
+                    onChange({
+                      ...widget,
+                      config: {
+                        ...widget.config,
+                        colors: [...prev, '#22d3ee'],
+                      },
+                    });
                   }}
-                  placeholder="sales, profit, qty"
-                />
-              )}
-              <div className="flex flex-wrap gap-3 text-xs text-slate-300">
-                {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
-                  <>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!widget.config?.stacked}
-                        onChange={(e) =>
-                          onChange({
-                            ...widget,
-                            config: { ...widget.config, stacked: e.target.checked },
-                          })
-                        }
-                      />
-                      Stacked
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={widget.config?.smooth !== false}
-                        onChange={(e) =>
-                          onChange({
-                            ...widget,
-                            config: { ...widget.config, smooth: e.target.checked },
-                          })
-                        }
-                      />
-                      Smooth
-                    </label>
-                  </>
-                )}
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!widget.config?.showDataLabels}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, showDataLabels: e.target.checked },
-                      })
-                    }
-                  />
-                  Data labels
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={widget.config?.showLegend !== false}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, showLegend: e.target.checked },
-                      })
-                    }
-                  />
-                  Legend
-                </label>
-                {widget.type === 'pie' && (
-                  <>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={widget.config?.showPercent !== false}
-                        onChange={(e) =>
-                          onChange({
-                            ...widget,
-                            config: { ...widget.config, showPercent: e.target.checked },
-                          })
-                        }
-                      />
-                      Prosent (%)
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={!!widget.config?.showValueInLabel}
-                        onChange={(e) =>
-                          onChange({
-                            ...widget,
-                            config: { ...widget.config, showValueInLabel: e.target.checked },
-                          })
-                        }
-                      />
-                      Value label
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={widget.config?.labelInside !== false}
-                        onChange={(e) =>
-                          onChange({
-                            ...widget,
-                            config: { ...widget.config, labelInside: e.target.checked },
-                          })
-                        }
-                      />
-                      Label içerde
-                    </label>
-                  </>
-                )}
-                {widget.type === 'bar' && (
-                  <label className="flex items-center gap-1.5 cursor-pointer">
+                >
+                  + Goş
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(widget.config?.colors || []).map((c, i) => (
+                  <div key={`c-${i}`} className="flex items-center gap-1">
                     <input
-                      type="checkbox"
-                      checked={!!widget.config?.horizontal}
+                      type="color"
+                      value={c || '#6366f1'}
+                      onChange={(e) => {
+                        const next = [...(widget.config?.colors || [])];
+                        next[i] = e.target.value;
+                        onChange({
+                          ...widget,
+                          config: { ...widget.config, colors: next },
+                        });
+                      }}
+                      className="h-9 w-12 cursor-pointer rounded-lg border border-slate-700 bg-slate-950 p-0.5"
+                    />
+                    <button
+                      type="button"
+                      className="text-[10px] text-rose-400 hover:text-rose-300 px-1"
+                      title="Poz"
+                      onClick={() => {
+                        const next = (widget.config?.colors || []).filter((_, j) => j !== i);
+                        onChange({
+                          ...widget,
+                          config: {
+                            ...widget.config,
+                            colors: next.length ? next : undefined,
+                          },
+                        });
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                {(widget.config?.colors || []).length === 0 && (
+                  <p className="text-[11px] text-slate-500">Esasy reňk ulanylýar — goşmaça üçin «+ Goş»</p>
+                )}
+              </div>
+            </div>
+            {(widget.type === 'bar' ||
+              widget.type === 'line' ||
+              widget.type === 'area' ||
+              widget.type === 'pie') && (
+                <>
+                  {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
+                    <Input
+                      label="Goşmaça value sütünler (csv) — köp series"
+                      value={(ds?.columns || []).join(', ')}
+                      onChange={(e) => {
+                        const cols = e.target.value
+                          .split(',')
+                          .map((s) => s.trim())
+                          .filter(Boolean);
+                        patchDs({ columns: cols.length ? cols : undefined });
+                      }}
+                      placeholder="sales, profit, qty"
+                    />
+                  )}
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+                    {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
+                      <>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!widget.config?.stacked}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, stacked: e.target.checked },
+                              })
+                            }
+                          />
+                          Stacked
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={widget.config?.smooth !== false}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, smooth: e.target.checked },
+                              })
+                            }
+                          />
+                          Smooth
+                        </label>
+                      </>
+                    )}
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!widget.config?.showDataLabels}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, showDataLabels: e.target.checked },
+                          })
+                        }
+                      />
+                      Data labels
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={widget.config?.showLegend !== false}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, showLegend: e.target.checked },
+                          })
+                        }
+                      />
+                      Legend
+                    </label>
+                    {widget.type === 'pie' && (
+                      <>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={widget.config?.showPercent !== false}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, showPercent: e.target.checked },
+                              })
+                            }
+                          />
+                          Prosent (%)
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!widget.config?.showValueInLabel}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, showValueInLabel: e.target.checked },
+                              })
+                            }
+                          />
+                          Value label
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={widget.config?.labelInside !== false}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, labelInside: e.target.checked },
+                              })
+                            }
+                          />
+                          Label içerde
+                        </label>
+                      </>
+                    )}
+                    {widget.type === 'bar' && (
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!widget.config?.horizontal}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: { ...widget.config, horizontal: e.target.checked },
+                            })
+                          }
+                        />
+                        Horizontal
+                      </label>
+                    )}
+                  </div>
+                  {widget.type === 'pie' && (
+                    <div className="pt-1 space-y-2">
+                      <label className="text-[11px] font-medium text-slate-400 block mb-1">
+                        Merkez (donut) jem
+                      </label>
+                      <select
+                        className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+                        value={widget.config?.pieCenterAgg || 'sum'}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: {
+                              ...widget.config,
+                              pieCenterAgg: e.target.value as 'sum' | 'count' | 'avg' | 'none',
+                            },
+                          })
+                        }
+                      >
+                        <option value="sum">Sum (jemi)</option>
+                        <option value="count">Count (sany)</option>
+                        <option value="avg">Avg (orta)</option>
+                        <option value="none">Ýok</option>
+                      </select>
+                      {/* Task 13: which column to sum/count/avg in center */}
+                      <label className="text-[11px] font-medium text-slate-400 block">
+                        Merkez sütün (column)
+                      </label>
+                      <select
+                        className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+                        value={
+                          widget.config?.pieCenterField ||
+                          ds?.valueField ||
+                          (ds?.valueFields && ds.valueFields[0]) ||
+                          ''
+                        }
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: {
+                              ...widget.config,
+                              pieCenterField: e.target.value || undefined,
+                            },
+                          })
+                        }
+                      >
+                        <option value="">— value field —</option>
+                        {Array.from(
+                          new Set(
+                            sampleColumns.length
+                              ? sampleColumns
+                              : ([
+                                ...(ds?.valueFields || []),
+                                ds?.valueField,
+                                ds?.categoryField,
+                              ].filter(Boolean) as string[])
+                          )
+                        ).map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              )}
+            {/* Task 15: chart label color / size / auto-scale for all chart widgets */}
+            {['bar', 'line', 'area', 'pie'].includes(widget.type) && (
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <p className="text-xs font-semibold text-slate-300">Tekst / label sazlamalary</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Label reňki</label>
+                    <input
+                      type="color"
+                      value={widget.config?.labelColor || '#94a3b8'}
                       onChange={(e) =>
                         onChange({
                           ...widget,
-                          config: { ...widget.config, horizontal: e.target.checked },
+                          config: { ...widget.config, labelColor: e.target.value },
                         })
                       }
+                      className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
                     />
-                    Horizontal
-                  </label>
-                )}
-              </div>
-              {widget.type === 'pie' && (
-                <div className="pt-1 space-y-2">
-                  <label className="text-[11px] font-medium text-slate-400 block mb-1">
-                    Merkez (donut) jem
-                  </label>
-                  <select
-                    className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-                    value={widget.config?.pieCenterAgg || 'sum'}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: {
-                          ...widget.config,
-                          pieCenterAgg: e.target.value as 'sum' | 'count' | 'avg' | 'none',
-                        },
-                      })
-                    }
-                  >
-                    <option value="sum">Sum (jemi)</option>
-                    <option value="count">Count (sany)</option>
-                    <option value="avg">Avg (orta)</option>
-                    <option value="none">Ýok</option>
-                  </select>
-                  {/* Task 13: which column to sum/count/avg in center */}
-                  <label className="text-[11px] font-medium text-slate-400 block">
-                    Merkez sütün (column)
-                  </label>
-                  <select
-                    className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-                    value={
-                      widget.config?.pieCenterField ||
-                      ds?.valueField ||
-                      (ds?.valueFields && ds.valueFields[0]) ||
-                      ''
-                    }
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: {
-                          ...widget.config,
-                          pieCenterField: e.target.value || undefined,
-                        },
-                      })
-                    }
-                  >
-                    <option value="">— value field —</option>
-                    {Array.from(
-                      new Set(
-                        sampleColumns.length
-                          ? sampleColumns
-                          : ([
-                              ...(ds?.valueFields || []),
-                              ds?.valueField,
-                              ds?.categoryField,
-                            ].filter(Boolean) as string[])
-                      )
-                    ).map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-          {/* Task 15: chart label color / size / auto-scale for all chart widgets */}
-          {['bar', 'line', 'area', 'pie'].includes(widget.type) && (
-            <div className="space-y-3 pt-2 border-t border-slate-800">
-              <p className="text-xs font-semibold text-slate-300">Tekst / label sazlamalary</p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">Label reňki</label>
-                  <input
-                    type="color"
-                    value={widget.config?.labelColor || '#94a3b8'}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, labelColor: e.target.value },
-                      })
-                    }
-                    className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">Oks label reňki</label>
-                  <input
-                    type="color"
-                    value={widget.config?.axisLabelColor || '#94a3b8'}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, axisLabelColor: e.target.value },
-                      })
-                    }
-                    className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">
-                  Font size ({widget.config?.labelFontSize || 11}px)
-                </label>
-                <input
-                  type="range"
-                  min={8}
-                  max={22}
-                  value={widget.config?.labelFontSize || 11}
-                  onChange={(e) =>
-                    onChange({
-                      ...widget,
-                      config: {
-                        ...widget.config,
-                        labelFontSize: Number(e.target.value),
-                      },
-                    })
-                  }
-                  className="w-full"
-                />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={!!widget.config?.enableAutoTextSize}
-                  onChange={(e) =>
-                    onChange({
-                      ...widget,
-                      config: {
-                        ...widget.config,
-                        enableAutoTextSize: e.target.checked,
-                      },
-                    })
-                  }
-                  className="rounded"
-                />
-                <span className="text-xs text-slate-300">
-                  Auto text: widget / zoom boyuna görä font ulalsyn/kiçelsin
-                </span>
-              </label>
-            </div>
-          )}
-
-          {widget.type === 'kpi' && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-3 gap-2">
-                <Input
-                  label="Decimals"
-                  type="number"
-                  value={String(widget.config?.decimals ?? '')}
-                  onChange={(e) =>
-                    onChange({
-                      ...widget,
-                      config: {
-                        ...widget.config,
-                        decimals: e.target.value === '' ? undefined : Number(e.target.value),
-                      },
-                    })
-                  }
-                />
-                <Input
-                  label="Prefix"
-                  value={widget.config?.prefix || ''}
-                  onChange={(e) =>
-                    onChange({
-                      ...widget,
-                      config: { ...widget.config, prefix: e.target.value || undefined },
-                    })
-                  }
-                  placeholder="$"
-                />
-                <Input
-                  label="Suffix"
-                  value={widget.config?.suffix || ''}
-                  onChange={(e) =>
-                    onChange({
-                      ...widget,
-                      config: { ...widget.config, suffix: e.target.value || undefined },
-                    })
-                  }
-                  placeholder="%"
-                />
-              </div>
-
-              {/* Task 5: Text Alignment Options */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold text-slate-300">
-                  Text Alignment
-                </label>
-                <div className="flex gap-2">
-                  {(['center', 'left', 'right'] as const).map((align) => (
-                    <button
-                      key={align}
-                      type="button"
-                      onClick={() =>
+                  </div>
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">Oks label reňki</label>
+                    <input
+                      type="color"
+                      value={widget.config?.axisLabelColor || '#94a3b8'}
+                      onChange={(e) =>
                         onChange({
                           ...widget,
-                          config: { ...widget.config, textAlign: align },
+                          config: { ...widget.config, axisLabelColor: e.target.value },
                         })
                       }
-                      className={`px-3 py-1 rounded text-xs font-medium transition ${
-                        (widget.config?.textAlign || 'center') === align
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      {align === 'center'
-                        ? '⊙ Merkez'
-                        : align === 'left'
-                        ? '⊣ Çep'
-                        : '⊢ Sag'}
-                    </button>
-                  ))}
+                      className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
+                    />
+                  </div>
                 </div>
-              </div>
-
-              {/* Task 5: Text Color */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold text-slate-300">
-                  Teksti Tüsy
-                </label>
-                <div className="flex gap-2 items-center">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">
+                    Font size ({widget.config?.labelFontSize || 11}px)
+                  </label>
                   <input
-                    type="color"
-                    value={widget.config?.color || '#ffffff'}
+                    type="range"
+                    min={8}
+                    max={22}
+                    value={widget.config?.labelFontSize || 11}
                     onChange={(e) =>
                       onChange({
                         ...widget,
-                        config: { ...widget.config, color: e.target.value },
+                        config: {
+                          ...widget.config,
+                          labelFontSize: Number(e.target.value),
+                        },
                       })
                     }
-                    className="w-12 h-8 rounded cursor-pointer"
-                  />
-                  <Input
-                    label="Hex"
-                    value={widget.config?.color || '#ffffff'}
-                    onChange={(e) =>
-                      onChange({
-                        ...widget,
-                        config: { ...widget.config, color: e.target.value },
-                      })
-                    }
-                    placeholder="#ffffff"
+                    className="w-full"
                   />
                 </div>
-              </div>
-
-              {/* Task 5: Auto Text Size */}
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold text-slate-300">
-                  Responsive Font
-                </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={widget.config?.enableAutoTextSize !== false}
+                    checked={!!widget.config?.enableAutoTextSize}
                     onChange={(e) =>
                       onChange({
                         ...widget,
@@ -1282,14 +1185,144 @@ export function WidgetConfigPanel({
                     className="rounded"
                   />
                   <span className="text-xs text-slate-300">
-                    Enable: widget size'yna göre font scaling
+                    Auto text: widget / zoom boyuna görä font ulalsyn/kiçelsin
                   </span>
                 </label>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+
+            {widget.type === 'kpi' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  <Input
+                    label="Decimals"
+                    type="number"
+                    value={String(widget.config?.decimals ?? '')}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          decimals: e.target.value === '' ? undefined : Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                  <Input
+                    label="Prefix"
+                    value={widget.config?.prefix || ''}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, prefix: e.target.value || undefined },
+                      })
+                    }
+                    placeholder="$"
+                  />
+                  <Input
+                    label="Suffix"
+                    value={widget.config?.suffix || ''}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, suffix: e.target.value || undefined },
+                      })
+                    }
+                    placeholder="%"
+                  />
+                </div>
+
+                {/* Task 5: Text Alignment Options */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    Text Alignment
+                  </label>
+                  <div className="flex gap-2">
+                    {(['center', 'left', 'right'] as const).map((align) => (
+                      <button
+                        key={align}
+                        type="button"
+                        onClick={() =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, textAlign: align },
+                          })
+                        }
+                        className={`px-3 py-1 rounded text-xs font-medium transition ${(widget.config?.textAlign || 'center') === align
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                          }`}
+                      >
+                        {align === 'center'
+                          ? '⊙ Merkez'
+                          : align === 'left'
+                            ? '⊣ Çep'
+                            : '⊢ Sag'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Task 5: Text Color */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    Teksti Tüsy
+                  </label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={widget.config?.color || '#ffffff'}
+                      onChange={(e) =>
+                        onChange({
+                          ...widget,
+                          config: { ...widget.config, color: e.target.value },
+                        })
+                      }
+                      className="w-12 h-8 rounded cursor-pointer"
+                    />
+                    <Input
+                      label="Hex"
+                      value={widget.config?.color || '#ffffff'}
+                      onChange={(e) =>
+                        onChange({
+                          ...widget,
+                          config: { ...widget.config, color: e.target.value },
+                        })
+                      }
+                      placeholder="#ffffff"
+                    />
+                  </div>
+                </div>
+
+                {/* Task 5: Auto Text Size */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-semibold text-slate-300">
+                    Responsive Font
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={widget.config?.enableAutoTextSize !== false}
+                      onChange={(e) =>
+                        onChange({
+                          ...widget,
+                          config: {
+                            ...widget.config,
+                            enableAutoTextSize: e.target.checked,
+                          },
+                        })
+                      }
+                      className="rounded"
+                    />
+                    <span className="text-xs text-slate-300">
+                      Enable: widget size'yna göre font scaling
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
       {widget.type === 'pivot' && (
         <div className="space-y-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
@@ -2142,7 +2175,7 @@ export function WidgetConfigPanel({
           <p className="text-xs text-slate-300">
             API maglumat bermek üçin aşakdaky parametrleri doldurmalysy:
           </p>
-          
+
           <div className="space-y-2">
             {Object.entries(requiredParamValues).map(([key, value]) => (
               <div key={key}>
@@ -2159,7 +2192,7 @@ export function WidgetConfigPanel({
                     setParamCache(newCache);
                     try {
                       localStorage.setItem('bi-param-cache', JSON.stringify(newCache));
-                    } catch {}
+                    } catch { }
                   }}
                   placeholder={`${key} gir`}
                   className="h-8 text-xs"
