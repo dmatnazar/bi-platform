@@ -9,6 +9,7 @@ import {
   Table2,
   Hash,
   Type,
+  Sheet,
 } from 'lucide-react';
 
 const ITEMS: { type: WidgetType; label: string; icon: typeof BarChart3 }[] = [
@@ -18,6 +19,7 @@ const ITEMS: { type: WidgetType; label: string; icon: typeof BarChart3 }[] = [
   { type: 'area', label: 'Meýdança', icon: AreaChart },
   { type: 'pie', label: 'Tegelek', icon: PieChart },
   { type: 'table', label: 'Tablo', icon: Table2 },
+  { type: 'pivot', label: 'Svodny tablo', icon: Sheet },
   { type: 'text', label: 'Tekst', icon: Type },
 ];
 

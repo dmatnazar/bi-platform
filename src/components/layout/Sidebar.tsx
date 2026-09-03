@@ -18,6 +18,7 @@ import {
   Database,
   Wallet,
   AppWindow,
+  Loader2,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -38,6 +39,13 @@ type NavBadges = {
 export function Sidebar({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const [navPending, setNavPending] = useState<string | null>(null);
+  const [logoutPending, setLogoutPending] = useState(false);
+
+  // Clear pending when route changes
+  useEffect(() => {
+    setNavPending(null);
+  }, [pathname]);
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [badges, setBadges] = useState<NavBadges>({});
@@ -142,9 +150,15 @@ export function Sidebar({ user }: Props) {
   ];
 
   async function logout() {
-    await fetch('/api/auth/me', { method: 'DELETE' });
-    router.push('/login');
-    router.refresh();
+    if (logoutPending || navPending) return;
+    setLogoutPending(true);
+    try {
+      await fetch('/api/auth/me', { method: 'DELETE' });
+      router.push('/login');
+      router.refresh();
+    } finally {
+      // keep disabled until unmount / login page
+    }
   }
 
   function Badge({ n }: { n?: number }) {
@@ -176,21 +190,43 @@ export function Sidebar({ user }: Props) {
             pathname === item.href ||
             (item.href !== '/dashboards' && pathname.startsWith(item.href));
           const Icon = item.icon;
+          const pending = navPending === item.href;
+          const busy = !!navPending || logoutPending;
           return (
             <Link
               key={item.href}
-              href={item.href}
-              onClick={() => setOpen(false)}
+              href={busy && !pending ? '#' : item.href}
+              onClick={(e) => {
+                if (busy && !pending) {
+                  e.preventDefault();
+                  return;
+                }
+                if (active) {
+                  e.preventDefault();
+                  return;
+                }
+                setNavPending(item.href);
+                setOpen(false);
+              }}
+              aria-disabled={busy && !pending}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
                 active
                   ? 'bg-indigo-500/15 text-indigo-300'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200',
+                busy && !pending && 'opacity-50 pointer-events-none',
+                pending && 'opacity-80'
               )}
             >
-              <Icon className="h-4 w-4 shrink-0 opacity-90" />
-              <span className="truncate flex-1">{item.label}</span>
-              <Badge n={item.badge} />
+              {pending ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-indigo-300" />
+              ) : (
+                <Icon className="h-4 w-4 shrink-0 opacity-90" />
+              )}
+              <span className="truncate flex-1">
+                {pending ? 'Garaşyň…' : item.label}
+              </span>
+              {!pending && <Badge n={item.badge} />}
             </Link>
           );
         })}
@@ -216,11 +252,16 @@ export function Sidebar({ user }: Props) {
         </div>
         <button
           type="button"
+          disabled={logoutPending || !!navPending}
           onClick={() => void logout()}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-800 hover:text-rose-300"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-800 hover:text-rose-300 disabled:opacity-50 disabled:pointer-events-none"
         >
-          <LogOut className="h-4 w-4" />
-          Çykyş
+          {logoutPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <LogOut className="h-4 w-4" />
+          )}
+          {logoutPending ? 'Garaşyň…' : 'Çykyş'}
         </button>
       </div>
     </>

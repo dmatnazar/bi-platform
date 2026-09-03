@@ -543,6 +543,14 @@ export async function ledgerOnGateway(params?: { tenantSlug?: string; limit?: nu
   return gatewayFetch('GET', `/api/admin/billing/ledger${qs ? `?${qs}` : ''}`);
 }
 
+export async function deleteLedgerOnGateway(id: string) {
+  return gatewayFetch('DELETE', `/api/admin/billing/ledger/${encodeURIComponent(id)}`);
+}
+
+export async function deleteLedgerBulkOnGateway(ids: string[]) {
+  return gatewayFetch('POST', '/api/admin/billing/ledger/delete', { ids });
+}
+
 export async function walletOnGateway(tenantSlug: string) {
   return gatewayFetch('GET', `/api/admin/billing/wallet?tenantSlug=${encodeURIComponent(tenantSlug)}`);
 }

@@ -8,6 +8,8 @@ import {
   topUpOnGateway,
   adjustBalanceOnGateway,
   ledgerOnGateway,
+  deleteLedgerOnGateway,
+  deleteLedgerBulkOnGateway,
   walletOnGateway,
   listTariffsOnGateway,
   requestTariffChangeOnGateway,
@@ -101,6 +103,30 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const action = body.action || req.nextUrl.searchParams.get('action');
+
+  if (action === 'delete-ledger') {
+    if (!isSuper(user)) return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+    const ids: string[] = Array.isArray(body.ids) ? body.ids : body.id ? [body.id] : [];
+    if (!ids.length) return NextResponse.json({ error: 'id gerek' }, { status: 400 });
+    if (ids.length === 1) {
+      const res = await deleteLedgerOnGateway(ids[0]);
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: res.data?.error || res.data?.message || 'Pozup bolmady' },
+          { status: 502 }
+        );
+      }
+      return NextResponse.json(res.data || { ok: true });
+    }
+    const res = await deleteLedgerBulkOnGateway(ids);
+    if (!res.ok) {
+      return NextResponse.json(
+        { error: res.data?.error || res.data?.message || 'Pozup bolmady' },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json(res.data || { ok: true });
+  }
 
   // Company users can request tariff change for their own firm
   if (action === 'request-tariff-change') {

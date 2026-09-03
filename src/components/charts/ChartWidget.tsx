@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import ReactECharts from 'echarts-for-react';
 import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Download, Filter, GripVertical, Loader2, Maximize2, RotateCcw, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Download, Filter, GripVertical, Loader2, Maximize2, RotateCcw, Search, X, Undo2, ChevronRight } from 'lucide-react';
 
 const DEMO_BAR = [
   { name: 'Ýan', value: 420 },
@@ -1339,59 +1339,202 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           }
         }
         cats = catSet;
+        // Task 16: multi value under series field → dual axis when not stacked
+        const multiScaleSF =
+          !stacked &&
+          !horizontal &&
+          valueKeys.length > 1 &&
+          (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar');
         series = seriesSet.map((ser, i) => ({
           name: ser,
           type: seriesType,
           stack: stacked ? 'total' : undefined,
+          yAxisIndex: multiScaleSF ? i % 2 : 0,
           data: catSet.map((cat) => matrix.get(ser)?.get(cat) ?? 0),
           smooth,
-          areaStyle: widget.type === 'area' ? { opacity: 0.15 } : undefined,
+          areaStyle: widget.type === 'area' ? { opacity: multiScaleSF ? 0.08 : 0.15 } : undefined,
           itemStyle: {
             color: palette[i % palette.length],
             borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
           },
           lineStyle: { width: 2.5 },
-          label: showLabels
-            ? { show: true, position: horizontal ? 'right' : 'top', color: '#94a3b8', fontSize: 10 }
-            : undefined,
+          label: {
+                // Always show one label per value-field series when multi-selected
+                show: showLabels || valueKeys.length > 1,
+                position: horizontal ? 'right' : 'top',
+                color: palette[i % palette.length],
+                fontSize: Math.max(9, (widget.config?.labelFontSize || 10) - (valueKeys.length > 2 ? 1 : 0)),
+                distance: horizontal ? 8 : 6,
+                // keep label above/ beside THIS series bar (not stacked on sibling)
+                offset: [0, 0],
+                overflow: 'none',
+                formatter: (p: any) => {
+                  const v = p.value;
+                  if (v == null || v === '') return '';
+                  if (valueKeys.length > 1) {
+                    // short series tag so 2+ labels are distinguishable
+                    const short =
+                      String(p.seriesName || '').length > 12
+                        ? String(p.seriesName).slice(0, 11) + '…'
+                        : p.seriesName;
+                    return short + '\n' + v;
+                  }
+                  return String(v);
+                },
+              },
         }));
       } else {
-        // Multi value fields → one series each
+        // Multi value fields → one series each (separate bars + own label)
         cats = rows.map((r) => String(r[catKey] ?? ''));
-        series = valueKeys.map((vk, i) => ({
-          name: vk,
-          type: seriesType,
-          stack: stacked ? 'total' : undefined,
-          data: rows.map((r) => Number(r[vk] ?? 0)),
-          smooth,
-          areaStyle: widget.type === 'area' ? { opacity: 0.15 } : undefined,
-          itemStyle: {
-            color: palette[i % palette.length],
-            borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
-          },
-          lineStyle: { width: 2.5 },
-          label: showLabels
-            ? { show: true, position: horizontal ? 'right' : 'top', color: '#94a3b8', fontSize: 10 }
-            : undefined,
+        const multiScale =
+          !stacked &&
+          valueKeys.length > 1 &&
+          (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar');
+        series = valueKeys.map((vk, i) => {
+          const color = palette[i % palette.length];
+          return {
+            name: vk,
+            type: seriesType,
+            stack: stacked ? 'total' : undefined,
+            // Each value field on alternating Y axis so 170k and 426 both visible
+            yAxisIndex: multiScale && !horizontal ? i % 2 : 0,
+            data: rows.map((r) => Number(r[vk] ?? 0)),
+            smooth,
+            barGap: valueKeys.length > 1 ? '20%' : undefined,
+            barMaxWidth: 48,
+            areaStyle: widget.type === 'area' ? { opacity: multiScale ? 0.08 : 0.15 } : undefined,
+            itemStyle: {
+              color,
+              borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
+            },
+            lineStyle: { width: 2.5 },
+            // One label per series, always when multi value fields
+            label: {
+              show: showLabels || valueKeys.length > 1,
+              position: horizontal ? 'right' : 'top',
+              color,
+              fontSize: Math.max(9, (widget.config?.labelFontSize || 10) - (valueKeys.length > 2 ? 1 : 0)),
+              distance: 6,
+              overflow: 'none',
+              formatter: (p: any) => {
+                const v = p.value;
+                if (v == null || v === '') return '';
+                const num = typeof v === 'number' ? v : Number(v);
+                const text = Number.isFinite(num)
+                  ? num.toLocaleString(undefined, { maximumFractionDigits: 1 })
+                  : String(v);
+                if (valueKeys.length > 1) {
+                  const nm = String(p.seriesName || vk);
+                  const short = nm.length > 14 ? nm.slice(0, 13) + '…' : nm;
+                  return short + '\n' + text;
+                }
+                return text;
+              },
+            },
+          };
+        });
+      }
+
+      // Task 15: configurable label/axis colors
+      const labelColor = widget.config?.labelColor || '#94a3b8';
+      const axisLabelColor = widget.config?.axisLabelColor || '#94a3b8';
+      const baseLabelFs = Math.min(14, Math.max(9, widget.config?.labelFontSize || 11));
+
+      // Task 16: multi value fields → independent Y scales (else small series looks flat / overlapped)
+      const multiY =
+        !stacked &&
+        !horizontal &&
+        series.length > 1 &&
+        valueKeys.length > 1 &&
+        (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar');
+
+      // Ensure every series has correct yAxisIndex when multiY
+      if (multiY) {
+        series = series.map((s: any, i: number) => ({
+          ...s,
+          yAxisIndex: i % 2,
+          // slight z so lines stay readable
+          z: 2 + (i % 2),
         }));
       }
 
       const categoryAxis = {
         type: 'category' as const,
         data: cats,
-        axisLabel: { color: '#94a3b8', fontSize: 11 },
+        axisLabel: {
+          color: axisLabelColor,
+          fontSize: baseLabelFs,
+          hideOverlap: false,
+          interval: 0 as const,
+          // horizontal bar: full category names on left
+          width: horizontal ? 120 : undefined,
+          overflow: horizontal ? 'truncate' : 'none',
+          ellipsis: horizontal ? '…' : undefined,
+        },
         axisLine: { lineStyle: { color: '#334155' } },
+        axisTick: { alignWithLabel: true },
       };
-      const valueAxis = {
+      const valueAxisLeft = {
         type: 'value' as const,
-        axisLabel: { color: '#94a3b8', fontSize: 11 },
+        name: multiY ? String(series[0]?.name || '') : undefined,
+        nameTextStyle: { color: palette[0] || axisLabelColor, fontSize: baseLabelFs - 1 },
+        axisLabel: {
+          color: multiY ? palette[0] || axisLabelColor : axisLabelColor,
+          fontSize: baseLabelFs,
+          hideOverlap: true,
+        },
         splitLine: { lineStyle: { color: '#1e293b' } },
+        scale: true,
+        alignTicks: false,
       };
+      const valueAxisRight = {
+        type: 'value' as const,
+        name: multiY ? String(series[1]?.name || '') : undefined,
+        nameTextStyle: { color: palette[1] || axisLabelColor, fontSize: baseLabelFs - 1 },
+        nameGap: 8,
+        axisLabel: {
+          color: palette[1] || axisLabelColor,
+          fontSize: baseLabelFs,
+          hideOverlap: true,
+          margin: 10,
+          formatter: (v: number) => {
+            if (v == null || !Number.isFinite(v)) return '';
+            const abs = Math.abs(v);
+            if (abs >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+            if (abs >= 1e4) return (v / 1e3).toFixed(1) + 'k';
+            return String(v);
+          },
+        },
+        splitLine: { show: false },
+        scale: true,
+        alignTicks: false,
+      };
+      const valueAxis = valueAxisLeft;
+
+      // Left padding grows with label size so Y labels stay visible (Task 15)
+      // Horizontal bar: category labels on LEFT (Y axis) — need real space
+      const leftPad = horizontal
+        ? Math.max(72, Math.round(baseLabelFs * 7))
+        : Math.max(48, Math.round(baseLabelFs * 4.5));
+      const rightPad = horizontal
+        ? Math.max(56, Math.round(baseLabelFs * 5.5)) // room for bar-end value labels
+        : multiY
+          ? Math.max(56, Math.round(baseLabelFs * 5.5))
+          : 20;
+
+      // Multi value fields → each series keeps its own color + legend entry
+      // (already separate series from valueKeys map)
 
       return {
         backgroundColor: 'transparent',
         color: palette,
-        grid: { left: 48, right: 16, top: 36, bottom: showLegend && series.length > 1 ? 72 : 56 },
+        grid: {
+          left: horizontal ? 8 : leftPad,
+          right: rightPad,
+          top: showLegend && series.length > 1 ? 28 : multiY ? 44 : 28,
+          bottom: showLegend && series.length > 1 ? (horizontal ? 48 : 72) : 40,
+          containLabel: true,
+        },
         dataZoom: [
           { type: 'inside', zoomOnMouseWheel: true, moveOnMouseMove: true },
           {
@@ -1402,17 +1545,24 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             fillerColor: 'rgba(99,102,241,0.35)',
             handleSize: '110%',
             handleStyle: { color: '#818cf8', borderColor: '#a5b4fc' },
-            textStyle: { color: '#94a3b8', fontSize: 11 },
+            textStyle: { color: axisLabelColor, fontSize: baseLabelFs },
             dataBackground: { lineStyle: { color: '#64748b' }, areaStyle: { color: '#334155' } },
           },
         ],
         tooltip: { trigger: 'axis' },
         legend:
-          showLegend && series.length > 1
-            ? { bottom: 38, textStyle: { color: '#94a3b8', fontSize: 11 } }
-            : undefined,
+          series.length > 1
+            ? {
+                bottom: horizontal ? 4 : 36,
+                type: 'scroll',
+                textStyle: { color: labelColor, fontSize: baseLabelFs },
+                // each value field = own color in legend
+              }
+            : showLegend
+              ? { bottom: 36, textStyle: { color: labelColor, fontSize: baseLabelFs } }
+              : undefined,
         xAxis: horizontal ? valueAxis : categoryAxis,
-        yAxis: horizontal ? categoryAxis : valueAxis,
+        yAxis: horizontal ? categoryAxis : multiY ? [valueAxis, valueAxisRight] : valueAxis,
         series,
         graphic:
           rows.length === 0
@@ -1458,6 +1608,8 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       const showValueInLabel = !!widget.config?.showValueInLabel;
       const labelInside = widget.config?.labelInside !== false;
       const centerAgg = widget.config?.pieCenterAgg || 'sum';
+      // Task 13: which column to aggregate in donut center (default = pie value field)
+      const centerField = widget.config?.pieCenterField || valKey;
       const pieData = rows.map((r, i) => {
         const value =
           valueKeys.length > 1
@@ -1469,15 +1621,23 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           itemStyle: { color: palette[i % palette.length] },
         };
       });
-      const total = pieData.reduce((s, d) => s + (Number.isFinite(d.value) ? d.value : 0), 0);
+      // Center metric can use a different column than slice value
+      const centerNums = rows
+        .map((r) => Number(r[centerField] ?? r[valKey] ?? 0))
+        .filter((n) => Number.isFinite(n));
+      const total =
+        centerField && centerField !== valKey
+          ? centerNums.reduce((s, n) => s + n, 0)
+          : pieData.reduce((s, d) => s + (Number.isFinite(d.value) ? d.value : 0), 0);
+      const centerCount = centerField && centerField !== valKey ? centerNums.length : pieData.length;
       const centerText =
         centerAgg === 'none' || pieData.length === 0
           ? ''
           : centerAgg === 'count'
-            ? String(pieData.length)
+            ? String(centerCount)
             : centerAgg === 'avg'
-              ? pieData.length
-                ? (total / pieData.length).toLocaleString(undefined, { maximumFractionDigits: 2 })
+              ? centerCount
+                ? (total / centerCount).toLocaleString(undefined, { maximumFractionDigits: 2 })
                 : '0'
               : total.toLocaleString(undefined, { maximumFractionDigits: 2 });
       const centerLabel =
@@ -1488,7 +1648,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       if (showPercent) labelParts.push('{d}%');
       const labelFmt = labelParts.join('\n');
 
-      const pieCenterY = showLegend ? '44%' : '50%';
+      const pieCenterY = showLegend ? '48%' : '50%';
       const graphics: any[] = [];
       if (rows.length === 0) {
         graphics.push({
@@ -1502,7 +1662,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           {
             type: 'text',
             left: 'center',
-            top: showLegend ? '38%' : '44%',
+            top: showLegend ? '40%' : '44%',
             style: {
               text: centerText,
               fill: '#e2e8f0',
@@ -1515,7 +1675,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           {
             type: 'text',
             left: 'center',
-            top: showLegend ? '46%' : '52%',
+            top: showLegend ? '48%' : '52%',
             style: {
               text: centerLabel,
               fill: '#94a3b8',
@@ -1538,8 +1698,12 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         },
         legend: showLegend
           ? {
-              bottom: 0,
+              bottom: 4,
               type: 'scroll',
+              itemGap: 8,
+              itemHeight: 10,
+              itemWidth: 12,
+              padding: [2, 4],
               textStyle: { color: '#94a3b8', fontSize: 11 },
               pageTextStyle: { color: '#94a3b8' },
             }
@@ -1547,26 +1711,60 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         series: [
           {
             type: 'pie',
-            radius: labelInside ? ['42%', '68%'] : ['36%', '58%'],
+            // Fill more of the widget — only small edge margin for labels
+            radius: labelInside
+              ? (showLegend ? ['38%', '64%'] : ['42%', '72%'])
+              : (showLegend ? ['36%', '60%'] : ['40%', '68%']),
             center: ['50%', pieCenterY],
             data: pieData,
             avoidLabelOverlap: true,
-            minShowLabelAngle: 8,
+            minShowLabelAngle: 0,
             label: {
-              color: labelInside ? '#f1f5f9' : '#cbd5e1',
-              fontSize: 10,
+              color: widget.config?.labelColor || (labelInside ? '#f1f5f9' : '#e2e8f0'),
+              fontSize: widget.config?.labelFontSize || 10,
               show: showLabels,
               position: labelInside ? 'inside' : 'outside',
-              formatter: labelFmt,
-              overflow: 'truncate',
-              width: labelInside ? 56 : 72,
+              // Word-aware wrap only (no letter-by-letter). Prefer 1–2 lines.
+              formatter: (p: any) => {
+                const name = String(p.name ?? '');
+                const wrapName = (s: string, max = 18) => {
+                  if (s.length <= max) return s;
+                  const words = s.split(/\s+/);
+                  const lines: string[] = [];
+                  let cur = '';
+                  for (const w of words) {
+                    if (!cur) cur = w;
+                    else if ((cur + ' ' + w).length <= max) cur = cur + ' ' + w;
+                    else {
+                      lines.push(cur);
+                      cur = w;
+                    }
+                  }
+                  if (cur) lines.push(cur);
+                  return lines.slice(0, 3).join('\n');
+                };
+                const lines = [wrapName(name)];
+                if (showValueInLabel && p.value != null) lines.push(String(p.value));
+                if (showPercent && p.percent != null) lines.push(p.percent + '%');
+                return lines.join('\n');
+              },
+              overflow: 'none',
               lineHeight: 13,
+              alignTo: labelInside ? undefined : 'labelLine',
+              edgeDistance: 4,
+              bleedMargin: 4,
+              distanceToLabelLine: 3,
+            },
+            labelLayout: {
+              hideOverlap: false,
+              moveOverlap: 'shiftY',
             },
             labelLine: {
               show: showLabels && !labelInside,
               length: 8,
               length2: 6,
-              smooth: true,
+              smooth: false,
+              lineStyle: { width: 1 },
             },
             itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 },
             emphasis: {
@@ -1602,58 +1800,53 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       display = dec != null ? n.toFixed(dec) : n.toLocaleString();
     }
     const prefix = widget.config?.prefix || '';
-    const suffix = widget.config?.suffix || widget.config?.unit || '';
+    // Unit/suffix on SAME line as value — no second row (avoids empty space above/below)
+    const unit = widget.config?.unit || '';
+    const suffix = widget.config?.suffix || '';
     const kpiColor = widget.config?.color || '#ffffff';
     const enableAutoTextSize = widget.config?.enableAutoTextSize !== false;
-    // Task 5: Text alignment - center/left/right option (default center)
     const textAlign = (widget.config?.textAlign || 'center') as 'center' | 'left' | 'right';
-    // Task 5: Fill space - when no unit/suffix, expand to fill container
-    const hasUnit = !!(widget.config?.unit && !widget.config?.suffix);
-    
+
     return (
       <div
-        className={cn('h-full w-full flex flex-col overflow-hidden px-1', className)}
-        style={{ 
+        className={cn('h-full w-full flex items-center overflow-hidden px-1', className)}
+        style={{
           containerType: 'size',
-          justifyContent: textAlign === 'center' ? 'center' : 'flex-start',
-          alignItems: textAlign === 'center' ? 'center' : textAlign === 'left' ? 'flex-start' : 'flex-end',
+          justifyContent:
+            textAlign === 'center' ? 'center' : textAlign === 'left' ? 'flex-start' : 'flex-end',
         }}
       >
-        {/* Task 5: Spacer above value if alignment not center */}
-        {textAlign !== 'center' && !hasUnit && <div className="flex-1" />}
-        
         <p
-          className="font-bold tracking-tight leading-[1.05] break-words"
-          style={{ 
-            color: kpiColor, 
-            fontSize: enableAutoTextSize 
-              ? 'clamp(0.65rem, 26cqmin, 4.5rem)' 
+          className="font-bold tracking-tight leading-none break-words max-w-full"
+          style={{
+            color: kpiColor,
+            fontSize: enableAutoTextSize
+              ? 'clamp(1rem, 38cqmin, 4.25rem)'
               : '2rem',
-            transition: 'font-size 0.3s ease-in-out',
+            lineHeight: 1,
             textAlign: textAlign,
+            margin: 0,
+            padding: 0,
           }}
         >
-          {prefix}{display}{suffix && !widget.config?.suffix && widget.config?.unit ? '' : ''}
-          {widget.config?.suffix ? suffix : ''}
+          {prefix}
+          {display}
+          {suffix}
+          {!suffix && unit ? (
+            <span
+              style={{
+                fontSize: enableAutoTextSize
+                  ? 'clamp(0.55rem, 14cqmin, 1.25rem)'
+                  : '0.85rem',
+                fontWeight: 500,
+                color: 'rgb(148 163 184)',
+                marginLeft: '0.25em',
+              }}
+            >
+              {unit}
+            </span>
+          ) : null}
         </p>
-        
-        {/* Task 5: Unit/Label - fill space if no unit */}
-        {hasUnit ? (
-          <p
-            className="text-slate-400 mt-1 break-words"
-            style={{ 
-              fontSize: enableAutoTextSize 
-                ? 'clamp(0.5rem, 9cqmin, 1rem)' 
-                : '0.875rem',
-              transition: 'font-size 0.3s ease-in-out',
-              textAlign: textAlign,
-            }}
-          >
-            {widget.config.unit}
-          </p>
-        ) : (
-          <div className="flex-1" />
-        )}
       </div>
     );
   }
@@ -1662,6 +1855,156 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
     return (
       <div className={cn('h-full text-sm text-slate-300 leading-relaxed', className)}>
         {String(widget.staticValue ?? '')}
+      </div>
+    );
+  }
+
+  // Pivot / сводная таблица (Excel / DataLens style)
+  if (widget.type === 'pivot') {
+    const rows = data || [];
+    const rowFields = widget.config?.pivotRows?.length
+      ? widget.config.pivotRows
+      : [];
+    const colFields = widget.config?.pivotCols?.length
+      ? widget.config.pivotCols
+      : [];
+    const valueField =
+      widget.config?.pivotValue ||
+      widget.dataSource?.valueField ||
+      (widget.dataSource?.valueFields && widget.dataSource.valueFields[0]) ||
+      '';
+    const agg = widget.config?.pivotAgg || 'sum';
+    const showRowTotals = widget.config?.pivotRowTotals !== false;
+    const showColTotals = widget.config?.pivotColTotals !== false;
+
+    function aggValues(nums: number[]): number {
+      if (!nums.length) return 0;
+      if (agg === 'count') return nums.length;
+      if (agg === 'avg') return nums.reduce((a, b) => a + b, 0) / nums.length;
+      if (agg === 'min') return Math.min(...nums);
+      if (agg === 'max') return Math.max(...nums);
+      return nums.reduce((a, b) => a + b, 0);
+    }
+    function fmt(n: number) {
+      if (!Number.isFinite(n)) return '—';
+      return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
+    // Build pivot matrix
+    const rowKeyFn = (r: Record<string, unknown>) =>
+      rowFields.length
+        ? rowFields.map((f) => String(r[f] ?? '')).join(' / ')
+        : '(Ähli)';
+    const colKeyFn = (r: Record<string, unknown>) =>
+      colFields.length
+        ? colFields.map((f) => String(r[f] ?? '')).join(' / ')
+        : 'Jemi';
+
+    const rowKeys: string[] = [];
+    const colKeys: string[] = [];
+    const matrix = new Map<string, Map<string, number[]>>();
+    const rowTotals = new Map<string, number[]>();
+    const colTotals = new Map<string, number[]>();
+    const grand: number[] = [];
+
+    for (const r of rows) {
+      const rk = rowKeyFn(r);
+      const ck = colKeyFn(r);
+      const v = valueField ? Number(r[valueField] ?? 0) : 1;
+      const num = Number.isFinite(v) ? v : 0;
+      if (!rowKeys.includes(rk)) rowKeys.push(rk);
+      if (!colKeys.includes(ck)) colKeys.push(ck);
+      if (!matrix.has(rk)) matrix.set(rk, new Map());
+      const m = matrix.get(rk)!;
+      if (!m.has(ck)) m.set(ck, []);
+      m.get(ck)!.push(num);
+      if (!rowTotals.has(rk)) rowTotals.set(rk, []);
+      rowTotals.get(rk)!.push(num);
+      if (!colTotals.has(ck)) colTotals.set(ck, []);
+      colTotals.get(ck)!.push(num);
+      grand.push(num);
+    }
+
+    if (!rowFields.length && !colFields.length && !valueField) {
+      return (
+        <div className={cn('h-full flex items-center justify-center text-slate-500 text-sm p-4', className)}>
+          Svodny: Row / Column / Value field saýlaň (widget sazlamasy)
+        </div>
+      );
+    }
+
+    return (
+      <div className={cn('h-full w-full overflow-auto', className)}>
+        <table className="w-full border-collapse text-[11px] sm:text-xs">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-900/95">
+              <th className="sticky left-0 z-20 bg-slate-900/95 border border-slate-800 px-2 py-1.5 text-left text-slate-400 font-medium min-w-[100px]">
+                {rowFields.length ? rowFields.join(' / ') : '—'}
+              </th>
+              {colKeys.map((ck) => (
+                <th
+                  key={ck}
+                  className="border border-slate-800 px-2 py-1.5 text-right text-slate-300 font-medium whitespace-nowrap bg-slate-900/95"
+                >
+                  {ck}
+                </th>
+              ))}
+              {showRowTotals && (
+                <th className="border border-slate-800 px-2 py-1.5 text-right text-indigo-300 font-semibold whitespace-nowrap bg-slate-900/95">
+                  Jemi
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {rowKeys.map((rk, ri) => (
+              <tr key={rk} className={ri % 2 ? 'bg-slate-950/40' : 'bg-slate-900/20'}>
+                <td className="sticky left-0 z-[5] border border-slate-800 px-2 py-1 text-slate-200 font-medium whitespace-nowrap bg-slate-950/90">
+                  {rk}
+                </td>
+                {colKeys.map((ck) => {
+                  const nums = matrix.get(rk)?.get(ck) || [];
+                  return (
+                    <td
+                      key={ck}
+                      className="border border-slate-800 px-2 py-1 text-right text-slate-300 tabular-nums"
+                    >
+                      {nums.length ? fmt(aggValues(nums)) : ''}
+                    </td>
+                  );
+                })}
+                {showRowTotals && (
+                  <td className="border border-slate-800 px-2 py-1 text-right text-indigo-300 font-semibold tabular-nums bg-indigo-500/5">
+                    {fmt(aggValues(rowTotals.get(rk) || []))}
+                  </td>
+                )}
+              </tr>
+            ))}
+            {showColTotals && (
+              <tr className="bg-indigo-500/10">
+                <td className="sticky left-0 z-[5] border border-slate-800 px-2 py-1.5 text-indigo-300 font-semibold bg-slate-950">
+                  Jemi
+                </td>
+                {colKeys.map((ck) => (
+                  <td
+                    key={ck}
+                    className="border border-slate-800 px-2 py-1.5 text-right text-indigo-300 font-semibold tabular-nums"
+                  >
+                    {fmt(aggValues(colTotals.get(ck) || []))}
+                  </td>
+                ))}
+                {showRowTotals && (
+                  <td className="border border-slate-800 px-2 py-1.5 text-right text-indigo-200 font-bold tabular-nums">
+                    {fmt(aggValues(grand))}
+                  </td>
+                )}
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {!rows.length && (
+          <div className="text-center text-slate-500 text-sm py-8">Maglumat ýok</div>
+        )}
       </div>
     );
   }
@@ -1685,23 +2028,119 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       className={className}
       chartKind={widget.type}
       widgetId={widget.id}
+      widget={widget}
+      data={data}
+      globalFilters={globalFilters}
     />
   );
 }
 
-/** Chart canvas — listens for header toolbar events (reset / PNG) */
+/** Chart canvas — listens for header toolbar events (reset / PNG) + Task 10 pie drill */
 function ChartCanvas({
   option,
   className,
   chartKind,
   widgetId,
+  widget,
+  data,
+  globalFilters = {},
 }: {
   option: any;
   className?: string;
   chartKind: string;
   widgetId: string;
+  widget: DashboardWidget;
+  data?: Record<string, unknown>[];
+  globalFilters?: GlobalFilterValues;
 }) {
   const chartRef = useRef<any>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const [boxMin, setBoxMin] = useState(200);
+  const dd = widget.dataSource?.drillDown;
+
+  // Task 15: auto text scale with widget box size (and after zoom/resize)
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth || 0;
+      const h = el.clientHeight || 0;
+      setBoxMin(Math.max(80, Math.min(w, h) || 200));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const scaledOption = useMemo(() => {
+    if (!option) return option;
+    if (!widget.config?.enableAutoTextSize) return option;
+    // Task 15: gentle scale only — avoid labels overflowing chart (was up to 1.85x)
+    // 1.0 at ~240px box; clamp 0.9 … 1.2
+    const factor = Math.max(0.9, Math.min(1.2, boxMin / 240));
+    const scaleFs = (n: number | undefined, fallback = 11) => {
+      const base = n ?? fallback;
+      // hard cap so axis labels always fit
+      return Math.min(14, Math.max(9, Math.round(base * factor)));
+    };
+
+    const opt = JSON.parse(JSON.stringify(option));
+    const walk = (node: any) => {
+      if (!node || typeof node !== 'object') return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      if (node.axisLabel && typeof node.axisLabel === 'object') {
+        node.axisLabel.fontSize = scaleFs(node.axisLabel.fontSize, 11);
+        node.axisLabel.hideOverlap = true;
+      }
+      if (node.label && typeof node.label === 'object' && node.label.fontSize != null) {
+        node.label.fontSize = scaleFs(node.label.fontSize, 10);
+      }
+      if (node.textStyle && typeof node.textStyle === 'object' && node.textStyle.fontSize != null) {
+        node.textStyle.fontSize = scaleFs(node.textStyle.fontSize, 11);
+      }
+      if (node.style && typeof node.style === 'object' && node.style.fontSize != null) {
+        node.style.fontSize = scaleFs(node.style.fontSize, 13);
+      }
+      // keep grid.containLabel so Y values stay visible after scale
+      if (node.grid) {
+        const g = Array.isArray(node.grid) ? node.grid : [node.grid];
+        g.forEach((gr: any) => {
+          if (gr && typeof gr === 'object') {
+            gr.containLabel = true;
+            if (typeof gr.left === 'number') gr.left = Math.max(gr.left, 8);
+            if (typeof gr.right === 'number') gr.right = Math.max(gr.right, 8);
+          }
+        });
+      }
+      for (const k of Object.keys(node)) {
+        if (k === 'grid') continue;
+        walk(node[k]);
+      }
+    };
+    walk(opt);
+    return opt;
+  }, [option, boxMin, widget.config?.enableAutoTextSize]);
+
+  // Task 10: multi-level pie hierarchy (nested pie + breadcrumb)
+  type PathCrumb = {
+    label: string;
+    /** params accumulated up to this level (sent to next API) */
+    params: Record<string, string | number | boolean>;
+  };
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [drillLoading, setDrillLoading] = useState(false);
+  const [drillError, setDrillError] = useState('');
+  const [pathStack, setPathStack] = useState<PathCrumb[]>([]);
+  const [levelRows, setLevelRows] = useState<Record<string, unknown>[]>([]);
+  const [levelMeta, setLevelMeta] = useState<{
+    categoryField: string;
+    valueField: string;
+    sourceField: string;
+  }>({ categoryField: 'name', valueField: 'value', sourceField: 'name' });
 
   function getChart() {
     return chartRef.current?.getEchartsInstance?.() || null;
@@ -1736,23 +2175,179 @@ function ChartCanvas({
     }
   }
 
-  // Task 10: Donut/Pie hierarchy drill-down on click
+  function resolveLevelConfig(depth: number) {
+    // depth 0 = first child (dd itself); depth 1+ = dd.levels[depth-1]
+    if (depth <= 0 || !dd?.levels?.length) {
+      return {
+        path: dd?.path || '',
+        tenantSlug: dd?.tenantSlug || widget.dataSource?.tenantSlug || '',
+        method: (dd?.method || 'GET') as 'GET' | 'POST',
+        sourceField: dd?.sourceField || widget.dataSource?.categoryField || 'name',
+        targetParam: dd?.targetParam || dd?.sourceField || 'id',
+        categoryField:
+          dd?.categoryField || widget.dataSource?.categoryField || 'name',
+        valueField:
+          dd?.valueField ||
+          widget.dataSource?.valueField ||
+          (widget.dataSource?.valueFields && widget.dataSource.valueFields[0]) ||
+          'value',
+      };
+    }
+    const L = dd!.levels![Math.min(depth - 1, dd!.levels!.length - 1)];
+    return {
+      path: L.path || dd?.path || '',
+      tenantSlug: L.tenantSlug || dd?.tenantSlug || widget.dataSource?.tenantSlug || '',
+      method: (L.method || dd?.method || 'GET') as 'GET' | 'POST',
+      sourceField: L.sourceField || dd?.sourceField || 'name',
+      targetParam: L.targetParam || L.sourceField || dd?.targetParam || 'id',
+      categoryField: L.categoryField || dd?.categoryField || widget.dataSource?.categoryField || 'name',
+      valueField:
+        L.valueField ||
+        dd?.valueField ||
+        widget.dataSource?.valueField ||
+        'value',
+    };
+  }
+
+  async function fetchHierarchyLevel(
+    depth: number,
+    params: Record<string, string | number | boolean>
+  ) {
+    const cfg = resolveLevelConfig(depth);
+    if (!cfg.path || !cfg.tenantSlug) {
+      setDrillError('Hierarchy API path/tenant ýok');
+      return;
+    }
+    setDrillLoading(true);
+    setDrillError('');
+    try {
+      const allParams = { ...params };
+      if (dd?.passGlobalFilters !== false) {
+        for (const [k, v] of Object.entries(globalFilters)) {
+          if (v != null && v !== '') allParams[k] = v as string | number | boolean;
+        }
+      }
+      const res = await fetch('/api/gateway/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: cfg.tenantSlug,
+          path: cfg.path,
+          method: cfg.method,
+          dbKey: dd?.dbKey || widget.dataSource?.dbKey || 'primary',
+          params: allParams,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setDrillError(body.error || 'API säwlik');
+        setLevelRows([]);
+      } else {
+        const rows = Array.isArray(body.rows) ? body.rows : [];
+        setLevelRows(rows);
+        setLevelMeta({
+          categoryField: cfg.categoryField,
+          valueField: cfg.valueField,
+          sourceField: cfg.sourceField,
+        });
+      }
+    } catch (e) {
+      setDrillError(String(e));
+      setLevelRows([]);
+    } finally {
+      setDrillLoading(false);
+    }
+  }
+
+  /** Click on root pie segment → open hierarchy at level 0 */
+  async function openPieDrill(categoryName: string, row?: Record<string, unknown>) {
+    if (!dd?.enabled || !dd.path || !dd.tenantSlug) return;
+    const cfg = resolveLevelConfig(0);
+    const sourceField = cfg.sourceField;
+    // Prefer id-like field from row; fallback to category name
+    let paramVal: string | number | boolean = categoryName;
+    if (row) {
+      if (row[sourceField] != null && row[sourceField] !== '') {
+        paramVal = row[sourceField] as string | number | boolean;
+      } else if (row['id'] != null) {
+        paramVal = row['id'] as string | number | boolean;
+      }
+    }
+    const targetParam = cfg.targetParam;
+    const params: Record<string, string | number | boolean> = {
+      [targetParam]: paramVal,
+    };
+    const rootLabel = dd.rootLabel || widget.title || 'Root';
+    const stack: PathCrumb[] = [
+      { label: rootLabel, params: {} },
+      { label: categoryName, params },
+    ];
+    setPathStack(stack);
+    setDrillOpen(true);
+    await fetchHierarchyLevel(0, params);
+  }
+
+  /** Click segment inside hierarchy pie → go deeper */
+  async function drillDeeper(categoryName: string, row?: Record<string, unknown>) {
+    const depth = Math.max(0, pathStack.length - 1); // current child depth
+    const nextDepth = depth; // levels index for NEXT fetch uses depth as next level index
+    // pathStack: [root, level0, level1, ...] → current data is level (pathStack.length-2)
+    const currentLevelIndex = pathStack.length - 2; // 0-based child level currently shown
+    const cfg = resolveLevelConfig(currentLevelIndex + 1);
+    let paramVal: string | number | boolean = categoryName;
+    if (row) {
+      if (row[cfg.sourceField] != null && row[cfg.sourceField] !== '') {
+        paramVal = row[cfg.sourceField] as string | number | boolean;
+      } else if (row['id'] != null) {
+        paramVal = row['id'] as string | number | boolean;
+      }
+    }
+    const prevParams = pathStack[pathStack.length - 1]?.params || {};
+    const params = {
+      ...prevParams,
+      [cfg.targetParam]: paramVal,
+    };
+    const nextStack = [...pathStack, { label: categoryName, params }];
+    setPathStack(nextStack);
+    await fetchHierarchyLevel(currentLevelIndex + 1, params);
+  }
+
+  function goToCrumb(index: number) {
+    // index 0 = root → close modal
+    if (index <= 0) {
+      setDrillOpen(false);
+      setPathStack([]);
+      setLevelRows([]);
+      return;
+    }
+    const crumb = pathStack[index];
+    if (!crumb) return;
+    const nextStack = pathStack.slice(0, index + 1);
+    setPathStack(nextStack);
+    // child level shown after this crumb is index-1
+    void fetchHierarchyLevel(index - 1, crumb.params);
+  }
+
+  function undoOne() {
+    if (pathStack.length <= 2) {
+      // back to root pie
+      setDrillOpen(false);
+      setPathStack([]);
+      setLevelRows([]);
+      return;
+    }
+    goToCrumb(pathStack.length - 2);
+  }
+
   function onChartClick(params: any) {
     if (chartKind !== 'pie' && chartKind !== 'donut') return;
-    if (!params.data || !params.data.name) return;
-    
-    // Emit custom event for parent component to handle drill-down API call
-    // Pass category name and any hierarchy parameters
-    const drillEvent = new CustomEvent('bi-chart-drilldown', {
-      detail: {
-        widgetId,
-        chartKind,
-        categoryName: params.data.name,
-        categoryValue: params.data.value,
-        dataIndex: params.dataIndex,
-      },
-    });
-    window.dispatchEvent(drillEvent);
+    if (!params?.data?.name) return;
+    if (!dd?.enabled) return;
+    const name = String(params.data.name);
+    // find matching root row for id
+    const catKey = widget.dataSource?.categoryField || 'name';
+    const row = (data || []).find((r) => String(r[catKey] ?? '') === name);
+    void openPieDrill(name, row);
   }
 
   useEffect(() => {
@@ -1767,32 +2362,171 @@ function ChartCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [widgetId, option, chartKind]);
 
-  // Task 10: Listen for chart clicks to handle drill-down
   useEffect(() => {
     const inst = getChart();
     if (!inst) return;
-    
-    const handleClick = (params: any) => {
-      onChartClick(params);
-    };
-    
-    inst.off('click', handleClick);
+    const handleClick = (params: any) => onChartClick(params);
+    inst.off('click');
     inst.on('click', handleClick);
-    
     return () => {
       inst.off('click', handleClick);
     };
-  }, [widgetId, chartKind]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [widgetId, chartKind, dd?.enabled, dd?.path, dd?.tenantSlug, dd?.sourceField, option, data]);
+
+  // Hierarchy pie option
+  const hierarchyPieOption = useMemo(() => {
+    const catKey = levelMeta.categoryField;
+    const valKey = levelMeta.valueField;
+    const palette = widget.config?.colors?.length
+      ? widget.config.colors
+      : ['#6366f1', '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
+    const pieData = levelRows.map((r, i) => ({
+      name: String(r[catKey] ?? ''),
+      value: Number(r[valKey] ?? 0),
+      itemStyle: { color: palette[i % palette.length] },
+      _row: r,
+    }));
+    return {
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+      series: [
+        {
+          type: 'pie',
+          radius: ['36%', '62%'],
+          center: ['50%', '52%'],
+          data: pieData,
+          label: {
+            color: '#cbd5e1',
+            fontSize: 11,
+            formatter: '{b}\n{d}%',
+          },
+          emphasis: { scale: true, scaleSize: 8 },
+        },
+      ],
+    };
+  }, [levelRows, levelMeta, widget.config?.colors]);
+
+  const hierarchyChartRef = useRef<any>(null);
+
+  // Click handler on hierarchy pie
+  useEffect(() => {
+    if (!drillOpen) return;
+    const inst = hierarchyChartRef.current?.getEchartsInstance?.();
+    if (!inst) return;
+    const handler = (params: any) => {
+      if (!params?.data?.name) return;
+      const name = String(params.data.name);
+      const row =
+        params.data._row ||
+        levelRows.find((r) => String(r[levelMeta.categoryField] ?? '') === name);
+      void drillDeeper(name, row);
+    };
+    inst.off('click');
+    inst.on('click', handler);
+    return () => {
+      inst.off('click', handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drillOpen, levelRows, levelMeta, pathStack, hierarchyPieOption]);
 
   return (
-    <div className={cn('relative h-full w-full', className)}>
+    <div ref={wrapRef} className={cn('relative h-full w-full', className)}>
       <ReactECharts
         ref={chartRef}
-        option={option}
+        option={scaledOption || option}
         style={{ height: '100%', width: '100%' }}
         opts={{ renderer: 'canvas' }}
         notMerge
       />
+
+      {/* Task 10: nested pie hierarchy modal with breadcrumb */}
+      {drillOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[2147482800] flex items-center justify-center p-3 sm:p-4">
+            <div
+              className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+              onClick={() => {
+                setDrillOpen(false);
+                setPathStack([]);
+                setLevelRows([]);
+              }}
+            />
+            <div className="relative w-full max-w-3xl h-[min(88dvh,720px)] rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
+              {/* Breadcrumb path + undo */}
+              <div className="flex items-center gap-1 px-3 sm:px-4 py-2.5 border-b border-slate-800 shrink-0">
+                <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto text-xs sm:text-sm">
+                  {pathStack.map((c, i) => (
+                    <span key={i} className="inline-flex items-center shrink-0">
+                      {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-slate-600 mx-0.5" />}
+                      <button
+                        type="button"
+                        onClick={() => goToCrumb(i)}
+                        className={
+                          i === pathStack.length - 1
+                            ? 'text-indigo-300 font-semibold px-1 py-0.5 rounded'
+                            : 'text-slate-400 hover:text-white px-1 py-0.5 rounded hover:bg-slate-800'
+                        }
+                        title={c.label}
+                      >
+                        {c.label}
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => undoOne()}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-amber-300 hover:bg-slate-800 shrink-0"
+                  title="Yza (undo)"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrillOpen(false);
+                    setPathStack([]);
+                    setLevelRows([]);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 shrink-0"
+                  title="Ýap"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 min-h-0 relative">
+                {drillLoading && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-slate-950/60 text-slate-400 text-sm">
+                    <Loader2 className="h-5 w-5 animate-spin" /> Ýüklenýär…
+                  </div>
+                )}
+                {drillError && (
+                  <div className="p-4 text-rose-400 text-sm bg-rose-500/10 m-3 rounded-lg">
+                    {drillError}
+                  </div>
+                )}
+                {!drillLoading && !drillError && levelRows.length === 0 && (
+                  <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                    Maglumat ýok
+                  </div>
+                )}
+                {!drillError && levelRows.length > 0 && (
+                  <ReactECharts
+                    ref={hierarchyChartRef}
+                    option={hierarchyPieOption}
+                    style={{ height: '100%', width: '100%' }}
+                    opts={{ renderer: 'canvas' }}
+                    notMerge
+                  />
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

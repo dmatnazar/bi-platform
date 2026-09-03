@@ -79,7 +79,7 @@ export function FullscreenController() {
   if (!supported && !isIOS) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2">
+    <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-40 flex flex-col items-end gap-2">
       {showHint && (
         <div className="max-w-[220px] rounded-lg border border-slate-700 bg-slate-900/95 px-3 py-2 text-[11px] text-slate-300 shadow-xl">
           iPhone-da doly ekran diňe &quot;Baş ekrana goş&quot; (Add to Home Screen) arkaly işleýär — Safari-de brauzer çäklendirmesi sebäpli başgaça mümkin däl.

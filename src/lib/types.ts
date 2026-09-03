@@ -61,7 +61,7 @@ export interface RegistrationRequest {
 }
 
 /** Widget types supported by the dashboard builder */
-export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'table' | 'kpi' | 'text';
+export type WidgetType = 'bar' | 'line' | 'pie' | 'area' | 'table' | 'kpi' | 'text' | 'pivot';
 
 /** Parameter types from Electron / VPS Gateway paramsSchema */
 export type ParamType = 'int' | 'bigint' | 'date' | 'datetime' | 'nvarchar' | 'bit' | 'float' | 'string' | 'number';
@@ -176,6 +176,32 @@ export interface WidgetDataSource {
     hiddenColumns?: string[];
     /** Column order in drill-down (persisted) */
     columnOrder?: string[];
+    /**
+     * Task 10: how to render child hierarchy for pie widgets.
+     * - pie: nested tegelek diagramma (default for pie parent)
+     * - table: detal tablisa (default for table parent)
+     */
+    childChartType?: 'pie' | 'table';
+    /** Child pie category / value columns */
+    categoryField?: string;
+    valueField?: string;
+    /** Root breadcrumb label (e.g. Harytlar) */
+    rootLabel?: string;
+    /**
+     * Extra hierarchy levels after the first child.
+     * Level 0 = first drillDown path; levels[0] = second click, etc.
+     * If omitted, the same path is reused with accumulating params.
+     */
+    levels?: Array<{
+      path?: string;
+      tenantSlug?: string;
+      method?: 'GET' | 'POST';
+      sourceField: string;
+      targetParam?: string;
+      categoryField?: string;
+      valueField?: string;
+      label?: string;
+    }>;
   };
 }
 
@@ -219,6 +245,18 @@ export interface DashboardWidget {
     /** Extra palette for multi-series / pie slices */
     colors?: string[];
     showLegend?: boolean;
+    /** Pivot (сводная): row dimension fields */
+    pivotRows?: string[];
+    /** Pivot: column dimension fields */
+    pivotCols?: string[];
+    /** Pivot: value field */
+    pivotValue?: string;
+    /** Pivot aggregation */
+    pivotAgg?: 'sum' | 'count' | 'avg' | 'min' | 'max';
+    /** Pivot: show row totals */
+    pivotRowTotals?: boolean;
+    /** Pivot: show column totals */
+    pivotColTotals?: boolean;
     stacked?: boolean;
     /** Smooth lines (line/area) */
     smooth?: boolean;

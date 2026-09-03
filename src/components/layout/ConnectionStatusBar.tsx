@@ -96,11 +96,11 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             BI Client {status?.biClientDataAvailable ? 'live' : '—'}
           </span>
         </div>
-        <div className="inline-flex items-center gap-1.5 text-slate-400">
+        <div className="inline-flex items-center gap-1.5 text-white">
           <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
           <span>
-            Sync: <span className="text-slate-200">{syncLabel}</span>
-            <span className="text-slate-500"> · {intervalLabel}</span>
+            Sync: <span className="text-white">{syncLabel}</span>
+            <span className="text-white/80"> · {intervalLabel}</span>
           </span>
         </div>
         {(companyName || status?.scoped?.companyName) && (
@@ -109,7 +109,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
           </span>
         )}
         {status?.scoped && (
-          <span className="text-slate-500">
+          <span className="text-white">
             API {status.scoped.endpoints} · işgär {status.scoped.staff}
           </span>
         )}
@@ -154,17 +154,17 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
         </span>
       </div>
 
-      <div className="inline-flex items-center gap-1.5 text-slate-500" title="Soňky catalog sync">
+      <div className="inline-flex items-center gap-1.5 text-white" title="Soňky catalog sync">
         <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
         <span>
-          Sync: <span className="text-slate-300">{syncLabel}</span>
-          <span className="mx-1 opacity-40">·</span>
-          {intervalLabel}
+          Sync: <span className="text-white">{syncLabel}</span>
+          <span className="mx-1 text-white/70">·</span>
+          <span className="text-white">{intervalLabel}</span>
         </span>
       </div>
 
       {status && (
-        <span className="text-slate-600 hidden sm:inline">
+        <span className="text-white hidden sm:inline">
           {status.counts.tenants} firma · {status.counts.endpoints} API · {status.counts.staff} işgär
         </span>
       )}

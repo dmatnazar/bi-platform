@@ -25,6 +25,7 @@ import {
   Building2,
   ArrowLeft,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -89,6 +90,8 @@ export function DashboardListClient({
   const [lastId, setLastId] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [menuId, setMenuId] = useState<string | null>(null);
+  const [navPending, setNavPending] = useState<string | null>(null);
+
   const [editTarget, setEditTarget] = useState<Dashboard | null>(null);
   const [accessTarget, setAccessTarget] = useState<Dashboard | null>(null);
   const [staffOpts, setStaffOpts] = useState<{ id: string; fullName: string; username: string; role: string }[]>([]);
@@ -848,6 +851,15 @@ export function DashboardListClient({
         )}
       </div>
 
+      {navPending && !navPending.startsWith('co:') && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 backdrop-blur-[1px] pointer-events-none">
+          <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-white shadow-xl pointer-events-auto">
+            <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
+            Garaşyň…
+          </div>
+        </div>
+      )}
+
       {/* Company picker for admin / multi-company */}
       {showCompanyPicker && !effectiveCompanyId && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -863,8 +875,14 @@ export function DashboardListClient({
               >
               <button
                 type="button"
-                onClick={() => setSelectedCompanyId(c.id)}
-                className="w-full text-left"
+                disabled={!!navPending}
+                onClick={() => {
+                  setNavPending(`co:${c.id}`);
+                  setSelectedCompanyId(c.id);
+                  // brief loading UX then clear
+                  window.setTimeout(() => setNavPending(null), 400);
+                }}
+                className="w-full text-left disabled:opacity-60"
               >
                 <div className="flex items-start gap-3">
                   <div className="h-11 w-11 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center shrink-0">
@@ -946,7 +964,17 @@ export function DashboardListClient({
               key={d.id}
               className="group relative rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 hover:border-indigo-500/40 hover:bg-slate-900 transition-all duration-200"
             >
-              <Link href={`/dashboards/${d.id}`} className="block min-w-0 pr-10">
+              <Link
+                href={navPending && navPending !== d.id ? '#' : `/dashboards/${d.id}`}
+                onClick={(e) => {
+                  if (navPending && navPending !== d.id) {
+                    e.preventDefault();
+                    return;
+                  }
+                  setNavPending(d.id);
+                }}
+                className={`block min-w-0 pr-10 ${navPending && navPending !== d.id ? 'pointer-events-none opacity-50' : ''}`}
+              >
                 <div className="flex items-start gap-3">
                   <div className="h-10 w-10 rounded-xl bg-indigo-500/15 flex items-center justify-center group-hover:bg-indigo-500/25 transition-colors shrink-0">
                     <LayoutDashboard className="h-5 w-5 text-indigo-400" />

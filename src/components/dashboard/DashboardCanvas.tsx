@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -8,7 +8,8 @@ import 'react-resizable/css/styles.css';
 import type { Dashboard, DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import { LiveWidget } from './LiveWidget';
 import { cn } from '@/lib/utils';
-import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown, RotateCcw, Download } from 'lucide-react';
+import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown, RotateCcw, Download, ArrowLeftRight } from 'lucide-react';
+import { generateId } from '@/lib/utils';
 
 interface Props {
   dashboard: Dashboard;
@@ -36,25 +37,41 @@ export function DashboardCanvas({
     return () => mq.removeEventListener?.('change', apply);
   }, []);
 
-  const [width, setWidth] = useState(1200);
+  const [width, setWidth] = useState(0); // Task 11: 0 until measured — avoid wrong RGL layout
   // Per-widget manual refresh — bumping the token forces LiveWidget to re-fetch immediately.
   const [refreshTokens, setRefreshTokens] = useState<Record<string, number>>({});
   const bumpRefresh = (id: string) =>
     setRefreshTokens((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
+
+  // Dashboard "Täzele" — refresh every widget
+  useEffect(() => {
+    const onAll = () => {
+      setRefreshTokens((prev) => {
+        const next = { ...prev };
+        for (const w of dashboard.widgets) {
+          next[w.id] = (next[w.id] || 0) + 1;
+        }
+        return next;
+      });
+    };
+    window.addEventListener('bi-dashboard-refresh-all', onAll);
+    return () => window.removeEventListener('bi-dashboard-refresh-all', onAll);
+  }, [dashboard.widgets]);
   // Fullscreen view — essential on mobile where grid cells are too small to
   // read a busy table/chart comfortably.
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedWidget = dashboard.widgets.find((w) => w.id === expandedId) || null;
   
-  // Task 8: Track unsaved widget arrange changes
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  
-  // Task 7: Widget transfer between dashboards
+  // Task 7: Widget transfer between dashboards (+ API + dbKey select)
   const [transferWidgetId, setTransferWidgetId] = useState<string | null>(null);
   const [targetDashboards, setTargetDashboards] = useState<Dashboard[]>([]);
-  const [selectedDbKey, setSelectedDbKey] = useState<string | null>(null);
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+  const [selectedDbKey, setSelectedDbKey] = useState<string>('primary');
+  const [dbOptions, setDbOptions] = useState<{ dbKey: string; label: string }[]>([
+    { dbKey: 'primary', label: 'primary' },
+  ]);
+  const [transferBusy, setTransferBusy] = useState(false);
+  const [transferMsg, setTransferMsg] = useState('');
 
   // Lock page scroll + support Escape while the fullscreen widget view is open
   useEffect(() => {
@@ -103,58 +120,112 @@ export function DashboardCanvas({
   const containerElRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     containerElRef.current = node;
+    // measure immediately when node mounts (before paint settles)
+    if (node) {
+      const w = node.getBoundingClientRect().width || node.clientWidth;
+      if (w > 0) setWidth(Math.floor(w));
+    }
   }, []);
 
-  useEffect(() => {
+  // Task 11: robust mobile width — wrong first paint left-empty / right-shift;
+  // only trust DOM after layout; re-measure on visualViewport & orientation.
+  useLayoutEffect(() => {
     const node = containerElRef.current;
     if (!node) return;
-    let raf = 0;
-    const measure = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const rect = node.getBoundingClientRect();
-        const w = rect.width;
-        // Task 11: Mobile fix - ensure full width, no left shift
-        // Account for padding/margin: use offsetWidth for true layout width
-        const layoutWidth = node.offsetWidth || w;
-        if (layoutWidth) {
-          setWidth(Math.floor(layoutWidth));
-          // Ensure parent container is also full width
-          if (node.parentElement) {
-            node.parentElement.style.width = '100%';
-            node.parentElement.style.overflow = 'hidden';
-          }
-        }
-      });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(node);
-    window.addEventListener('resize', measure);
-    window.addEventListener('orientationchange', measure);
-    window.visualViewport?.addEventListener('resize', measure);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', measure);
-      window.removeEventListener('orientationchange', measure);
-      window.visualViewport?.removeEventListener('resize', measure);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
 
+    const readWidth = () => {
+      const parent = node.parentElement;
+      // Prefer the content box of the canvas host itself
+      const rect = node.getBoundingClientRect();
+      let w =
+        node.clientWidth ||
+        node.offsetWidth ||
+        rect.width ||
+        parent?.clientWidth ||
+        0;
+      // On mobile, if host is still 0 (flex not settled), fall back to viewport
+      // minus typical horizontal page padding (px-3 / px-4 ≈ 24–32)
+      if (w < 80 && typeof window !== 'undefined') {
+        const vw = window.visualViewport?.width || window.innerWidth;
+        w = Math.max(0, vw - 24);
+      }
+      // Never exceed viewport
+      if (typeof window !== 'undefined') {
+        const vw = window.visualViewport?.width || window.innerWidth;
+        if (vw > 0 && w > vw) w = vw;
+      }
+      return Math.floor(w);
+    };
+
+    const apply = () => {
+      const next = readWidth();
+      if (next > 0) {
+        setWidth((prev) => (Math.abs(prev - next) > 0.5 ? next : prev));
+      }
+      // Keep ancestors from clipping / shrinking the grid host
+      node.style.width = '100%';
+      node.style.maxWidth = '100%';
+      node.style.minWidth = '0';
+      node.style.boxSizing = 'border-box';
+      if (node.parentElement) {
+        node.parentElement.style.width = '100%';
+        node.parentElement.style.maxWidth = '100%';
+        node.parentElement.style.minWidth = '0';
+        node.parentElement.style.overflowX = 'hidden';
+      }
+    };
+
+    apply();
+    // Double rAF: after browser applies flex/grid for this frame
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(apply);
+    });
+
+    const t1 = window.setTimeout(apply, 50);
+    const t2 = window.setTimeout(apply, 200);
+    const t3 = window.setTimeout(apply, 600);
+    const t4 = window.setTimeout(apply, 1200);
+
+    const ro = new ResizeObserver(() => apply());
+    ro.observe(node);
+    if (node.parentElement) ro.observe(node.parentElement);
+
+    window.addEventListener('resize', apply);
+    window.addEventListener('orientationchange', apply);
+    window.visualViewport?.addEventListener('resize', apply);
+    window.visualViewport?.addEventListener('scroll', apply);
+
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      ro.disconnect();
+      window.removeEventListener('resize', apply);
+      window.removeEventListener('orientationchange', apply);
+      window.visualViewport?.removeEventListener('resize', apply);
+      window.visualViewport?.removeEventListener('scroll', apply);
+    };
+  }, [isMobile, dashboard.widgets.length, editable]);
+
+  // Task 5: KPI can be smaller — desktop minH 1, mobile minH 2 (was forced 3 → too tall)
   const layout: Layout[] = dashboard.widgets.map((w) => ({
     i: w.id,
     x: w.x,
     y: w.y,
     w: w.w,
     h: w.h,
-    minW: 2,
-    minH: 2,
+    minW: w.type === 'kpi' ? 1 : 2,
+    minH: w.type === 'kpi' ? 1 : 2,
   }));
 
   // Mobile: KPI-style widgets default to half-width so two of them can sit
   // side by side in one row; everything else stays full width unless the
   // user overrides it (mobileW, toggled from the per-widget "Ini" button).
+  // Task 5: KPI default height 2 (not forced to 3), minH 2 so user can shrink.
   const MOBILE_COLS = 2;
   const mobileLayout: Layout[] = (() => {
     const ordered = [...dashboard.widgets].sort((a, b) => {
@@ -165,19 +236,22 @@ export function DashboardCanvas({
     });
     const colY = [0, 0]; // running height cursor per mobile column
     return ordered.map((w) => {
-      const h = Math.max(w.mobileH ?? w.h, 3);
-      const defaultW = w.type === 'kpi' ? 1 : MOBILE_COLS;
+      const isKpi = w.type === 'kpi';
+      const minH = isKpi ? 2 : 3;
+      const defaultH = isKpi ? 2 : Math.max(w.h, 3);
+      const h = Math.max(w.mobileH ?? defaultH, minH);
+      const defaultW = isKpi ? 1 : MOBILE_COLS;
       const width = Math.min(Math.max(w.mobileW ?? defaultW, 1), MOBILE_COLS);
       if (width >= MOBILE_COLS) {
         const y = Math.max(colY[0], colY[1]);
         colY[0] = y + h;
         colY[1] = y + h;
-        return { i: w.id, x: 0, y, w: MOBILE_COLS, h, minW: 1, minH: 3 };
+        return { i: w.id, x: 0, y, w: MOBILE_COLS, h, minW: 1, minH };
       }
       const col = colY[0] <= colY[1] ? 0 : 1;
       const y = colY[col];
       colY[col] = y + h;
-      return { i: w.id, x: col, y, w: 1, h, minW: 1, minH: 3 };
+      return { i: w.id, x: col, y, w: 1, h, minW: 1, minH };
     });
   })();
 
@@ -186,9 +260,6 @@ export function DashboardCanvas({
 
   function onLayoutChange(next: Layout[]) {
     if (!editable || !onChange) return;
-    // Task 8: Mark changes as unsaved
-    setHasUnsavedChanges(true);
-    
     if (isMobile) {
       // Persist mobileOrder + mobileH + mobileW — keep desktop grid intact
       const sorted = [...next].sort((a, b) => a.y - b.y || a.x - b.x);
@@ -199,7 +270,7 @@ export function DashboardCanvas({
         return {
           ...w,
           mobileOrder: idx,
-          mobileH: Math.max(l.h, 3),
+          mobileH: Math.max(l.h, w.type === 'kpi' ? 2 : 3),
           mobileW: Math.min(Math.max(l.w, 1), MOBILE_COLS),
         };
       });
@@ -218,6 +289,183 @@ export function DashboardCanvas({
     if (!onChange) return;
     onChange(dashboard.widgets.filter((w) => w.id !== id));
   }
+
+  // Task 7: open transfer dialog for a widget
+  async function openTransfer(widgetId: string) {
+    setTransferWidgetId(widgetId);
+    setSelectedTargetId('');
+    setSelectedDbKey('primary');
+    setTransferMsg('');
+    setTransferBusy(true);
+    try {
+      const res = await fetch('/api/dashboards');
+      const data = await res.json();
+      const list: Dashboard[] = (data.dashboards || data || []).filter(
+        (d: Dashboard) => d.id !== dashboard.id
+      );
+      setTargetDashboards(list);
+    } catch (e) {
+      setTransferMsg(String(e));
+      setTargetDashboards([]);
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
+  async function loadDbOptionsForTarget(target: Dashboard) {
+    try {
+      const res = await fetch('/api/catalog');
+      const cat = await res.json();
+      const slug =
+        (target as any).tenantSlug ||
+        (target as any).companySlug ||
+        '';
+      // Prefer company connections from catalog tenants
+      const tenants = cat.tenants || [];
+      let opts: { dbKey: string; label: string }[] = [];
+      // try match by companyId / slug on target
+      const coId = (target as any).companyId;
+      for (const t of tenants) {
+        if (
+          (coId && (t.id === coId || t.companyId === coId)) ||
+          (slug && t.slug === slug)
+        ) {
+          opts = (t.connections || []).map((c: any) => ({
+            dbKey: c.dbKey || 'primary',
+            label: c.label || c.database || c.dbKey || 'primary',
+          }));
+          break;
+        }
+      }
+      // fallback: any connections from endpoints used by target widgets
+      if (!opts.length) {
+        const keys = new Set<string>();
+        for (const w of target.widgets || []) {
+          const k = w.dataSource?.dbKey || 'primary';
+          keys.add(k);
+        }
+        opts = [...keys].map((k) => ({ dbKey: k, label: k }));
+      }
+      if (!opts.length) opts = [{ dbKey: 'primary', label: 'primary' }];
+      setDbOptions(opts);
+      setSelectedDbKey(opts[0].dbKey);
+    } catch {
+      setDbOptions([{ dbKey: 'primary', label: 'primary' }]);
+      setSelectedDbKey('primary');
+    }
+  }
+
+  async function confirmTransfer() {
+    if (!transferWidgetId || !selectedTargetId) {
+      setTransferMsg('Maksat dashboard saýlaň');
+      return;
+    }
+    const src = dashboard.widgets.find((w) => w.id === transferWidgetId);
+    if (!src) return;
+    const target = targetDashboards.find((d) => d.id === selectedTargetId);
+    if (!target) return;
+
+    setTransferBusy(true);
+    setTransferMsg('Geçirilýär…');
+    try {
+      // Clone widget with new id; remap dbKey / tenant if needed
+      const cloned: DashboardWidget = {
+        ...JSON.parse(JSON.stringify(src)),
+        id: generateId(),
+      };
+      // place below existing widgets
+      const maxY = (target.widgets || []).reduce(
+        (m, w) => Math.max(m, (w.y || 0) + (w.h || 2)),
+        0
+      );
+      cloned.x = 0;
+      cloned.y = maxY;
+      if (cloned.dataSource) {
+        cloned.dataSource = {
+          ...cloned.dataSource,
+          dbKey: selectedDbKey || cloned.dataSource.dbKey || 'primary',
+        };
+        // keep path; tenantSlug stays if same company, else use target company slug when available
+        const targetSlug =
+          (target as any).tenantSlug ||
+          (target as any).companySlug ||
+          cloned.dataSource.tenantSlug;
+        if (targetSlug) cloned.dataSource.tenantSlug = targetSlug;
+        if (cloned.dataSource.drillDown) {
+          cloned.dataSource.drillDown = {
+            ...cloned.dataSource.drillDown,
+            dbKey: selectedDbKey || cloned.dataSource.drillDown.dbKey || 'primary',
+            tenantSlug: targetSlug || cloned.dataSource.drillDown.tenantSlug,
+          };
+        }
+      }
+
+      // Task 7: also ensure related API endpoint exists on target tenant (best-effort)
+      if (cloned.dataSource?.path && cloned.dataSource?.tenantSlug) {
+        try {
+          const catRes = await fetch('/api/catalog');
+          const cat = await catRes.json();
+          const eps: any[] = cat.endpoints || [];
+          const path = cloned.dataSource.path.startsWith('/')
+            ? cloned.dataSource.path
+            : `/${cloned.dataSource.path}`;
+          const exists = eps.some(
+            (e) =>
+              e.tenantSlug === cloned.dataSource!.tenantSlug &&
+              (e.pathTemplate === path || e.path === path)
+          );
+          if (!exists && src.dataSource?.path) {
+            // copy endpoint definition from source tenant if found
+            const srcEp = eps.find(
+              (e) =>
+                e.tenantSlug === src.dataSource?.tenantSlug &&
+                (e.pathTemplate === path ||
+                  e.path === path ||
+                  e.pathTemplate === src.dataSource?.path ||
+                  e.path === src.dataSource?.path)
+            );
+            if (srcEp) {
+              await fetch('/api/endpoints', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  ...srcEp,
+                  id: undefined,
+                  tenantSlug: cloned.dataSource.tenantSlug,
+                  dbKey: selectedDbKey,
+                }),
+              });
+            }
+          }
+        } catch {
+          /* API copy best-effort */
+        }
+      }
+
+      const nextWidgets = [...(target.widgets || []), cloned];
+      const res = await fetch(`/api/dashboards/${target.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: target.name,
+          widgets: nextWidgets,
+          globalFilters: target.globalFilters || [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Geçirmek şowsuz');
+      setTransferMsg('Üstünlikli geçirildi');
+      setTimeout(() => {
+        setTransferWidgetId(null);
+        setTransferMsg('');
+      }, 900);
+    } catch (e) {
+      setTransferMsg(String(e));
+    } finally {
+      setTransferBusy(false);
+    }
+  }
+
 
   /** Toggle a widget between half-width and full-width in the mobile grid. */
   function toggleMobileWidth(id: string) {
@@ -277,13 +525,19 @@ export function DashboardCanvas({
       className="w-full overflow-hidden"
       style={{ width: '100%', maxWidth: '100%' }}
     >
+      {width < 40 ? (
+        <div className="w-full min-h-[120px] flex items-center justify-center text-slate-500 text-xs">
+          …
+        </div>
+      ) : (
       <GridLayout
-        className="layout"
+        key={`gl-${effectiveCols}-${Math.round(width)}`}
+        className="layout w-full"
         layout={effectiveLayout}
         cols={effectiveCols}
         rowHeight={isMobile ? 40 : 48}
         width={width}
-        margin={isMobile ? [0, 10] : [12, 12]}
+        margin={isMobile ? [8, 10] : [12, 12]}
         containerPadding={[0, 0]}
         isDraggable={editable}
         isResizable={editable}
@@ -291,6 +545,7 @@ export function DashboardCanvas({
         compactType="vertical"
         onLayoutChange={onLayoutChange}
         draggableHandle=".drag-handle"
+        style={{ width: '100%' }}
       >
         {dashboard.widgets.map((widget) => (
           <div
@@ -374,6 +629,14 @@ export function DashboardCanvas({
                   <>
                     <button
                       type="button"
+                      onClick={() => void openTransfer(widget.id)}
+                      className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+                      title="Başga dashboarda geçir"
+                    >
+                      <ArrowLeftRight className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onConfigureWidget?.(widget.id)}
                       className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
                       title="Sazla"
@@ -436,8 +699,98 @@ export function DashboardCanvas({
           </div>
         ))}
       </GridLayout>
+      )}
 
             {/* Fullscreen via portal — avoids transform/overflow parents breaking fixed positioning */}
+      {/* Task 7: Widget transfer dialog */}
+      {transferWidgetId &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[2147482700] flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+              onClick={() => !transferBusy && setTransferWidgetId(null)}
+            />
+            <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl space-y-4 z-10">
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="h-5 w-5 text-emerald-400" />
+                <h3 className="text-base font-semibold text-white flex-1">Widget geçir</h3>
+                <button
+                  type="button"
+                  className="p-1 text-slate-400 hover:text-white"
+                  onClick={() => !transferBusy && setTransferWidgetId(null)}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400">
+                Saýlanan widget + baglanan API başga dashboarda göçüriler. Maksat dashboardda 2+ DB
+                bolsa, haýsy DB-de işlemelidigini saýlaň.
+              </p>
+              <div className="space-y-2">
+                <label className="text-xs text-slate-400">Maksat dashboard</label>
+                <select
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                  value={selectedTargetId}
+                  disabled={transferBusy}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedTargetId(id);
+                    const t = targetDashboards.find((d) => d.id === id);
+                    if (t) void loadDbOptionsForTarget(t);
+                  }}
+                >
+                  <option value="">— saýlaň —</option>
+                  {targetDashboards.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({(d.widgets || []).length} widget)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedTargetId && (
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-400">Database (dbKey)</label>
+                  <select
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                    value={selectedDbKey}
+                    disabled={transferBusy}
+                    onChange={(e) => setSelectedDbKey(e.target.value)}
+                  >
+                    {dbOptions.map((o) => (
+                      <option key={o.dbKey} value={o.dbKey}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {transferMsg && (
+                <p className="text-xs text-amber-300 bg-amber-500/10 rounded-lg px-3 py-2">{transferMsg}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={transferBusy}
+                  onClick={() => setTransferWidgetId(null)}
+                  className="px-3 py-1.5 rounded-lg text-sm bg-slate-800 text-slate-200 hover:bg-slate-700"
+                >
+                  Ýatyr
+                </button>
+                <button
+                  type="button"
+                  disabled={transferBusy || !selectedTargetId}
+                  onClick={() => void confirmTransfer()}
+                  className="px-3 py-1.5 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
+                >
+                  {transferBusy ? '…' : 'Geçir'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
       {expandedWidget &&
         typeof document !== 'undefined' &&
         createPortal(
@@ -510,61 +863,6 @@ export function DashboardCanvas({
           document.body
         )}
       
-      {/* Task 8: Unsaved changes warning dialog */}
-      {showUnsavedDialog &&
-        typeof document !== 'undefined' &&
-        createPortal(
-          <div className="fixed inset-0 z-[2147481600] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => setShowUnsavedDialog(false)} />
-            <div className="relative bg-slate-900 border border-emerald-600/30 rounded-xl shadow-2xl p-6 max-w-sm animate-in fade-in zoom-in-95">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-1 h-8 bg-emerald-500 rounded-full"></div>
-                <h3 className="text-lg font-bold text-white">Saklanmadyk üýtgetmeler</h3>
-              </div>
-              <p className="text-slate-300 mb-6 text-sm">
-                Widget tertiplemelerinde üýtgetmeler boldy. Ýokarda "<strong>↶ Undo</strong>" iconuna basyp undo edip bilärsiňiz ýa-da aşakdaky dülkemelerden saýlanyp bilärsiňiz:
-              </p>
-              
-              <div className="space-y-3">
-                <div className="flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUnsavedDialog(false);
-                      setPendingAction(null);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition text-sm"
-                  >
-                    ✕ Ýap
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUnsavedDialog(false);
-                      setHasUnsavedChanges(false);
-                      setPendingAction(null);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 font-medium transition text-sm"
-                  >
-                    ↻ Üýtget
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUnsavedDialog(false);
-                      setHasUnsavedChanges(false);
-                      if (pendingAction) pendingAction();
-                    }}
-                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition text-sm flex items-center gap-1"
-                  >
-                    💾 Sakla
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
     </div>
   );
 }

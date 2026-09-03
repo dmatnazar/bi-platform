@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Wallet,
   RefreshCw,
@@ -53,6 +54,16 @@ interface LedgerEntry {
   reason?: string;
   createdAt: string;
   createdBy?: string;
+  username?: string;
+  user?: string;
+  deviceId?: string;
+  deviceName?: string;
+  device?: string;
+  ip?: string;
+  path?: string;
+  method?: string;
+  endpoint?: string;
+  meta?: Record<string, unknown>;
 }
 
 const levelStyle: Record<string, string> = {
@@ -68,6 +79,50 @@ const levelLabel: Record<string, string> = {
   critical: 'Critiki',
   empty: 'Gutardy',
 };
+
+
+function displayUser(e: LedgerEntry): string {
+  const meta = e.meta || {};
+  const candidates = [
+    meta.fullName,
+    meta.displayName,
+    meta.userName,
+    meta.username,
+    e.username,
+    e.user,
+    meta.login,
+    e.createdBy,
+  ];
+  for (const c of candidates) {
+    if (c == null || c === '') continue;
+    const s = String(c);
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) continue;
+    if (/^[0-9a-f]{24}$/i.test(s)) continue;
+    return s;
+  }
+  return '—';
+}
+
+function displayDevice(e: LedgerEntry): string {
+  const meta = e.meta || {};
+  const candidates = [
+    e.deviceName,
+    meta.deviceName,
+    meta.deviceLabel,
+    e.device,
+    meta.device,
+    e.deviceId,
+    meta.deviceId,
+    meta.userAgent,
+  ];
+  for (const c of candidates) {
+    if (c == null || c === '') continue;
+    const s = String(c);
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) continue;
+    return s.length > 40 ? s.slice(0, 38) + '…' : s;
+  }
+  return '—';
+}
 
 export default function BillingPage() {
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
@@ -365,7 +420,50 @@ export default function BillingPage() {
           <Building2 className="h-4 w-4 text-sky-400" />
           Firma gaplary
         </h2>
-        <div className="rounded-xl border border-slate-700/80 overflow-hidden">
+        {/* Mobile cards */}
+        <div className="sm:hidden space-y-3">
+          {wallets.map((w) => (
+            <div key={w.tenantId} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-white truncate">{w.tenantName || w.tenantSlug}</p>
+                  <p className="text-[11px] font-mono text-slate-500">{w.tenantSlug}</p>
+                </div>
+                <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border shrink-0 ${levelStyle[w.level] || levelStyle.ok}`}>
+                  {levelLabel[w.level] || w.level}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">{w.tariff?.name || 'Tarif ýok'}</span>
+                <span className="font-semibold tabular-nums text-white">
+                  {w.balanceCredits.toLocaleString()} <span className="text-[10px] text-slate-500">REQ</span>
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="flex-1 text-[11px] px-2 py-2 rounded-lg bg-emerald-500/15 text-emerald-300"
+                  onClick={() => { setSelected(w); setAmount('500'); setTopupOpen(true); }}
+                >
+                  Top-up
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 text-[11px] px-2 py-2 rounded-lg bg-indigo-500/15 text-indigo-300"
+                  onClick={() => { setSelected(w); setTariffId(w.tariff?.id || tariffs[0]?.id || ''); setAssignOpen(true); }}
+                >
+                  Tarif
+                </button>
+              </div>
+            </div>
+          ))}
+          {wallets.length === 0 && !loading && (
+            <p className="text-center text-slate-500 text-sm py-6">Firma ýok</p>
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden sm:block rounded-xl border border-slate-700/80 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -446,7 +544,7 @@ export default function BillingPage() {
                 {wallets.length === 0 && !loading && (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">
-                      Firma gapy ýok
+                      Firma ýok
                     </td>
                   </tr>
                 )}
@@ -456,41 +554,115 @@ export default function BillingPage() {
         </div>
       </section>
 
-      {/* Ledger */}
+      {/* Ledger — table like API list */}
       <section>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3">Soňky hereketler</h2>
-        <div className="rounded-xl border border-slate-700/80 divide-y divide-slate-800">
-          {ledger.slice(0, 15).map((e) => (
-            <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-              {e.amount >= 0 ? (
-                <ArrowUpRight className="h-4 w-4 text-emerald-400 shrink-0" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 text-rose-400 shrink-0" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="text-slate-200 truncate">
-                  <span className="font-mono text-xs text-slate-500">{e.tenantSlug}</span>
-                  {' · '}
-                  {e.reason || e.type}
-                </p>
-                <p className="text-[10px] text-slate-500">
-                  {e.createdAt?.replace('T', ' ').slice(0, 19)} · {e.type}
-                </p>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-sm font-semibold text-slate-300">Soňky hereketler</h2>
+          <Link
+            href="/admin/billing/ledger"
+            className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+          >
+            Ählisi →
+          </Link>
+        </div>
+
+        {/* Mobile cards */}
+        <div className="sm:hidden space-y-2 mb-3">
+          {ledger.slice(0, 10).map((e) => (
+            <div key={e.id} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-3 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-slate-500">{e.createdAt?.replace('T', ' ').slice(0, 19)}</span>
+                <span className={`text-xs font-semibold tabular-nums ${e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {e.amount >= 0 ? '+' : ''}{e.amount}
+                </span>
               </div>
-              <div className="text-right shrink-0">
-                <p
-                  className={`font-semibold tabular-nums ${e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}
-                >
-                  {e.amount >= 0 ? '+' : ''}
-                  {e.amount}
-                </p>
-                <p className="text-[10px] text-slate-500">→ {e.balanceAfter}</p>
+              <p className="text-sm text-white font-medium truncate">{e.tenantSlug}</p>
+              <p className="text-xs text-slate-400 truncate">{e.reason || e.type}</p>
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
+                <span>Ulanyjy: <span className="text-slate-300">{displayUser(e)}</span></span>
+                <span>Device: <span className="text-slate-300">{displayDevice(e)}</span></span>
               </div>
             </div>
           ))}
           {ledger.length === 0 && (
-            <p className="px-4 py-6 text-center text-slate-500 text-sm">Hereket ýok</p>
+            <p className="text-center text-slate-500 text-sm py-6">Hereket ýok</p>
           )}
+        </div>
+
+        <div className="hidden sm:block rounded-xl border border-slate-700/80 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wider">
+                <tr>
+                  <th className="px-3 py-2.5 font-medium">Wagt</th>
+                  <th className="px-3 py-2.5 font-medium">Firma</th>
+                  <th className="px-3 py-2.5 font-medium">Görnüş</th>
+                  <th className="px-3 py-2.5 font-medium">Sebäp</th>
+                  <th className="px-3 py-2.5 font-medium">Ulanyjy</th>
+                  <th className="px-3 py-2.5 font-medium">Device</th>
+                  <th className="px-3 py-2.5 font-medium text-right">Mukdar</th>
+                  <th className="px-3 py-2.5 font-medium text-right">Balans</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {ledger.slice(0, 10).map((e) => {
+                  const user = displayUser(e);
+                  const device = displayDevice(e);
+                  return (
+                    <tr key={e.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-3 py-2 text-slate-400 whitespace-nowrap text-xs">
+                        {e.createdAt?.replace('T', ' ').slice(0, 19) || '—'}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs text-slate-300 whitespace-nowrap">
+                        {e.tenantSlug}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md border ${
+                            e.amount >= 0
+                              ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
+                              : 'border-rose-500/30 text-rose-400 bg-rose-500/10'
+                          }`}
+                        >
+                          {e.amount >= 0 ? (
+                            <ArrowUpRight className="h-3 w-3" />
+                          ) : (
+                            <ArrowDownRight className="h-3 w-3" />
+                          )}
+                          {e.type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-300 max-w-[180px] truncate" title={e.reason || ''}>
+                        {e.reason || '—'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-300 whitespace-nowrap text-xs">{String(user)}</td>
+                      <td className="px-3 py-2 text-slate-400 whitespace-nowrap text-xs font-mono max-w-[120px] truncate" title={String(device)}>
+                        {String(device)}
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right font-semibold tabular-nums whitespace-nowrap ${
+                          e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {e.amount >= 0 ? '+' : ''}
+                        {e.amount}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-400 tabular-nums whitespace-nowrap text-xs">
+                        {e.balanceAfter}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {ledger.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                      Hereket ýok
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 

@@ -49,7 +49,7 @@ export function WidgetConfigPanel({
   const [columnsLoading, setColumnsLoading] = useState(false);
   const [columnsError, setColumnsError] = useState('');
   const [columnsTick, setColumnsTick] = useState(0);
-  
+
   // Task 12: Cache required param values in localStorage so same params don't need re-entry
   const [paramCache, setParamCache] = useState<Record<string, string>>(() => {
     try {
@@ -59,17 +59,49 @@ export function WidgetConfigPanel({
       return {};
     }
   });
-  
+
   // Task 12: Track required params that need filling
   const [requiredParamValues, setRequiredParamValues] = useState<Record<string, string>>({});
   const [showRequiredParamsForm, setShowRequiredParamsForm] = useState(false);
-  
+
   // Task 13: Column selection for aggregate functions
   const [aggregateColumn, setAggregateColumn] = useState<string>(
     widget.dataSource?.aggregateColumn || ''
   );
-  
+
+  // MUST be before any effect that reads ds (avoid TDZ ReferenceError)
   const ds = widget.dataSource;
+
+  // Task 12: hydrate saved API params into widget when opening config
+  useEffect(() => {
+    if (!ds?.tenantSlug || !ds?.path) return;
+    try {
+      const key = `bi-api-params:${ds.tenantSlug}:${ds.path}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Record<string, string | number | boolean>;
+      if (!saved || !Object.keys(saved).length) return;
+      const cur = ds.params || {};
+      const missing = Object.keys(saved).filter(
+        (k) => cur[k] === undefined || cur[k] === null || cur[k] === ''
+      );
+      if (!missing.length) return;
+      const merged = { ...saved, ...cur };
+      onChange({
+        ...widget,
+        dataSource: {
+          tenantSlug: ds.tenantSlug || '',
+          path: ds.path || '',
+          method: ds.method || 'GET',
+          ...ds,
+          params: merged,
+        },
+      });
+    } catch {
+      /* */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ds?.tenantSlug, ds?.path, ds?.endpointId]);
 
   useEffect(() => {
     fetch('/api/catalog')
@@ -106,7 +138,15 @@ export function WidgetConfigPanel({
       try {
         const path = ds.path.startsWith('/') ? ds.path : `/${ds.path}`;
         // Probe params: date → today range; other required → null / empty
+        // Task 12: restore last-used probe params for this API (cross-widget)
+        const storageKey = `bi-api-params:${ds.tenantSlug}:${ds.path}`;
+        let savedParams: Record<string, string | number | boolean> = {};
+        try {
+          const raw = localStorage.getItem(storageKey);
+          if (raw) savedParams = JSON.parse(raw) || {};
+        } catch { /* */ }
         const probeParams: Record<string, string | number | boolean | null> = {
+          ...savedParams,
           ...(ds.params || {}),
         };
         const schema = ds.paramsSchema || endpoints.find((e) => e.id === ds.endpointId)?.paramsSchema;
@@ -175,11 +215,26 @@ export function WidgetConfigPanel({
         if (rows[0] && typeof rows[0] === 'object' && !Array.isArray(rows[0])) {
           const keys = Object.keys(rows[0] as object);
           setSampleColumns(keys);
+          // Task 12: remember working params for this API
+          try {
+            const toSave: Record<string, string | number | boolean> = {};
+            for (const [k, v] of Object.entries(probeParams)) {
+              if (v != null && v !== '') toSave[k] = v as string | number | boolean;
+            }
+            if (Object.keys(toSave).length) {
+              localStorage.setItem(
+                `bi-api-params:${ds.tenantSlug}:${ds.path}`,
+                JSON.stringify(toSave)
+              );
+            }
+          } catch { /* */ }
         } else if (ds.columns?.length) {
           setSampleColumns([...ds.columns]);
         } else {
           setSampleColumns([]);
-          setColumnsError('Jogapda setir ýok — API parametrleri / agent barlaň');
+          setColumnsError(
+            'Jogapda setir ýok — aşakdaky required parametrleri dolduryp «Täzele» basyň'
+          );
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -320,6 +375,15 @@ export function WidgetConfigPanel({
     if (b?.source === 'fixed' && b.value !== undefined && b.value !== null && b.value !== '') {
       params[paramName] = b.value as string | number | boolean;
     }
+    // Task 12: remember fixed params for this API across widgets
+    if (ds?.tenantSlug && ds?.path) {
+      try {
+        const key = `bi-api-params:${ds.tenantSlug}:${ds.path}`;
+        const prev = JSON.parse(localStorage.getItem(key) || '{}');
+        const merged = { ...prev, ...params };
+        localStorage.setItem(key, JSON.stringify(merged));
+      } catch { /* */ }
+    }
     patchDs({ paramBindings: next, params });
   }
 
@@ -344,7 +408,7 @@ export function WidgetConfigPanel({
   }, [globalFilters]);
 
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900 p-4 space-y-3 shadow-xl max-h-[calc(100vh-8rem)] overflow-y-auto">
+    <div className="p-4 space-y-3">
       <div className="flex items-center justify-between sticky top-0 bg-slate-900 z-10 pb-1">
         <h4 className="text-sm font-semibold text-white">Widget sazlama</h4>
         <button type="button" onClick={onClose} className="text-slate-500 hover:text-white">
@@ -498,33 +562,55 @@ export function WidgetConfigPanel({
         </div>
       )}
 
-      {schemaParams.length === 0 && ds?.endpointId && (
-        <div className="space-y-2">
-          <p className="text-[11px] text-slate-500">
-            Bu API-da paramsSchema ýok. El bilen parametr goşuň (mysal: beginDate).
+      {/* Task 12: when schema missing OR columns failed — required param inputs */}
+      {(schemaParams.length === 0 || sampleColumns.length === 0) && ds?.path && (
+        <div className="space-y-2 rounded-xl border border-amber-700/40 bg-amber-500/5 p-3">
+          <p className="text-[11px] text-amber-200/90">
+            Sütünler gelmedik bolsa, required parametrleri dolduryp «Täzele» basyň.
+            Ýazylan parametrler indiki widget-lerde ýatda saklanýar.
           </p>
           <div className="grid grid-cols-2 gap-2">
             <Input
-              label="beginDate"
+              label="beginDate *"
               type="date"
               value={String(ds?.params?.beginDate ?? '')}
-              onChange={(e) =>
-                patchDs({
-                  params: { ...ds?.params, beginDate: e.target.value },
-                })
-              }
+              onChange={(e) => {
+                const params = { ...ds?.params, beginDate: e.target.value };
+                patchDs({ params });
+                if (ds?.tenantSlug && ds?.path) {
+                  try {
+                    const key = `bi-api-params:${ds.tenantSlug}:${ds.path}`;
+                    const prev = JSON.parse(localStorage.getItem(key) || '{}');
+                    localStorage.setItem(key, JSON.stringify({ ...prev, ...params }));
+                  } catch { /* */ }
+                }
+              }}
             />
             <Input
-              label="endDate"
+              label="endDate *"
               type="date"
               value={String(ds?.params?.endDate ?? '')}
-              onChange={(e) =>
-                patchDs({
-                  params: { ...ds?.params, endDate: e.target.value },
-                })
-              }
+              onChange={(e) => {
+                const params = { ...ds?.params, endDate: e.target.value };
+                patchDs({ params });
+                if (ds?.tenantSlug && ds?.path) {
+                  try {
+                    const key = `bi-api-params:${ds.tenantSlug}:${ds.path}`;
+                    const prev = JSON.parse(localStorage.getItem(key) || '{}');
+                    localStorage.setItem(key, JSON.stringify({ ...prev, ...params }));
+                  } catch { /* */ }
+                }
+              }}
             />
           </div>
+          <button
+            type="button"
+            className="text-[11px] text-indigo-300 hover:text-indigo-200"
+            disabled={columnsLoading}
+            onClick={() => setColumnsTick((n) => n + 1)}
+          >
+            Parametr bilen täzele
+          </button>
         </div>
       )}
 
@@ -929,7 +1015,7 @@ export function WidgetConfigPanel({
                 )}
               </div>
               {widget.type === 'pie' && (
-                <div className="pt-1">
+                <div className="pt-1 space-y-2">
                   <label className="text-[11px] font-medium text-slate-400 block mb-1">
                     Merkez (donut) jem
                   </label>
@@ -951,10 +1037,126 @@ export function WidgetConfigPanel({
                     <option value="avg">Avg (orta)</option>
                     <option value="none">Ýok</option>
                   </select>
+                  {/* Task 13: which column to sum/count/avg in center */}
+                  <label className="text-[11px] font-medium text-slate-400 block">
+                    Merkez sütün (column)
+                  </label>
+                  <select
+                    className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+                    value={
+                      widget.config?.pieCenterField ||
+                      ds?.valueField ||
+                      (ds?.valueFields && ds.valueFields[0]) ||
+                      ''
+                    }
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          pieCenterField: e.target.value || undefined,
+                        },
+                      })
+                    }
+                  >
+                    <option value="">— value field —</option>
+                    {Array.from(
+                      new Set(
+                        sampleColumns.length
+                          ? sampleColumns
+                          : ([
+                              ...(ds?.valueFields || []),
+                              ds?.valueField,
+                              ds?.categoryField,
+                            ].filter(Boolean) as string[])
+                      )
+                    ).map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
             </>
           )}
+          {/* Task 15: chart label color / size / auto-scale for all chart widgets */}
+          {['bar', 'line', 'area', 'pie'].includes(widget.type) && (
+            <div className="space-y-3 pt-2 border-t border-slate-800">
+              <p className="text-xs font-semibold text-slate-300">Tekst / label sazlamalary</p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Label reňki</label>
+                  <input
+                    type="color"
+                    value={widget.config?.labelColor || '#94a3b8'}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, labelColor: e.target.value },
+                      })
+                    }
+                    className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Oks label reňki</label>
+                  <input
+                    type="color"
+                    value={widget.config?.axisLabelColor || '#94a3b8'}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, axisLabelColor: e.target.value },
+                      })
+                    }
+                    className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">
+                  Font size ({widget.config?.labelFontSize || 11}px)
+                </label>
+                <input
+                  type="range"
+                  min={8}
+                  max={22}
+                  value={widget.config?.labelFontSize || 11}
+                  onChange={(e) =>
+                    onChange({
+                      ...widget,
+                      config: {
+                        ...widget.config,
+                        labelFontSize: Number(e.target.value),
+                      },
+                    })
+                  }
+                  className="w-full"
+                />
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!widget.config?.enableAutoTextSize}
+                  onChange={(e) =>
+                    onChange({
+                      ...widget,
+                      config: {
+                        ...widget.config,
+                        enableAutoTextSize: e.target.checked,
+                      },
+                    })
+                  }
+                  className="rounded"
+                />
+                <span className="text-xs text-slate-300">
+                  Auto text: widget / zoom boyuna görä font ulalsyn/kiçelsin
+                </span>
+              </label>
+            </div>
+          )}
+
           {widget.type === 'kpi' && (
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-2">
@@ -1084,21 +1286,167 @@ export function WidgetConfigPanel({
                   </span>
                 </label>
               </div>
+            </div>
+          )}
+        </div>
+      )}
 
-              {/* Task 5: Unit/Label */}
+      {widget.type === 'pivot' && (
+        <div className="space-y-3 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
+          <p className="text-xs font-semibold text-cyan-300">Svodny tablo (Pivot)</p>
+          <p className="text-[11px] text-slate-500">
+            Excel / DataLens ýaly: setir we sütün ölçegleri + bahany jemle (Sum/Count/…).
+          </p>
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">Setir (Rows)</label>
+            {sampleColumns.length > 0 ? (
+              <div className="max-h-28 overflow-y-auto space-y-1 rounded-lg border border-slate-800 p-2">
+                {sampleColumns.map((c) => {
+                  const selected = (widget.config?.pivotRows || []).includes(c);
+                  return (
+                    <label key={c} className="flex items-center gap-2 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(e) => {
+                          const prev = widget.config?.pivotRows || [];
+                          const next = e.target.checked
+                            ? [...prev, c]
+                            : prev.filter((x) => x !== c);
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pivotRows: next },
+                          });
+                        }}
+                      />
+                      <span className="font-mono">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
               <Input
-                label="Unit / Label (iki setir)"
-                value={widget.config?.unit || ''}
+                value={(widget.config?.pivotRows || []).join(', ')}
+                onChange={(e) => {
+                  const next = e.target.value.split(',').map((s) => s.trim()).filter(Boolean);
+                  onChange({
+                    ...widget,
+                    config: { ...widget.config, pivotRows: next },
+                  });
+                }}
+                placeholder="region, category"
+              />
+            )}
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">Sütün (Columns)</label>
+            {sampleColumns.length > 0 ? (
+              <div className="max-h-28 overflow-y-auto space-y-1 rounded-lg border border-slate-800 p-2">
+                {sampleColumns.map((c) => {
+                  const selected = (widget.config?.pivotCols || []).includes(c);
+                  return (
+                    <label key={c} className="flex items-center gap-2 text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={(e) => {
+                          const prev = widget.config?.pivotCols || [];
+                          const next = e.target.checked
+                            ? [...prev, c]
+                            : prev.filter((x) => x !== c);
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pivotCols: next },
+                          });
+                        }}
+                      />
+                      <span className="font-mono">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <Input
+                value={(widget.config?.pivotCols || []).join(', ')}
+                onChange={(e) => {
+                  const next = e.target.value.split(',').map((s) => s.trim()).filter(Boolean);
+                  onChange({
+                    ...widget,
+                    config: { ...widget.config, pivotCols: next },
+                  });
+                }}
+                placeholder="year, month"
+              />
+            )}
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">Baha (Value)</label>
+            <select
+              className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+              value={widget.config?.pivotValue || ''}
+              onChange={(e) =>
+                onChange({
+                  ...widget,
+                  config: { ...widget.config, pivotValue: e.target.value || undefined },
+                })
+              }
+            >
+              <option value="">— saýla —</option>
+              {(sampleColumns.length ? sampleColumns : []).map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] text-slate-400 block mb-1">Aggregasiýa</label>
+            <select
+              className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
+              value={widget.config?.pivotAgg || 'sum'}
+              onChange={(e) =>
+                onChange({
+                  ...widget,
+                  config: {
+                    ...widget.config,
+                    pivotAgg: e.target.value as 'sum' | 'count' | 'avg' | 'min' | 'max',
+                  },
+                })
+              }
+            >
+              <option value="sum">Sum</option>
+              <option value="count">Count</option>
+              <option value="avg">Avg</option>
+              <option value="min">Min</option>
+              <option value="max">Max</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs text-slate-300">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={widget.config?.pivotRowTotals !== false}
                 onChange={(e) =>
                   onChange({
                     ...widget,
-                    config: { ...widget.config, unit: e.target.value || undefined },
+                    config: { ...widget.config, pivotRowTotals: e.target.checked },
                   })
                 }
-                placeholder="TMT, %,  pieces"
               />
-            </div>
-          )}
+              Setir jemi
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={widget.config?.pivotColTotals !== false}
+                onChange={(e) =>
+                  onChange({
+                    ...widget,
+                    config: { ...widget.config, pivotColTotals: e.target.checked },
+                  })
+                }
+              />
+              Sütün jemi
+            </label>
+          </div>
         </div>
       )}
 
@@ -1308,12 +1656,13 @@ export function WidgetConfigPanel({
         </div>
       )}
 
-      {widget.type === 'table' && (
+      {(widget.type === 'table' || widget.type === 'pie') && (
         <div className="space-y-2 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3">
           <p className="text-xs font-semibold text-indigo-300">Hierarhiýa / Drill-down</p>
           <p className="text-[11px] text-slate-500">
-            Setire basylanda saýlanan sütündäki bahany başga API-a iberip detal tablisasyny açýar
-            (meselem faktura → harytlar).
+            {widget.type === 'pie'
+              ? 'Tegelek bölegine basylanda child API-a parametr iberilýär we täze tegelek açylýar (Telefonlar → Samsung → A12…). Path we Undo bilen yza gaýdyp bolýar.'
+              : 'Setire basylanda saýlanan sütündäki bahany başga API-a iberip detal tablisasyny açýar (meselem faktura → harytlar).'}
           </p>
           <label className="flex items-center gap-2 text-xs text-slate-300">
             <input
@@ -1323,17 +1672,25 @@ export function WidgetConfigPanel({
                 patchDs({
                   drillDown: {
                     enabled: e.target.checked,
-                    sourceField: ds?.drillDown?.sourceField || '',
+                    sourceField: ds?.drillDown?.sourceField || ds?.categoryField || '',
                     tenantSlug: ds?.drillDown?.tenantSlug || ds?.tenantSlug || '',
                     path: ds?.drillDown?.path || '',
                     method: ds?.drillDown?.method || 'GET',
                     passGlobalFilters: ds?.drillDown?.passGlobalFilters !== false,
+                    childChartType: widget.type === 'pie' ? 'pie' : 'table',
+                    categoryField: ds?.drillDown?.categoryField || ds?.categoryField || '',
+                    valueField:
+                      ds?.drillDown?.valueField ||
+                      ds?.valueField ||
+                      (ds?.valueFields && ds.valueFields[0]) ||
+                      '',
+                    rootLabel: ds?.drillDown?.rootLabel || widget.title || 'Root',
                   },
                 })
               }
               className="rounded border-slate-600"
             />
-            Drill-down açyk
+            Hierarhiýa / Drill-down açyk
           </label>
           {ds?.drillDown?.enabled && (
             <>
@@ -1357,6 +1714,130 @@ export function WidgetConfigPanel({
                 }
                 placeholder="fich_id"
               />
+              {widget.type === 'pie' && (
+                <>
+                  <Input
+                    label="Root path ady (breadcrumb: /Harytlar/...)"
+                    value={ds.drillDown.rootLabel || ''}
+                    onChange={(e) =>
+                      patchDs({
+                        drillDown: {
+                          ...ds.drillDown!,
+                          rootLabel: e.target.value || undefined,
+                        },
+                      })
+                    }
+                    placeholder="Harytlar"
+                  />
+                  <Input
+                    label="Child category field"
+                    value={ds.drillDown.categoryField || ''}
+                    onChange={(e) =>
+                      patchDs({
+                        drillDown: {
+                          ...ds.drillDown!,
+                          categoryField: e.target.value || undefined,
+                        },
+                      })
+                    }
+                    placeholder="name"
+                  />
+                  <Input
+                    label="Child value field"
+                    value={ds.drillDown.valueField || ''}
+                    onChange={(e) =>
+                      patchDs({
+                        drillDown: {
+                          ...ds.drillDown!,
+                          valueField: e.target.value || undefined,
+                        },
+                      })
+                    }
+                    placeholder="value"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    2-nji / 3-nji dereje: aşakda levels goşuň (birmeňzeş API bolsa boş goýup
+                    bolýar — şol path gaýtalanýar, parametrler ýygnalýar).
+                  </p>
+                  {(ds.drillDown.levels || []).map((lv, i) => (
+                    <div
+                      key={i}
+                      className="rounded-lg border border-slate-700/80 bg-slate-900/50 p-2 space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-indigo-300 font-medium">
+                          Dereje {i + 2}
+                        </span>
+                        <button
+                          type="button"
+                          className="text-[10px] text-rose-400"
+                          onClick={() => {
+                            const next = [...(ds.drillDown?.levels || [])];
+                            next.splice(i, 1);
+                            patchDs({
+                              drillDown: {
+                                ...ds.drillDown!,
+                                levels: next.length ? next : undefined,
+                              },
+                            });
+                          }}
+                        >
+                          Poz
+                        </button>
+                      </div>
+                      <Input
+                        label="sourceField"
+                        value={lv.sourceField || ''}
+                        onChange={(e) => {
+                          const next = [...(ds.drillDown?.levels || [])];
+                          next[i] = { ...next[i], sourceField: e.target.value };
+                          patchDs({ drillDown: { ...ds.drillDown!, levels: next } });
+                        }}
+                        placeholder="brand_id"
+                      />
+                      <Input
+                        label="targetParam"
+                        value={lv.targetParam || ''}
+                        onChange={(e) => {
+                          const next = [...(ds.drillDown?.levels || [])];
+                          next[i] = {
+                            ...next[i],
+                            targetParam: e.target.value || undefined,
+                          };
+                          patchDs({ drillDown: { ...ds.drillDown!, levels: next } });
+                        }}
+                        placeholder="brand_id"
+                      />
+                      <Input
+                        label="path (boş = birinji child path)"
+                        value={lv.path || ''}
+                        onChange={(e) => {
+                          const next = [...(ds.drillDown?.levels || [])];
+                          next[i] = { ...next[i], path: e.target.value || undefined };
+                          patchDs({ drillDown: { ...ds.drillDown!, levels: next } });
+                        }}
+                        placeholder="/api/products-by-brand"
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                    onClick={() => {
+                      const next = [
+                        ...(ds.drillDown?.levels || []),
+                        {
+                          sourceField: ds.drillDown?.sourceField || 'id',
+                          targetParam: ds.drillDown?.targetParam,
+                        },
+                      ];
+                      patchDs({ drillDown: { ...ds.drillDown!, levels: next } });
+                    }}
+                  >
+                    + Indiki dereje goş
+                  </button>
+                </>
+              )}
               <Select
                 label="Child endpoint"
                 value={
