@@ -1,5 +1,8 @@
 'use client';
 
+// Task 12: Parameter persistence — cache required param values across widgets
+// Task 13: Column selection for aggregate functions (Sum, Count, etc.)
+
 import { useEffect, useMemo, useState } from 'react';
 import type {
   DashboardWidget,
@@ -46,6 +49,26 @@ export function WidgetConfigPanel({
   const [columnsLoading, setColumnsLoading] = useState(false);
   const [columnsError, setColumnsError] = useState('');
   const [columnsTick, setColumnsTick] = useState(0);
+  
+  // Task 12: Cache required param values in localStorage so same params don't need re-entry
+  const [paramCache, setParamCache] = useState<Record<string, string>>(() => {
+    try {
+      const cached = localStorage.getItem('bi-param-cache');
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
+  
+  // Task 12: Track required params that need filling
+  const [requiredParamValues, setRequiredParamValues] = useState<Record<string, string>>({});
+  const [showRequiredParamsForm, setShowRequiredParamsForm] = useState(false);
+  
+  // Task 13: Column selection for aggregate functions
+  const [aggregateColumn, setAggregateColumn] = useState<string>(
+    widget.dataSource?.aggregateColumn || ''
+  );
+  
   const ds = widget.dataSource;
 
   useEffect(() => {
@@ -933,42 +956,146 @@ export function WidgetConfigPanel({
             </>
           )}
           {widget.type === 'kpi' && (
-            <div className="grid grid-cols-3 gap-2">
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <Input
+                  label="Decimals"
+                  type="number"
+                  value={String(widget.config?.decimals ?? '')}
+                  onChange={(e) =>
+                    onChange({
+                      ...widget,
+                      config: {
+                        ...widget.config,
+                        decimals: e.target.value === '' ? undefined : Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+                <Input
+                  label="Prefix"
+                  value={widget.config?.prefix || ''}
+                  onChange={(e) =>
+                    onChange({
+                      ...widget,
+                      config: { ...widget.config, prefix: e.target.value || undefined },
+                    })
+                  }
+                  placeholder="$"
+                />
+                <Input
+                  label="Suffix"
+                  value={widget.config?.suffix || ''}
+                  onChange={(e) =>
+                    onChange({
+                      ...widget,
+                      config: { ...widget.config, suffix: e.target.value || undefined },
+                    })
+                  }
+                  placeholder="%"
+                />
+              </div>
+
+              {/* Task 5: Text Alignment Options */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold text-slate-300">
+                  Text Alignment
+                </label>
+                <div className="flex gap-2">
+                  {(['center', 'left', 'right'] as const).map((align) => (
+                    <button
+                      key={align}
+                      type="button"
+                      onClick={() =>
+                        onChange({
+                          ...widget,
+                          config: { ...widget.config, textAlign: align },
+                        })
+                      }
+                      className={`px-3 py-1 rounded text-xs font-medium transition ${
+                        (widget.config?.textAlign || 'center') === align
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {align === 'center'
+                        ? '⊙ Merkez'
+                        : align === 'left'
+                        ? '⊣ Çep'
+                        : '⊢ Sag'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Task 5: Text Color */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold text-slate-300">
+                  Teksti Tüsy
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="color"
+                    value={widget.config?.color || '#ffffff'}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, color: e.target.value },
+                      })
+                    }
+                    className="w-12 h-8 rounded cursor-pointer"
+                  />
+                  <Input
+                    label="Hex"
+                    value={widget.config?.color || '#ffffff'}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: { ...widget.config, color: e.target.value },
+                      })
+                    }
+                    placeholder="#ffffff"
+                  />
+                </div>
+              </div>
+
+              {/* Task 5: Auto Text Size */}
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold text-slate-300">
+                  Responsive Font
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={widget.config?.enableAutoTextSize !== false}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          enableAutoTextSize: e.target.checked,
+                        },
+                      })
+                    }
+                    className="rounded"
+                  />
+                  <span className="text-xs text-slate-300">
+                    Enable: widget size'yna göre font scaling
+                  </span>
+                </label>
+              </div>
+
+              {/* Task 5: Unit/Label */}
               <Input
-                label="Decimals"
-                type="number"
-                value={String(widget.config?.decimals ?? '')}
+                label="Unit / Label (iki setir)"
+                value={widget.config?.unit || ''}
                 onChange={(e) =>
                   onChange({
                     ...widget,
-                    config: {
-                      ...widget.config,
-                      decimals: e.target.value === '' ? undefined : Number(e.target.value),
-                    },
+                    config: { ...widget.config, unit: e.target.value || undefined },
                   })
                 }
-              />
-              <Input
-                label="Prefix"
-                value={widget.config?.prefix || ''}
-                onChange={(e) =>
-                  onChange({
-                    ...widget,
-                    config: { ...widget.config, prefix: e.target.value || undefined },
-                  })
-                }
-                placeholder="$"
-              />
-              <Input
-                label="Suffix"
-                value={widget.config?.suffix || ''}
-                onChange={(e) =>
-                  onChange({
-                    ...widget,
-                    config: { ...widget.config, suffix: e.target.value || undefined },
-                  })
-                }
-                placeholder="%"
+                placeholder="TMT, %,  pieces"
               />
             </div>
           )}
@@ -1522,6 +1649,65 @@ export function WidgetConfigPanel({
               </label>
             </>
           )}
+        </div>
+      )}
+
+      {/* Task 12: Required Parameters Form - shows when API needs additional params */}
+      {showRequiredParamsForm && (
+        <div className="space-y-3 rounded-xl border border-amber-600/30 bg-amber-950/20 p-4 mt-4">
+          <p className="text-xs font-semibold text-amber-300 flex items-center gap-2">
+            ⚠️ Gere Parametrler - Doldurmaly
+          </p>
+          <p className="text-xs text-slate-300">
+            API maglumat bermek üçin aşakdaky parametrleri doldurmalysy:
+          </p>
+          
+          <div className="space-y-2">
+            {Object.entries(requiredParamValues).map(([key, value]) => (
+              <div key={key}>
+                <label className="text-[11px] font-semibold text-slate-300 block mb-1">
+                  {key}
+                </label>
+                <Input
+                  value={value}
+                  onChange={(e) => {
+                    const newValues = { ...requiredParamValues, [key]: e.target.value };
+                    setRequiredParamValues(newValues);
+                    // Task 12: Auto-cache required param values
+                    const newCache = { ...paramCache, [key]: e.target.value };
+                    setParamCache(newCache);
+                    try {
+                      localStorage.setItem('bi-param-cache', JSON.stringify(newCache));
+                    } catch {}
+                  }}
+                  placeholder={`${key} gir`}
+                  className="h-8 text-xs"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setShowRequiredParamsForm(false)}
+            >
+              Ýap
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => {
+                // Retry API fetch with new params
+                setColumnsTick((t) => t + 1);
+                setShowRequiredParamsForm(false);
+              }}
+            >
+              ✓ Täzele
+            </Button>
+          </div>
         </div>
       )}
 

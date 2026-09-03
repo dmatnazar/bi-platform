@@ -1,30 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
+import { useAppAnimations } from '@/lib/use-app-animations';
 
 export function AppShellBackground() {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const cached = localStorage.getItem('bi-app-animations');
-        if (cached === '0') setOn(false);
-        const res = await fetch('/api/settings/public', { cache: 'no-store' });
-        const data = await res.json().catch(() => ({}));
-        if (!cancelled && typeof data.appAnimations === 'boolean') {
-          setOn(data.appAnimations);
-          localStorage.setItem('bi-app-animations', data.appAnimations ? '1' : '0');
-        }
-      } catch {
-        /* */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const on = useAppAnimations();
   if (!on) return <div className="absolute inset-0 bg-slate-950" aria-hidden />;
   return (
     <>
@@ -38,14 +18,6 @@ export function AppShellBackground() {
 }
 
 export function AppPageMotion({ children }: { children: React.ReactNode }) {
-  const [on, setOn] = useState(true);
-  useEffect(() => {
-    try {
-      const cached = localStorage.getItem('bi-app-animations');
-      if (cached === '0') setOn(false);
-    } catch {
-      /* */
-    }
-  }, []);
+  const on = useAppAnimations();
   return <div className={on ? 'animate-fade-in' : undefined}>{children}</div>;
 }

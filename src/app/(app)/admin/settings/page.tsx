@@ -69,6 +69,7 @@ export default function SettingsPage() {
   );
   const [authAnimations, setAuthAnimations] = useState(true);
   const [appAnimations, setAppAnimations] = useState(true);
+  const [modalAnimations, setModalAnimations] = useState(true);
 
   const loadGateway = useCallback(async () => {
     const res = await fetch('/api/settings');
@@ -81,6 +82,7 @@ export default function SettingsPage() {
       if (data.version) setVersion(data.version);
       setAuthAnimations(data.settings?.authAnimations !== false);
       setAppAnimations(data.settings?.appAnimations !== false);
+      setModalAnimations(data.settings?.modalAnimations !== false);
     }
   }, []);
 
@@ -190,7 +192,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authAnimations, appAnimations }),
+        body: JSON.stringify({ authAnimations, appAnimations, modalAnimations }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
@@ -198,6 +200,7 @@ export default function SettingsPage() {
       try {
         localStorage.setItem('bi-auth-animations', authAnimations ? '1' : '0');
         localStorage.setItem('bi-app-animations', appAnimations ? '1' : '0');
+        localStorage.setItem('bi-modal-animations', modalAnimations ? '1' : '0');
       } catch {
         /* */
       }
@@ -450,6 +453,20 @@ export default function SettingsPage() {
               className="h-4 w-4 rounded border-slate-600 accent-indigo-500"
               checked={appAnimations}
               onChange={(e) => setAppAnimations(e.target.checked)}
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
+            <span>
+              Modallar (aç/ýap)
+              <span className="block text-[10px] text-slate-500 font-normal">
+                Widget/API redaktor, tassyklama (warning) penjireleriniň geçiş animasiýasy
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-600 accent-indigo-500"
+              checked={modalAnimations}
+              onChange={(e) => setModalAnimations(e.target.checked)}
             />
           </label>
           <Button size="sm" loading={saving === 'anim'} onClick={() => void saveAnimations()}>

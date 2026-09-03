@@ -24,6 +24,7 @@ const defaultData = (): DbSchema => ({
     catalogSyncIntervalSec: 0,
     authAnimations: true,
     appAnimations: true,
+    modalAnimations: true,
   },
 });
 

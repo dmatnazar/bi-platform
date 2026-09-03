@@ -9,6 +9,7 @@ import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
 import { ToastHost } from '@/components/ui/Toast';
 import { LoginAppsSection } from '@/components/apps/LoginAppsSection';
+import { requestFullscreenSafe, fullscreenPrefDisabled } from '@/lib/fullscreen';
 
 interface Notif {
   id: string;
@@ -77,6 +78,9 @@ export default function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    // Must fire synchronously inside this gesture — calling it after an
+    // `await` loses the user-activation flag and browsers silently reject it.
+    if (!fullscreenPrefDisabled()) requestFullscreenSafe();
     setError('');
     setWarning('');
     setLoading(true);

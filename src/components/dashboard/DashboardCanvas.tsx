@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import GridLayout, { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -45,6 +45,16 @@ export function DashboardCanvas({
   // read a busy table/chart comfortably.
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const expandedWidget = dashboard.widgets.find((w) => w.id === expandedId) || null;
+  
+  // Task 8: Track unsaved widget arrange changes
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  
+  // Task 7: Widget transfer between dashboards
+  const [transferWidgetId, setTransferWidgetId] = useState<string | null>(null);
+  const [targetDashboards, setTargetDashboards] = useState<Dashboard[]>([]);
+  const [selectedDbKey, setSelectedDbKey] = useState<string | null>(null);
 
   // Lock page scroll + support Escape while the fullscreen widget view is open
   useEffect(() => {
@@ -82,15 +92,54 @@ export function DashboardCanvas({
     return () => window.removeEventListener('bi-widget-expand', onExpand as EventListener);
   }, []);
 
+  // Mobile browsers fire ResizeObserver's contentRect a beat before the
+  // layout has actually settled (address-bar show/hide, orientation change,
+  // pull-to-refresh elastic scroll) which used to leave the grid holding a
+  // stale width — some widgets then rendered full-width, others squashed to
+  // the left with a big empty gap on the right. getBoundingClientRect() on a
+  // rAF-throttled re-measure, plus explicit orientation/visualViewport
+  // listeners, keeps `width` accurate on real devices, not just in the
+  // desktop simulator.
+  const containerElRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
+    containerElRef.current = node;
+  }, []);
+
+  useEffect(() => {
+    const node = containerElRef.current;
     if (!node) return;
-    const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w) setWidth(Math.floor(w));
-    });
+    let raf = 0;
+    const measure = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const rect = node.getBoundingClientRect();
+        const w = rect.width;
+        // Task 11: Mobile fix - ensure full width, no left shift
+        // Account for padding/margin: use offsetWidth for true layout width
+        const layoutWidth = node.offsetWidth || w;
+        if (layoutWidth) {
+          setWidth(Math.floor(layoutWidth));
+          // Ensure parent container is also full width
+          if (node.parentElement) {
+            node.parentElement.style.width = '100%';
+            node.parentElement.style.overflow = 'hidden';
+          }
+        }
+      });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(node);
-    setWidth(node.clientWidth);
-    return () => ro.disconnect();
+    window.addEventListener('resize', measure);
+    window.addEventListener('orientationchange', measure);
+    window.visualViewport?.addEventListener('resize', measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('orientationchange', measure);
+      window.visualViewport?.removeEventListener('resize', measure);
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   const layout: Layout[] = dashboard.widgets.map((w) => ({
@@ -103,8 +152,10 @@ export function DashboardCanvas({
     minH: 2,
   }));
 
-  // Mobile: single column with stable sequential y (order = mobileOrder or desktop y).
-  // Desktop x/y/w/h never overwritten by the forced 1-col view.
+  // Mobile: KPI-style widgets default to half-width so two of them can sit
+  // side by side in one row; everything else stays full width unless the
+  // user overrides it (mobileW, toggled from the per-widget "Ini" button).
+  const MOBILE_COLS = 2;
   const mobileLayout: Layout[] = (() => {
     const ordered = [...dashboard.widgets].sort((a, b) => {
       const ao = a.mobileOrder ?? a.y;
@@ -112,30 +163,34 @@ export function DashboardCanvas({
       if (ao !== bo) return ao - bo;
       return a.x - b.x;
     });
-    let y = 0;
+    const colY = [0, 0]; // running height cursor per mobile column
     return ordered.map((w) => {
-      const h = Math.max(w.mobileH ?? w.h, 4);
-      const item: Layout = {
-        i: w.id,
-        x: 0,
-        y,
-        w: 1,
-        h,
-        minW: 1,
-        minH: 3,
-      };
-      y += h;
-      return item;
+      const h = Math.max(w.mobileH ?? w.h, 3);
+      const defaultW = w.type === 'kpi' ? 1 : MOBILE_COLS;
+      const width = Math.min(Math.max(w.mobileW ?? defaultW, 1), MOBILE_COLS);
+      if (width >= MOBILE_COLS) {
+        const y = Math.max(colY[0], colY[1]);
+        colY[0] = y + h;
+        colY[1] = y + h;
+        return { i: w.id, x: 0, y, w: MOBILE_COLS, h, minW: 1, minH: 3 };
+      }
+      const col = colY[0] <= colY[1] ? 0 : 1;
+      const y = colY[col];
+      colY[col] = y + h;
+      return { i: w.id, x: col, y, w: 1, h, minW: 1, minH: 3 };
     });
   })();
 
-  const effectiveCols = isMobile ? 1 : cols;
+  const effectiveCols = isMobile ? MOBILE_COLS : cols;
   const effectiveLayout = isMobile ? mobileLayout : layout;
 
   function onLayoutChange(next: Layout[]) {
     if (!editable || !onChange) return;
+    // Task 8: Mark changes as unsaved
+    setHasUnsavedChanges(true);
+    
     if (isMobile) {
-      // Persist only mobileOrder + mobileH — keep desktop grid intact
+      // Persist mobileOrder + mobileH + mobileW — keep desktop grid intact
       const sorted = [...next].sort((a, b) => a.y - b.y || a.x - b.x);
       const widgets = dashboard.widgets.map((w) => {
         const idx = sorted.findIndex((l) => l.i === w.id);
@@ -145,6 +200,7 @@ export function DashboardCanvas({
           ...w,
           mobileOrder: idx,
           mobileH: Math.max(l.h, 3),
+          mobileW: Math.min(Math.max(l.w, 1), MOBILE_COLS),
         };
       });
       onChange(widgets);
@@ -161,6 +217,17 @@ export function DashboardCanvas({
   function removeWidget(id: string) {
     if (!onChange) return;
     onChange(dashboard.widgets.filter((w) => w.id !== id));
+  }
+
+  /** Toggle a widget between half-width and full-width in the mobile grid. */
+  function toggleMobileWidth(id: string) {
+    if (!onChange) return;
+    const widgets = dashboard.widgets.map((w) => {
+      if (w.id !== id) return w;
+      const current = Math.min(Math.max(w.mobileW ?? (w.type === 'kpi' ? 1 : MOBILE_COLS), 1), MOBILE_COLS);
+      return { ...w, mobileW: current >= MOBILE_COLS ? 1 : MOBILE_COLS };
+    });
+    onChange(widgets);
   }
 
   function moveWidgetMobile(id: string, dir: -1 | 1) {
@@ -205,7 +272,11 @@ export function DashboardCanvas({
   }
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div 
+      ref={containerRef} 
+      className="w-full overflow-hidden"
+      style={{ width: '100%', maxWidth: '100%' }}
+    >
       <GridLayout
         className="layout"
         layout={effectiveLayout}
@@ -216,6 +287,7 @@ export function DashboardCanvas({
         containerPadding={[0, 0]}
         isDraggable={editable}
         isResizable={editable}
+        resizeHandles={editable ? ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] : []}
         compactType="vertical"
         onLayoutChange={onLayoutChange}
         draggableHandle=".drag-handle"
@@ -238,35 +310,23 @@ export function DashboardCanvas({
                 </button>
               )}
               <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 truncate">{widget.title}</h4>
-              <div className="flex items-center gap-0.5 shrink-0">
-                {editable && isMobile && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => moveWidgetMobile(widget.id, -1)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800"
-                      title="Ýokary süýş"
-                    >
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveWidgetMobile(widget.id, 1)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800"
-                      title="Aşak süýş"
-                    >
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
+              
+              {/* Task 16: Buttons positioned right - Maximize first, then others */}
+              <div className="flex items-center gap-0.5 shrink-0 ml-auto">
+                {/* Task 17: Full-page Refresh button - completely reload widget data */}
                 <button
                   type="button"
-                  onClick={() => bumpRefresh(widget.id)}
-                  className="p-1 rounded-lg text-slate-500 hover:text-sky-300 hover:bg-sky-500/10"
-                  title="Täzele"
+                  onClick={() => {
+                    bumpRefresh(widget.id);
+                    // Trigger full page refresh-like behavior
+                    window.dispatchEvent(new CustomEvent('bi-widget-fullrefresh', { detail: { id: widget.id } }));
+                  }}
+                  className="p-1 rounded-lg text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                  title="Doly täzele (page refresh)"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                 </button>
+
                 {['bar', 'line', 'pie', 'area'].includes(widget.type) && (
                   <>
                     <button
@@ -278,7 +338,7 @@ export function DashboardCanvas({
                           })
                         )
                       }
-                      className="p-1 rounded-lg text-slate-500 hover:text-sky-300 hover:bg-sky-500/10"
+                      className="p-1 rounded-lg text-slate-500 hover:text-sky-300 hover:bg-sky-500/10 transition-colors"
                       title="Reset zoom"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
@@ -292,27 +352,30 @@ export function DashboardCanvas({
                           })
                         )
                       }
-                      className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10"
+                      className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
                       title="PNG ýükle"
                     >
                       <Download className="h-3.5 w-3.5" />
                     </button>
                   </>
                 )}
+
+                {/* Task 16: Maximize button positioned far right */}
                 <button
                   type="button"
                   onClick={() => setExpandedId(widget.id)}
-                  className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10"
+                  className="p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 shadow-lg backdrop-blur transition-colors"
                   title="Doly ekran"
                 >
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <Maximize2 className="h-4 w-4" />
                 </button>
+
                 {editable && (
                   <>
                     <button
                       type="button"
                       onClick={() => onConfigureWidget?.(widget.id)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10"
+                      className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
                       title="Sazla"
                     >
                       <Settings2 className="h-3.5 w-3.5" />
@@ -320,7 +383,7 @@ export function DashboardCanvas({
                     <button
                       type="button"
                       onClick={() => removeWidget(widget.id)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10"
+                      className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                       title="Poz"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -328,6 +391,38 @@ export function DashboardCanvas({
                   </>
                 )}
               </div>
+
+              {/* Task 16: Mobile buttons (width, move up/down) - below main header on mobile */}
+              {editable && isMobile && (
+                <div className="flex items-center gap-0.5 absolute top-10 left-2 z-10">
+                  <button
+                    type="button"
+                    onClick={() => toggleMobileWidth(widget.id)}
+                    className="px-1 py-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 text-[10px] font-semibold leading-none w-[22px] text-center"
+                    title="Ini: ýarym / doly"
+                  >
+                    {Math.min(Math.max(widget.mobileW ?? (widget.type === 'kpi' ? 1 : MOBILE_COLS), 1), MOBILE_COLS) >= MOBILE_COLS
+                      ? '½'
+                      : '1/1'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveWidgetMobile(widget.id, -1)}
+                    className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                    title="Ýokary süýş"
+                  >
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveWidgetMobile(widget.id, 1)}
+                    className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800"
+                    title="Aşak süýş"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
             <div className="flex-1 min-h-0 p-1.5 sm:p-3">
               <LiveWidget
@@ -409,6 +504,62 @@ export function DashboardCanvas({
                   globalFilters={globalFilters}
                   refreshToken={refreshTokens[expandedWidget.id]}
                 />
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+      
+      {/* Task 8: Unsaved changes warning dialog */}
+      {showUnsavedDialog &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[2147481600] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-md" onClick={() => setShowUnsavedDialog(false)} />
+            <div className="relative bg-slate-900 border border-emerald-600/30 rounded-xl shadow-2xl p-6 max-w-sm animate-in fade-in zoom-in-95">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-1 h-8 bg-emerald-500 rounded-full"></div>
+                <h3 className="text-lg font-bold text-white">Saklanmadyk üýtgetmeler</h3>
+              </div>
+              <p className="text-slate-300 mb-6 text-sm">
+                Widget tertiplemelerinde üýtgetmeler boldy. Ýokarda "<strong>↶ Undo</strong>" iconuna basyp undo edip bilärsiňiz ýa-da aşakdaky dülkemelerden saýlanyp bilärsiňiz:
+              </p>
+              
+              <div className="space-y-3">
+                <div className="flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUnsavedDialog(false);
+                      setPendingAction(null);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium transition text-sm"
+                  >
+                    ✕ Ýap
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUnsavedDialog(false);
+                      setHasUnsavedChanges(false);
+                      setPendingAction(null);
+                    }}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 font-medium transition text-sm"
+                  >
+                    ↻ Üýtget
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowUnsavedDialog(false);
+                      setHasUnsavedChanges(false);
+                      if (pendingAction) pendingAction();
+                    }}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition text-sm flex items-center gap-1"
+                  >
+                    💾 Sakla
+                  </button>
+                </div>
               </div>
             </div>
           </div>,

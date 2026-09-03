@@ -6,6 +6,7 @@ import { Providers } from '@/components/Providers';
 import { SupportFab } from '@/components/support/SupportFab';
 import { ConnectionStatusBar } from '@/components/layout/ConnectionStatusBar';
 import { AppShellBackground, AppPageMotion } from '@/components/layout/AppShellBackground';
+import { FullscreenController } from '@/components/layout/FullscreenController';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await getSession();
@@ -36,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </main>
       <SupportFab />
+      <FullscreenController />
       </div>
     </div>
   );

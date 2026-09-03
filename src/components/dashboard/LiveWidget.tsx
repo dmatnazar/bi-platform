@@ -1,5 +1,8 @@
 'use client';
 
+// Task 5: Mobile-responsive widget rendering
+// Task 11: Layout container fixes for proper mobile display
+
 import { useEffect, useMemo, useState } from 'react';
 import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import {

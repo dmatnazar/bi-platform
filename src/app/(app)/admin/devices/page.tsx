@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useModalAnimations } from '@/lib/use-modal-animations';
 
 interface Device {
   id: string;
@@ -73,6 +74,7 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function DevicesPage() {
+  const modalAnimOn = useModalAnimations();
   const [devices, setDevices] = useState<Device[]>([]);
   const [tenants, setTenants] = useState<TenantOpt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -521,7 +523,7 @@ export default function DevicesPage() {
       {approveId && (
         <ModalPortal open={Boolean(approveId)}>
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className="bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl animate-in slide-in-from-bottom-4 duration-200">
+          <div className={`bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
             <h2 className="text-lg font-bold text-white">Firma bagla we tassykla</h2>
             <p className="text-xs text-slate-400">
               Saýlanan firmalar üçin Electron tunnel we sync açylýar. BI hasabatlary şol firmalar bilen işleýär.
@@ -575,7 +577,7 @@ export default function DevicesPage() {
         <ModalPortal open={Boolean(settingsDevice)}>
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setSettingsDevice(null)} />
-          <div className="relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/10 animate-in slide-in-from-bottom-4 duration-200">
+          <div className={`relative w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/10${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
             <div className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900/95 px-5 py-4 backdrop-blur">
               <h3 className="text-lg font-semibold text-white text-center">Firma Sazlamalary</h3>
               <p className="text-xs text-slate-400 text-center mt-1 truncate">

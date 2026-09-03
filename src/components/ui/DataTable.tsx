@@ -296,7 +296,7 @@ export function DataTable<T>({
 
       {/* Desktop table */}
       <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-800">
-        <table className="w-full text-sm">
+        <table className="w-full text-[15px]">
           <thead>
             <tr className="bg-slate-900/80 border-b border-slate-800 text-left text-slate-400">
               {visibleCols.map((c) => (
@@ -305,7 +305,7 @@ export function DataTable<T>({
                   draggable
                   onDragStart={() => onDragStart(c.id)}
                   onDragOver={(e) => onDragOver(e, c.id)}
-                  className="px-3 py-2.5 font-medium whitespace-nowrap"
+                  className="px-3 py-2.5 font-medium whitespace-nowrap text-sm"
                 >
                   <button
                     type="button"
@@ -403,7 +403,7 @@ export function DataTable<T>({
                 )}
               >
                 {primary && (
-                  <div className="font-semibold text-white text-sm leading-snug break-words border-b border-slate-800 pb-2">
+                  <div className="font-semibold text-white text-base leading-snug break-words border-b border-slate-800 pb-2">
                     {primary.cell ? primary.cell(row) : String(primary.accessor(row) ?? '')}
                   </div>
                 )}
@@ -412,8 +412,8 @@ export function DataTable<T>({
                     const content = c.cell ? c.cell(row) : String(c.accessor(row) ?? '—');
                     return (
                       <div key={c.id} className="min-w-0">
-                        <p className="text-[9px] uppercase tracking-wide text-slate-500 truncate">{c.header}</p>
-                        <div className="text-[12px] text-slate-200 leading-snug break-words mt-0.5">{content}</div>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500 truncate">{c.header}</p>
+                        <div className="text-[13px] text-slate-200 leading-snug break-words mt-0.5">{content}</div>
                       </div>
                     );
                   })}

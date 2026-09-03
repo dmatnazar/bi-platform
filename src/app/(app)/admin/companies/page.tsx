@@ -7,6 +7,7 @@ import { ModalPortal } from '@/components/ui/ModalPortal';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useModalAnimations } from '@/lib/use-modal-animations';
 
 interface Company {
   id: string;
@@ -91,6 +92,7 @@ function PhoneField({
 }
 
 export default function CompaniesPage() {
+  const modalAnimOn = useModalAnimations();
   const [list, setList] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
@@ -476,7 +478,7 @@ export default function CompaniesPage() {
               setModal(false);
             }}
           />
-          <div className="relative w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 p-5 sm:p-6 space-y-5 shadow-2xl shadow-indigo-500/10 animate-in slide-in-from-bottom-4 duration-200">
+          <div className={`relative w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 p-5 sm:p-6 space-y-5 shadow-2xl shadow-indigo-500/10${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
             <h3 className="text-lg font-semibold text-white text-center">
               {editing ? 'Kompaniyany uytget' : 'Taze kompaniya'}
             </h3>

@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   X,
+  ChevronLeft,
   BarChart3,
   Network,
   Settings,
@@ -38,7 +39,28 @@ export function Sidebar({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [badges, setBadges] = useState<NavBadges>({});
+
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem('bi-sidebar-collapsed') === '1');
+    } catch {
+      /* */
+    }
+  }, []);
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('bi-sidebar-collapsed', next ? '1' : '0');
+      } catch {
+        /* */
+      }
+      return next;
+    });
+  }, []);
 
   const loadBadges = useCallback(async () => {
     try {
@@ -136,7 +158,7 @@ export function Sidebar({ user }: Props) {
 
   const NavContent = (
     <>
-      <div className="flex items-center gap-3 px-4 py-5 border-b border-slate-800">
+      <div className="flex items-center gap-3 px-4 py-5 pr-10 border-b border-slate-800">
         <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0">
           <BarChart3 className="h-5 w-5 text-white" />
         </div>
@@ -214,8 +236,34 @@ export function Sidebar({ user }: Props) {
         <Menu className="h-5 w-5" />
       </button>
 
-      <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 backdrop-blur-xl">
-        {NavContent}
+      {/* Desktop collapse toggle — floats outside only while collapsed */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title="Menýuny görkez"
+          className="hidden lg:flex fixed top-3 left-3 z-50 p-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+        >
+          <Menu className="h-4 w-4" />
+        </button>
+      )}
+
+      <aside
+        className={cn(
+          'hidden lg:flex shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 backdrop-blur-xl overflow-hidden transition-[width] duration-200 ease-in-out relative',
+          collapsed ? 'w-0 border-r-0' : 'w-60'
+        )}
+      >
+        {/* Collapse toggle — docked inside the sidebar itself while it's open */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title="Menýuny gizle"
+          className="absolute top-4 right-2.5 z-10 p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <div className="w-60 h-full flex flex-col">{NavContent}</div>
       </aside>
 
       {open && (

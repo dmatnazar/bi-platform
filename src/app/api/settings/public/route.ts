@@ -8,5 +8,6 @@ export async function GET() {
     gatewayUrl: s.gatewayUrl,
     authAnimations: s.authAnimations !== false,
     appAnimations: s.appAnimations !== false,
+    modalAnimations: s.modalAnimations !== false,
   });
 }

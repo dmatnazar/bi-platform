@@ -206,6 +206,10 @@ export interface DashboardWidget {
   mobileOrder?: number;
   /** Mobile height in grid units */
   mobileH?: number;
+  /** Mobile width in grid units, out of MOBILE_COLS (2). 1 = half width (lets two
+   *  KPI-style widgets sit side by side), 2 = full width. Defaults to half for
+   *  'kpi' widgets and full for everything else when unset. */
+  mobileW?: number;
   dataSource?: WidgetDataSource;
   /** static KPI value or text content when no dataSource */
   staticValue?: string | number;
@@ -399,6 +403,8 @@ export interface DbSchema {
     authAnimations?: boolean;
     /** App shell particles & page animations after login */
     appAnimations?: boolean;
+    /** Modal open/close transition animations (widget config, confirm dialogs, etc.) */
+    modalAnimations?: boolean;
     /** Gmail / SMTP for forgot-password */
     mail?: {
       enabled?: boolean;

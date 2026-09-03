@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
+import { useModalAnimations } from '@/lib/use-modal-animations';
 
 type ConfirmResult = boolean | 'stay';
 
@@ -72,14 +75,22 @@ export function confirmDialog(opts: {
 export function ConfirmDialogHost() {
   const { open, title, message, confirmLabel, cancelLabel, stayLabel, danger, close } =
     useConfirmStore();
-  if (!open) return null;
-  return (
+  const [mounted, setMounted] = useState(false);
+  const animOn = useModalAnimations();
+  useEffect(() => setMounted(true), []);
+  if (!open || !mounted) return null;
+  return createPortal(
     <div className="fixed inset-0 z-[2147482900] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div
         className="absolute inset-0 bg-slate-950/80"
         onClick={() => close(stayLabel ? 'stay' : false)}
       />
-      <div className="relative w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl space-y-4">
+      <div
+        className={
+          'relative w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-950 p-5 shadow-2xl space-y-4' +
+          (animOn ? ' animate-in fade-in zoom-in-95 duration-150' : '')
+        }
+      >
         <div className="flex gap-3">
           <div
             className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -95,11 +106,11 @@ export function ConfirmDialogHost() {
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           {stayLabel && (
-            <Button variant="ghost" size="sm" onClick={() => close('stay')}>
+            <Button variant="secondary" size="sm" onClick={() => close('stay')}>
               {stayLabel}
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={() => close(false)}>
+          <Button variant="danger" size="sm" onClick={() => close(false)}>
             {cancelLabel}
           </Button>
           <Button variant={danger ? 'danger' : 'primary'} size="sm" onClick={() => close(true)}>
@@ -107,6 +118,7 @@ export function ConfirmDialogHost() {
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

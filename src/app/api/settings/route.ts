@@ -54,6 +54,7 @@ export async function GET() {
       catalogSyncIntervalSec: s.catalogSyncIntervalSec ?? 0,
       authAnimations: s.authAnimations !== false,
       appAnimations: s.appAnimations !== false,
+      modalAnimations: s.modalAnimations !== false,
     },
     gatewayOnline: online,
     version: '1.0.0',
@@ -67,6 +68,7 @@ const patchSchema = z.object({
   clearSecret: z.boolean().optional(),
   authAnimations: z.boolean().optional(),
   appAnimations: z.boolean().optional(),
+  modalAnimations: z.boolean().optional(),
 });
 
 function normalizeGatewayUrl(raw: string): string | null {
@@ -114,6 +116,9 @@ export async function PUT(req: NextRequest) {
   }
   if (parsed.data.appAnimations !== undefined) {
     patch.appAnimations = parsed.data.appAnimations;
+  }
+  if (parsed.data.modalAnimations !== undefined) {
+    patch.modalAnimations = parsed.data.modalAnimations;
   }
   if (parsed.data.clearSecret) patch.gatewayAdminSecret = '';
   else if (parsed.data.gatewayAdminSecret && parsed.data.gatewayAdminSecret !== '••••••••') {

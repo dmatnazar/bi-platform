@@ -10,6 +10,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
 import { formatDate } from '@/lib/utils';
 import { toastSuccess, toastError, toastInfo } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useModalAnimations } from '@/lib/use-modal-animations';
 
 interface StaffRow {
   id: string;
@@ -43,6 +44,7 @@ function phoneLocal(p?: string) {
 }
 
 export default function StaffPage() {
+  const modalAnimOn = useModalAnimations();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [regs, setRegs] = useState<Reg[]>([]);
   const [loading, setLoading] = useState(true);
@@ -389,7 +391,7 @@ export default function StaffPage() {
         <ModalPortal open={Boolean(modal)}>
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setModal(false)} />
-          <div className="relative w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/10 flex flex-col max-h-[min(92vh,780px)] animate-in slide-in-from-bottom-4 duration-200">
+          <div className={`relative w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/10 flex flex-col max-h-[min(92vh,780px)]${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
             <h3 className="text-lg font-semibold text-white text-center px-5 pt-5 pb-3 shrink-0 border-b border-slate-800/80">
               {editing ? 'Işgäri üýtget' : 'Täze işgär'}
             </h3>

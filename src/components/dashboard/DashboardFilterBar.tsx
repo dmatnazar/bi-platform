@@ -46,8 +46,9 @@ function toDateInputValue(v: unknown): string {
 
 const PRESETS: { label: string; begin: () => string; end: () => string }[] = [
   { label: 'Bugün', begin: () => todayISO(), end: () => todayISO() },
-  { label: '7 gün', begin: () => daysAgoISO(6), end: () => todayISO() },
-  { label: '30 gün', begin: () => daysAgoISO(29), end: () => todayISO() },
+  { label: 'Soňky 2 gün', begin: () => daysAgoISO(1), end: () => todayISO() },
+  { label: 'Soňky 7 gün', begin: () => daysAgoISO(6), end: () => todayISO() },
+  { label: 'Soňky 30 gün', begin: () => daysAgoISO(29), end: () => todayISO() },
   { label: 'Bu aý', begin: () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;

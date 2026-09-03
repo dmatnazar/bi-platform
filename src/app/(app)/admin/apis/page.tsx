@@ -295,20 +295,27 @@ export default function ApisPage() {
       const choice = await confirmDialog({
         title: 'Saklanmadyk üýtgeşmeler',
         message:
-          'API redaktorynda saklanmadyk üýtgeşmeler bar.\n\n• Sakla we çyk — üýtgeşmeleri VPS-e ýazyp çykýar\n• Saklamazdan çyk — üýtgeşmeler ýitýär\n• Ýatda sakla — redaktorda galýarsyňyz',
+          'API redaktorynda saklanmadyk üýtgeşmeler bar.\n\n• Sakla we çyk — üýtgeşmeleri VPS-e ýazyp çykýar\n• Saklamazdan çyk — üýtgeşmeler ýitýär\n• Redaktorda gal — hiç zat üýtgemän dowam edersiňiz',
         confirmLabel: 'Sakla we çyk',
         cancelLabel: 'Saklamazdan çyk',
-        stayLabel: 'Ýatda sakla',
+        stayLabel: 'Redaktorda gal',
         danger: false,
       });
       if (choice === 'stay') return;
       if (choice === true) {
         await saveEdit();
-        // saveEdit closes on success; if validation failed stay open
+        // saveEdit force-closes on success; if validation failed stay open
         return;
       }
       // false → discard and close
     }
+    forceClose();
+  }
+
+  /** Close the editor without re-checking dirty state (used right after a
+   * successful save, so the user doesn't get a second "unsaved changes"
+   * warning immediately after saving). */
+  function forceClose() {
     setEditEp(null);
     setExecResult(null);
     setShowResultModal(false);
@@ -379,7 +386,7 @@ export default function ApisPage() {
         return;
       }
       toastSuccess(isCreate ? 'API goşuldy' : 'API üýtgedildi', 'VPS-e ýazyldy · Electron catalog-dan görer');
-      closeEdit();
+      forceClose();
       await load(true);
     } finally {
       setSaving(false);
@@ -690,9 +697,6 @@ export default function ApisPage() {
                 Poz
               </Button>
             )}
-            <Button variant="secondary" size="sm" onClick={closeEdit}>
-              Ýatyr
-            </Button>
             <Button size="sm" loading={saving} onClick={() => void saveEdit()}>
               Sakla
             </Button>

@@ -1,5 +1,9 @@
 'use client';
 
+// Task 11: Mobile layout Flex/Grid width fix - ensure proper responsive container sizing
+// Prevents layout shifts and gaps on mobile browsers
+// Hydration fix: defer container width calculation until client-side
+
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
@@ -61,12 +65,19 @@ export function DashboardView({ initial, editable }: Props) {
   const [name, setName] = useState(initial.name);
   const [dirty, setDirty] = useState(false);
   const [configId, setConfigId] = useState<string | null>(null);
+  // Task 11: Hydration fix - track if component has mounted on client
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const filterDefs = dashboard.globalFilters || [];
   const [filterValues, setFilterValues] = useState<GlobalFilterValues>(() =>
     defaultFilterValues(initial.globalFilters || [])
   );
   const [filtersHydrated, setFiltersHydrated] = useState(false);
+  
+  // Task 11: Set hydration flag on mount (client-side only)
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Load saved filters AFTER mount (avoid SSR hydration mismatch on "N aktif")
   useEffect(() => {
@@ -242,16 +253,19 @@ export function DashboardView({ initial, editable }: Props) {
         />
       )}
 
-      <div className={editMode ? 'flex flex-col lg:flex-row gap-4' : ''}>
-        <div className="flex-1 min-w-0">
-          <DashboardCanvas
-            dashboard={{ ...dashboard, name }}
-            editable={editMode}
-            onChange={updateWidgets}
-            onConfigureWidget={(id) => setConfigId(id)}
-            globalFilters={effectiveFilterValues}
-          />
-        </div>
+      {/* Task 11: Hydration fix - ensure container is fully ready before rendering grid */}
+      {isHydrated && (
+        <div className={editMode ? 'flex flex-col lg:flex-row gap-4 w-full' : 'w-full'}>
+          {/* Task 11: Fixed mobile layout - ensure flex container properly handles width on mobile */}
+          <div className="flex-1 min-w-0 w-full overflow-x-hidden">
+            <DashboardCanvas
+              dashboard={{ ...dashboard, name }}
+              editable={editMode}
+              onChange={updateWidgets}
+              onConfigureWidget={(id) => setConfigId(id)}
+              globalFilters={effectiveFilterValues}
+            />
+          </div>
         {editMode && (
           <aside className="lg:w-80 shrink-0 space-y-4 h-fit sticky top-4">
             <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
@@ -278,7 +292,8 @@ export function DashboardView({ initial, editable }: Props) {
             )}
           </aside>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

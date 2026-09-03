@@ -275,6 +275,63 @@ function TableWidgetBody({
   const [drillLoading, setDrillLoading] = useState(false);
   const [drillError, setDrillError] = useState('');
 
+  // Drill-down table: user-adjustable columns + row search, remembered per
+  // widget across sessions (same idea as the parent table above) so removing
+  // a column here stays removed next time this hierarchy is opened.
+  const [drillSearch, setDrillSearch] = useState('');
+  const [drillColFilters, setDrillColFilters] = useState<Record<string, string>>({});
+  const [showDrillColFilters, setShowDrillColFilters] = useState(false);
+  const [drillHiddenCols, setDrillHiddenCols] = useState<Set<string>>(() => {
+    try {
+      const ls = localStorage.getItem(`bi-drill-hidden:${widget.id}`);
+      if (ls) return new Set(JSON.parse(ls) as string[]);
+    } catch { /* */ }
+    return new Set(dd?.hiddenColumns || []);
+  });
+  const [drillColOrderSaved, setDrillColOrderSaved] = useState<string[]>(() => {
+    try {
+      const ls = localStorage.getItem(`bi-drill-order:${widget.id}`);
+      if (ls) {
+        const parsed = JSON.parse(ls) as string[];
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch { /* */ }
+    return dd?.columnOrder || [];
+  });
+  const [drillMobilePrimaryCols, setDrillMobilePrimaryCols] = useState<string[]>(() => {
+    try {
+      const ls = localStorage.getItem(`bi-drill-mobile-primary:${widget.id}`);
+      if (ls) {
+        const parsed = JSON.parse(ls) as string[];
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch { /* */ }
+    return [];
+  });
+  const [showDrillColPicker, setShowDrillColPicker] = useState(false);
+  const persistDrillHiddenCols = (next: Set<string>) => {
+    setDrillHiddenCols(next);
+    try {
+      localStorage.setItem(`bi-drill-hidden:${widget.id}`, JSON.stringify([...next]));
+    } catch { /* */ }
+  };
+  const persistDrillColOrder = (next: string[]) => {
+    setDrillColOrderSaved(next);
+    try {
+      localStorage.setItem(`bi-drill-order:${widget.id}`, JSON.stringify(next));
+    } catch { /* */ }
+  };
+  const persistDrillMobilePrimary = (next: string[]) => {
+    setDrillMobilePrimaryCols(next);
+    try {
+      localStorage.setItem(`bi-drill-mobile-primary:${widget.id}`, JSON.stringify(next));
+    } catch { /* */ }
+  };
+  function clearDrillFilters() {
+    setDrillSearch('');
+    setDrillColFilters({});
+  }
+
 
   const visibleCols = useMemo(
     () => colOrder.filter((c) => !hiddenCols.has(c)),
@@ -315,6 +372,8 @@ function TableWidgetBody({
     setDrillLoading(true);
     setDrillError('');
     setDrillRows([]);
+    setDrillSearch('');
+    setDrillColFilters({});
 
     try {
       const targetParam = dd.targetParam || dd.sourceField;
@@ -502,15 +561,39 @@ function TableWidgetBody({
   }
 
 
-  const drillColKeys = useMemo(() => {
+  // All columns available in the drill-down result (order + hidden are the
+  // user's saved choices, falling back to the widget's static config).
+  const drillAllColKeys = useMemo(() => {
     if (!drillRows[0]) return [] as string[];
     const all = Object.keys(drillRows[0]);
-    const order = dd?.columnOrder?.length
-      ? [...dd.columnOrder.filter((c) => all.includes(c)), ...all.filter((c) => !(dd.columnOrder || []).includes(c))]
+    const savedOrder = drillColOrderSaved;
+    const order = savedOrder.length
+      ? [...savedOrder.filter((c) => all.includes(c)), ...all.filter((c) => !savedOrder.includes(c))]
       : all;
-    const hidden = new Set(dd?.hiddenColumns || []);
-    return order.filter((c) => !hidden.has(c));
-  }, [drillRows, dd?.columnOrder, dd?.hiddenColumns]);
+    return order;
+  }, [drillRows, drillColOrderSaved]);
+
+  const drillColKeys = useMemo(
+    () => drillAllColKeys.filter((c) => !drillHiddenCols.has(c)),
+    [drillAllColKeys, drillHiddenCols]
+  );
+
+  const drillFilteredRows = useMemo(() => {
+    let out = drillRows;
+    const q = drillSearch.trim().toLowerCase();
+    if (q) out = out.filter((r) => drillColKeys.some((k) => String(r[k] ?? '').toLowerCase().includes(q)));
+    for (const [col, fv] of Object.entries(drillColFilters)) {
+      const fq = fv.trim().toLowerCase();
+      if (!fq) continue;
+      out = out.filter((r) => String(r[col] ?? '').toLowerCase().includes(fq));
+    }
+    return out;
+  }, [drillRows, drillSearch, drillColFilters, drillColKeys]);
+
+  const activeDrillColFilterCount = useMemo(
+    () => Object.values(drillColFilters).filter((v) => v.trim()).length,
+    [drillColFilters]
+  );
 
   return (
     <div className={cn('h-full max-h-full flex flex-col min-h-0 overflow-hidden gap-1.5', className)}>
@@ -895,6 +978,148 @@ function TableWidgetBody({
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {!drillLoading && !drillError && drillRows.length > 0 && (
+              <div className="shrink-0 flex items-center gap-1.5 px-3 pt-2.5">
+                <div className="relative flex-1 min-w-0">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
+                  <input
+                    value={drillSearch}
+                    onChange={(e) => setDrillSearch(e.target.value)}
+                    placeholder="Gözle..."
+                    className="w-full h-8 pl-7 pr-7 rounded-lg bg-slate-950/80 border border-slate-700 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                  />
+                  {drillSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setDrillSearch('')}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowDrillColFilters((v) => !v)}
+                    className={cn(
+                      'h-8 px-2 rounded-lg border text-xs inline-flex items-center gap-1 shrink-0',
+                      showDrillColFilters || activeDrillColFilterCount
+                        ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
+                        : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
+                    )}
+                    title="Sütün filterleri"
+                  >
+                    <Filter className="h-3.5 w-3.5" />
+                    {activeDrillColFilterCount > 0 ? activeDrillColFilterCount : 'Filter'}
+                  </button>
+                </div>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowDrillColPicker((v) => !v)}
+                    className={cn(
+                      'h-8 px-2 rounded-lg border text-xs inline-flex items-center gap-1',
+                      showDrillColPicker || drillHiddenCols.size
+                        ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
+                        : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
+                    )}
+                    title="Sütünleri görkez / gizle"
+                  >
+                    <Columns3 className="h-3.5 w-3.5" />
+                    Sütünler
+                    {drillHiddenCols.size > 0 && (
+                      <span className="text-[10px] opacity-80">({drillColKeys.length}/{drillAllColKeys.length})</span>
+                    )}
+                  </button>
+                  {showDrillColPicker && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowDrillColPicker(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-50 w-64 max-h-80 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl p-2 space-y-0.5">
+                        <div className="flex gap-1 mb-1.5">
+                          <button
+                            type="button"
+                            className="flex-1 text-[10px] py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                            onClick={() => persistDrillHiddenCols(new Set())}
+                          >
+                            Hemmesi
+                          </button>
+                          <button
+                            type="button"
+                            className="flex-1 text-[10px] py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                            onClick={() => persistDrillHiddenCols(new Set(drillAllColKeys))}
+                          >
+                            Hiçisi
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-slate-500 px-1 pt-0.5">Görkez / gizle</p>
+                        {drillAllColKeys.map((c) => (
+                          <label
+                            key={c}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!drillHiddenCols.has(c)}
+                              onChange={(e) => {
+                                const next = new Set(drillHiddenCols);
+                                if (e.target.checked) next.delete(c);
+                                else next.add(c);
+                                persistDrillHiddenCols(next);
+                              }}
+                              className="rounded border-slate-600"
+                            />
+                            <span className="truncate text-slate-200">{c}</span>
+                          </label>
+                        ))}
+                        <div className="border-t border-slate-800 mt-2 pt-2">
+                          <p className="text-[10px] text-indigo-300/90 px-1 mb-1 leading-snug">
+                            Mobile card · 1-nji setir (saýlananlar). Galanlar 2-nji setirde.
+                          </p>
+                          {drillColKeys.map((c) => {
+                            const on = drillMobilePrimaryCols.includes(c);
+                            return (
+                              <label
+                                key={`dm-${c}`}
+                                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-800/60 cursor-pointer text-xs"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={(e) => {
+                                    const next = e.target.checked
+                                      ? [...drillMobilePrimaryCols.filter((x) => x !== c), c]
+                                      : drillMobilePrimaryCols.filter((x) => x !== c);
+                                    persistDrillMobilePrimary(next);
+                                  }}
+                                  className="rounded border-indigo-600/50"
+                                />
+                                <span className="text-slate-200 truncate">{c}</span>
+                                {on && (
+                                  <span className="ml-auto text-[9px] text-indigo-400 shrink-0">row1</span>
+                                )}
+                              </label>
+                            );
+                          })}
+                          {drillColKeys.length === 0 && (
+                            <p className="text-[10px] text-slate-500 px-2 py-1">Ilki sütünleri görkeziň</p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {(drillSearch || activeDrillColFilterCount > 0) && (
+                  <button
+                    type="button"
+                    onClick={clearDrillFilters}
+                    className="h-8 px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0"
+                  >
+                    Arassala
+                  </button>
+                )}
+              </div>
+            )}
             <div className="flex-1 min-h-0 overflow-auto p-3 flex flex-col">
               {drillLoading && (
                 <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-sm">
@@ -908,7 +1133,10 @@ function TableWidgetBody({
               {!drillLoading && !drillError && drillRows.length === 0 && (
                 <p className="text-sm text-slate-500 py-10 text-center">Maglumat tapylmady</p>
               )}
-              {!drillLoading && drillRows.length > 0 && (
+              {!drillLoading && !drillError && drillRows.length > 0 && drillFilteredRows.length === 0 && (
+                <p className="text-sm text-slate-500 py-10 text-center">Gözlege gabat gelýän hat ýok</p>
+              )}
+              {!drillLoading && drillFilteredRows.length > 0 && (
                 <>
                   <div className="hidden sm:block overflow-auto flex-1 min-h-0">
                     <table className="w-full text-sm min-w-[240px]">
@@ -920,9 +1148,23 @@ function TableWidgetBody({
                             </th>
                           ))}
                         </tr>
+                        {showDrillColFilters && (
+                          <tr className="bg-slate-950/80">
+                            {drillColKeys.map((k) => (
+                              <th key={`df-${k}`} className="py-1 pr-3 sticky top-6 z-10 bg-slate-950/95 border-b border-slate-800">
+                                <input
+                                  value={drillColFilters[k] || ''}
+                                  onChange={(e) => setDrillColFilters((prev) => ({ ...prev, [k]: e.target.value }))}
+                                  placeholder="Filter..."
+                                  className="w-full text-[11px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-200 outline-none"
+                                />
+                              </th>
+                            ))}
+                          </tr>
+                        )}
                       </thead>
                       <tbody>
-                        {drillRows.map((r, idx) => (
+                        {drillFilteredRows.map((r, idx) => (
                           <tr key={idx} className="border-b border-slate-800/60 text-slate-200">
                             {drillColKeys.map((k) => (
                               <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate">
@@ -935,32 +1177,60 @@ function TableWidgetBody({
                     </table>
                   </div>
                   <div className="sm:hidden space-y-1.5 flex-1 min-h-0 overflow-y-auto">
-                    {drillRows.map((r, idx) => (
-                      <div key={idx} className="rounded-lg border border-slate-800 bg-slate-900/50 px-2 py-1.5">
-                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                          {drillColKeys.map((k, j) => (
-                            <div
-                              key={k}
-                              className={
-                                j === 0
-                                  ? 'col-span-2 text-sm font-medium text-white'
-                                  : 'text-[11px] text-slate-200 break-words'
-                              }
-                            >
-                              <span className="text-slate-500 text-[10px] mr-1">{k}:</span>
-                              {String(r[k] ?? '—')}
+                    {drillFilteredRows.map((r, idx) => {
+                      const primary = (
+                        drillMobilePrimaryCols.length
+                          ? drillMobilePrimaryCols.filter((c) => drillColKeys.includes(c))
+                          : drillColKeys.slice(0, Math.min(2, drillColKeys.length))
+                      );
+                      const secondary = drillColKeys.filter((c) => !primary.includes(c));
+                      return (
+                        <div key={idx} className="rounded-lg border border-slate-800 bg-slate-900/50 px-2 py-1.5">
+                          {/* Row 1 — primary (saýlanan) sütünler */}
+                          <div className="grid grid-cols-2 gap-x-1.5 gap-y-0.5">
+                            {primary.map((c, j) => (
+                              <div
+                                key={c}
+                                className={cn(
+                                  'min-w-0 text-[10px] sm:text-[11px] leading-snug break-words',
+                                  primary.length === 1 || j === 0 ? 'col-span-2' : ''
+                                )}
+                              >
+                                <span className="text-slate-500">{c}: </span>
+                                <span
+                                  className={cn(
+                                    'text-slate-100',
+                                    (primary.length === 1 || j === 0) && 'font-medium text-white'
+                                  )}
+                                >
+                                  {String(r[c] ?? '—')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Row 2 — galanlar */}
+                          {secondary.length > 0 && (
+                            <div className="grid grid-cols-2 gap-x-1.5 gap-y-0.5 mt-1 pt-1 border-t border-slate-800/50">
+                              {secondary.map((c) => (
+                                <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
+                                  <span className="text-slate-500">{c}: </span>
+                                  <span className="text-slate-300">{String(r[c] ?? '—')}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               )}
             </div>
             <div className="shrink-0 px-4 py-2.5 border-t border-slate-800 space-y-1.5">
               <div className="text-[10px] text-slate-500">
-                {drillRows.length} hat
+                {drillFilteredRows.length === drillRows.length
+                  ? `${drillRows.length} hat`
+                  : `${drillFilteredRows.length} / ${drillRows.length} hat`}
                 {dd?.sourceField && <> · {dd.sourceField} → {dd.targetParam || dd.sourceField}</>}
               </div>
               {(() => {
@@ -1334,14 +1604,55 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
     const prefix = widget.config?.prefix || '';
     const suffix = widget.config?.suffix || widget.config?.unit || '';
     const kpiColor = widget.config?.color || '#ffffff';
+    const enableAutoTextSize = widget.config?.enableAutoTextSize !== false;
+    // Task 5: Text alignment - center/left/right option (default center)
+    const textAlign = (widget.config?.textAlign || 'center') as 'center' | 'left' | 'right';
+    // Task 5: Fill space - when no unit/suffix, expand to fill container
+    const hasUnit = !!(widget.config?.unit && !widget.config?.suffix);
+    
     return (
-      <div className={cn('h-full flex flex-col justify-center px-1', className)}>
-        <p className="text-xl sm:text-3xl md:text-4xl font-bold tracking-tight" style={{ color: kpiColor }}>
+      <div
+        className={cn('h-full w-full flex flex-col overflow-hidden px-1', className)}
+        style={{ 
+          containerType: 'size',
+          justifyContent: textAlign === 'center' ? 'center' : 'flex-start',
+          alignItems: textAlign === 'center' ? 'center' : textAlign === 'left' ? 'flex-start' : 'flex-end',
+        }}
+      >
+        {/* Task 5: Spacer above value if alignment not center */}
+        {textAlign !== 'center' && !hasUnit && <div className="flex-1" />}
+        
+        <p
+          className="font-bold tracking-tight leading-[1.05] break-words"
+          style={{ 
+            color: kpiColor, 
+            fontSize: enableAutoTextSize 
+              ? 'clamp(0.65rem, 26cqmin, 4.5rem)' 
+              : '2rem',
+            transition: 'font-size 0.3s ease-in-out',
+            textAlign: textAlign,
+          }}
+        >
           {prefix}{display}{suffix && !widget.config?.suffix && widget.config?.unit ? '' : ''}
           {widget.config?.suffix ? suffix : ''}
         </p>
-        {widget.config?.unit && !widget.config?.suffix && (
-          <p className="text-sm text-slate-400 mt-1">{widget.config.unit}</p>
+        
+        {/* Task 5: Unit/Label - fill space if no unit */}
+        {hasUnit ? (
+          <p
+            className="text-slate-400 mt-1 break-words"
+            style={{ 
+              fontSize: enableAutoTextSize 
+                ? 'clamp(0.5rem, 9cqmin, 1rem)' 
+                : '0.875rem',
+              transition: 'font-size 0.3s ease-in-out',
+              textAlign: textAlign,
+            }}
+          >
+            {widget.config.unit}
+          </p>
+        ) : (
+          <div className="flex-1" />
         )}
       </div>
     );
@@ -1425,6 +1736,25 @@ function ChartCanvas({
     }
   }
 
+  // Task 10: Donut/Pie hierarchy drill-down on click
+  function onChartClick(params: any) {
+    if (chartKind !== 'pie' && chartKind !== 'donut') return;
+    if (!params.data || !params.data.name) return;
+    
+    // Emit custom event for parent component to handle drill-down API call
+    // Pass category name and any hierarchy parameters
+    const drillEvent = new CustomEvent('bi-chart-drilldown', {
+      detail: {
+        widgetId,
+        chartKind,
+        categoryName: params.data.name,
+        categoryValue: params.data.value,
+        dataIndex: params.dataIndex,
+      },
+    });
+    window.dispatchEvent(drillEvent);
+  }
+
   useEffect(() => {
     const onCmd = (e: Event) => {
       const ce = e as CustomEvent<{ id: string; action: string }>;
@@ -1436,6 +1766,23 @@ function ChartCanvas({
     return () => window.removeEventListener('bi-chart-cmd', onCmd as EventListener);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [widgetId, option, chartKind]);
+
+  // Task 10: Listen for chart clicks to handle drill-down
+  useEffect(() => {
+    const inst = getChart();
+    if (!inst) return;
+    
+    const handleClick = (params: any) => {
+      onChartClick(params);
+    };
+    
+    inst.off('click', handleClick);
+    inst.on('click', handleClick);
+    
+    return () => {
+      inst.off('click', handleClick);
+    };
+  }, [widgetId, chartKind]);
 
   return (
     <div className={cn('relative h-full w-full', className)}>
