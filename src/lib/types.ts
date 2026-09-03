@@ -39,6 +39,8 @@ export interface StaffMember {
   active: boolean;
   /** If true, this is a platform-level super admin (sees all companies) */
   isSuperAdmin?: boolean;
+  tenantSlugs?: string[];
+  tenantIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -425,6 +427,8 @@ export interface SessionUser {
   companyId: string;
   companySlug?: string;
   companyName?: string;
+  tenantSlugs?: string[];
+  tenantIds?: string[];
   isSuperAdmin: boolean;
 }
 

@@ -179,6 +179,8 @@ export async function listDashboardsVisibleTo(user: {
   companyId: string;
   role: string;
   isSuperAdmin?: boolean;
+  tenantSlugs?: string[];
+  tenantIds?: string[];
 }): Promise<Dashboard[]> {
   const data = await getData();
   let list = data.dashboards || [];
@@ -190,7 +192,12 @@ export async function listDashboardsVisibleTo(user: {
   if (user.isSuperAdmin || user.role === 'super_admin') {
     // all
   } else {
-    list = list.filter((d) => d.companyId === user.companyId);
+    const allowed = new Set([
+      user.companyId,
+      ...(user.tenantSlugs || []),
+      ...(user.tenantIds || []),
+    ].filter(Boolean));
+    list = list.filter((d) => allowed.has(d.companyId));
   }
   if (!isBoss) {
     list = list.filter(
@@ -204,11 +211,12 @@ export async function listDashboardsVisibleTo(user: {
 }
 
 export function userCanViewDashboard(
-  user: { id: string; companyId: string; role: string; isSuperAdmin?: boolean },
+  user: { id: string; companyId: string; role: string; isSuperAdmin?: boolean; tenantSlugs?: string[]; tenantIds?: string[] },
   d: Dashboard
 ): boolean {
   if (user.isSuperAdmin || user.role === 'super_admin') return true;
-  if (d.companyId !== user.companyId) return false;
+  const allowedCompanies = new Set([user.companyId, ...(user.tenantSlugs || []), ...(user.tenantIds || [])].filter(Boolean));
+  if (!allowedCompanies.has(d.companyId)) return false;
   if (user.role === 'admin' || user.role === 'editor') return true;
   return d.isPublic || d.ownerId === user.id || (d.sharedWith || []).includes(user.id);
 }

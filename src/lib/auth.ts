@@ -29,6 +29,8 @@ export async function createSessionToken(user: SessionUser): Promise<string> {
     companyId: user.companyId,
     companySlug: user.companySlug,
     companyName: user.companyName,
+    tenantSlugs: user.tenantSlugs,
+    tenantIds: user.tenantIds,
     isSuperAdmin: user.isSuperAdmin,
   })
     .setProtectedHeader({ alg: 'HS256' })
@@ -49,6 +51,8 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
       companyId: payload.companyId as string,
       companySlug: payload.companySlug as string | undefined,
       companyName: payload.companyName as string | undefined,
+      tenantSlugs: Array.isArray(payload.tenantSlugs) ? payload.tenantSlugs.map(String) : undefined,
+      tenantIds: Array.isArray(payload.tenantIds) ? payload.tenantIds.map(String) : undefined,
       isSuperAdmin: Boolean(payload.isSuperAdmin),
     };
   } catch {

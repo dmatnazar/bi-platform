@@ -34,7 +34,8 @@ export async function GET() {
         email: s.email,
         active: s.active,
         tenantSlug: co?.slug || 'demo',
-        tenantSlugs: [co?.slug || 'demo'],
+        tenantSlugs: (s as any).tenantSlugs || (co?.slug ? [co.slug] : []),
+        companyId: s.companyId,
         source: 'local' as const,
         passwordReveal: '',
         updatedAt: s.updatedAt,
@@ -65,13 +66,11 @@ export async function GET() {
       email: s.email,
       active: s.active,
       tenantSlug: s.tenantSlug,
-      tenantSlugs: Array.from(new Set(
-        (Array.isArray(s.tenantSlugs) ? s.tenantSlugs : []).concat(s.tenantSlug ? [s.tenantSlug] : [])
-      )),
-      companyName: (Array.isArray(s.tenantSlugs) ? s.tenantSlugs : [s.tenantSlug])
-        .filter(Boolean)
-        .map((slug: string) => nameBySlug.get(slug) || slug)
-        .join(', '),
+      companyId: (s as any).tenantId || (s as any).companyId,
+      tenantSlugs: Array.isArray(s.tenantSlugs) && s.tenantSlugs.length ? s.tenantSlugs : (s.tenantSlug ? [s.tenantSlug] : []),
+      companyName: (Array.isArray(s.tenantSlugs) && s.tenantSlugs.length
+        ? s.tenantSlugs.map((slug: string) => nameBySlug.get(slug) || slug).join(', ')
+        : (nameBySlug.get(s.tenantSlug) || s.tenantSlug)),
       source: 'gateway' as const,
       passwordReveal: (s as any).password || decryptPasswordPlain(s.passwordEnc) || '',
       updatedAt: s.updatedAt,
@@ -101,7 +100,7 @@ const upsertSchema = z.object({
   email: z.string().email().optional().or(z.literal('')),
   active: z.boolean().default(true),
   tenantSlug: z.string().optional(),
-  tenantSlugs: z.array(z.string().min(1)).optional(),
+  tenantSlugs: z.array(z.string()).optional(),
   previousTenantSlug: z.string().optional(),
 });
 
@@ -126,134 +125,82 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
-
-  // Superadmin may assign an employee to any number of companies.
-  // Company admins/editors are restricted to their own company.
-  const requestedSlugs = Array.from(
-    new Set(
-      (Array.isArray(data.tenantSlugs) ? data.tenantSlugs : [])
-        .concat(data.tenantSlug ? [data.tenantSlug] : [])
-        .map((x) => x.trim().toLowerCase())
-        .filter(Boolean)
-    )
-  );
-  const tenantSlugs = isSuperAdmin(user)
+  const requestedSlugs = Array.from(new Set(
+    (data.tenantSlugs?.length ? data.tenantSlugs : (data.tenantSlug ? [data.tenantSlug] : []))
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+  ));
+  const allowedSlugs = isSuperAdmin(user)
     ? requestedSlugs
-    : user.companySlug
-      ? [user.companySlug]
-      : requestedSlugs.slice(0, 1);
-
-  if (tenantSlugs.length === 0) {
-    return NextResponse.json({ error: 'Iň az bir firma saýlaň' }, { status: 400 });
+    : requestedSlugs.filter((s) => s === user.companySlug);
+  const tenantSlugs = allowedSlugs.length
+    ? allowedSlugs
+    : (user.companySlug ? [user.companySlug] : []);
+  if (!tenantSlugs.length) {
+    return NextResponse.json({ error: 'Kompaniýa saýlanmady' }, { status: 400 });
   }
 
-  const primaryTenantSlug = tenantSlugs[0];
   const catalog = await fetchCatalog(true);
   const allStaff = catalog.staff || [];
-
   const id = data.id || crypto.randomUUID();
   const existingAnywhere = allStaff.find(
-    (s) =>
-      (data.id && s.id === data.id) ||
-      s.username.toLowerCase() === data.username.toLowerCase()
+    (s) => (data.id && s.id === data.id) || s.username.toLowerCase() === data.username.toLowerCase()
   );
 
-  const oldTenantSlugs = Array.from(
-    new Set(
-      (
-        (existingAnywhere as { tenantSlugs?: string[] } | undefined)?.tenantSlugs ||
-        (existingAnywhere?.tenantSlug ? [existingAnywhere.tenantSlug] : [])
-      ).filter(Boolean)
-    )
-  );
-
-  let existing = existingAnywhere;
   let passwordHash = 'synced-from-bi:keep';
   let passwordPlain: string | undefined;
-
   if (data.password) {
     passwordHash = hashPasswordBcrypt(data.password);
     passwordPlain = data.password;
-  } else if (existing) {
-    const lookup = await staffLookup(existing.username);
-    if (lookup.ok && lookup.data?.passwordHash) {
-      passwordHash = lookup.data.passwordHash;
-    }
+  } else if (existingAnywhere) {
+    const lookup = await staffLookup(existingAnywhere.username);
+    if (lookup.ok && lookup.data?.passwordHash) passwordHash = lookup.data.passwordHash;
   } else {
     return NextResponse.json({ error: 'Täze işgär üçin parol gerek' }, { status: 400 });
   }
 
+  const existingSlugs = Array.from(new Set(
+    ((existingAnywhere as any)?.tenantSlugs || ((existingAnywhere as any)?.tenantSlug ? [(existingAnywhere as any).tenantSlug] : []))
+      .filter(Boolean)
+  ));
   const entry: any = {
-    id: existing?.id || id,
+    id: existingAnywhere?.id || id,
     fullName: data.fullName,
     username: data.username,
     passwordHash,
     role: data.role === 'admin' ? 'admin' : data.role === 'editor' ? 'editor' : 'viewer',
-    tenantSlug: primaryTenantSlug,
     tenantSlugs,
+    tenantSlug: tenantSlugs[0],
     phone: data.phone,
     email: data.email || undefined,
     active: data.active,
   };
   if (passwordPlain) entry.passwordPlain = passwordPlain;
-  if (existing?.passwordEnc && !passwordPlain) entry.passwordEnc = existing.passwordEnc;
+  if ((existingAnywhere as any)?.passwordEnc && !passwordPlain) entry.passwordEnc = (existingAnywhere as any).passwordEnc;
 
-  // /sync-staff is tenant-scoped, so synchronize every affected company.
-  // For each company, preserve its other staff and put this employee into
-  // exactly the selected tenant list.
-  const affectedSlugs = Array.from(new Set([...oldTenantSlugs, ...tenantSlugs]));
-  const selectedSet = new Set(tenantSlugs);
+  const affectedSlugs = Array.from(new Set([...existingSlugs, ...tenantSlugs]));
+  const staffForTenant = (slug: string) => {
+    const members = allStaff.filter((s: any) => {
+      const slugs = Array.isArray(s.tenantSlugs) && s.tenantSlugs.length ? s.tenantSlugs : (s.tenantSlug ? [s.tenantSlug] : []);
+      return slugs.includes(slug) && s.id !== entry.id && s.username.toLowerCase() !== entry.username.toLowerCase();
+    }).map((s: any) => ({
+      id: s.id, fullName: s.fullName, username: s.username, passwordHash: 'synced-from-bi:keep',
+      role: s.role, tenantSlugs: Array.isArray(s.tenantSlugs) && s.tenantSlugs.length ? s.tenantSlugs : [slug],
+      phone: s.phone, email: s.email, active: s.active, passwordEnc: s.passwordEnc,
+    }));
+    if (tenantSlugs.includes(slug)) members.push(entry);
+    return members;
+  };
 
   for (const slug of affectedSlugs) {
-    const list = allStaff.filter(
-      (s) =>
-        s.tenantSlug === slug ||
-        (Array.isArray((s as { tenantSlugs?: string[] }).tenantSlugs) &&
-          (s as { tenantSlugs?: string[] }).tenantSlugs!.includes(slug))
-    );
-
-    const others = list.filter(
-      (s) =>
-        s.id !== entry.id &&
-        s.username.toLowerCase() !== entry.username.toLowerCase()
-    );
-
-    const shouldIncludeEmployee = selectedSet.has(slug);
-    const payloadStaff = [
-      ...others.map((s) => ({
-        id: s.id,
-        fullName: s.fullName,
-        username: s.username,
-        passwordHash: 'synced-from-bi:keep',
-        role: s.role,
-        tenantSlug: s.tenantSlug,
-        tenantSlugs: s.tenantSlugs || [s.tenantSlug],
-        phone: s.phone,
-        email: s.email,
-        active: s.active,
-        passwordEnc: s.passwordEnc,
-      })),
-      ...(shouldIncludeEmployee
-        ? [{
-            ...entry,
-            // Keep the complete assignment list in the record, while the
-            // sync itself is scoped to this company.
-            tenantSlug: slug,
-            tenantSlugs,
-          }]
-        : []),
-    ];
-
-    const res = await syncStaffToGateway(slug, payloadStaff as any);
+    const members = staffForTenant(slug);
+    const res = await syncStaffToGateway(slug, members as any);
     if (!res.ok) {
-      return NextResponse.json(
-        { error: `VPS-e "${slug}" kompaniýasyna ýazyp bolmady`, detail: res.data },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: `VPS-e "${slug}" firmasyna işgär sync bolmady`, detail: res.data }, { status: 502 });
     }
   }
 
-  return NextResponse.json({ ok: true, staffId: entry.id, synced: true, tenantSlug: primaryTenantSlug, tenantSlugs });
+  return NextResponse.json({ ok: true, staffId: entry.id, synced: true, tenantSlugs });
 }
 
 export async function DELETE(req: NextRequest) {

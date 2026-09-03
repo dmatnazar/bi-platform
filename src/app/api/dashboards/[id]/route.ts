@@ -3,6 +3,7 @@ import { getDashboard, upsertDashboard, deleteDashboard } from '@/lib/db';
 import { getSession, canEditDashboard, isSuperAdmin } from '@/lib/auth';
 import type { DashboardWidget, GlobalFilterDef } from '@/lib/types';
 import { z } from 'zod';
+import { fetchCatalog } from '@/lib/gateway';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -14,8 +15,21 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   const dash = await getDashboard(id);
   if (!dash) return NextResponse.json({ error: 'Tapyimady' }, { status: 404 });
 
-  if (!isSuperAdmin(user) && dash.companyId !== user.companyId) {
-    return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+  if (!isSuperAdmin(user)) {
+    const allowed = new Set([user.companyId, ...(user.tenantSlugs || []), ...(user.tenantIds || [])].filter(Boolean));
+    if (!allowed.has(dash.companyId)) {
+      try {
+        const catalog = await fetchCatalog(false);
+        const matching = (catalog.tenants || []).find((t: any) => String(t.id) === dash.companyId);
+        if (matching?.slug && (user.tenantSlugs || []).includes(String(matching.slug))) {
+          // allowed through tenant slug -> tenant id mapping
+        } else {
+          return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+      }
+    }
   }
 
   return NextResponse.json({ dashboard: dash });
@@ -42,8 +56,21 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   const dash = await getDashboard(id);
   if (!dash) return NextResponse.json({ error: 'Tapyimady' }, { status: 404 });
 
-  if (!isSuperAdmin(user) && dash.companyId !== user.companyId) {
-    return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+  if (!isSuperAdmin(user)) {
+    const allowed = new Set([user.companyId, ...(user.tenantSlugs || []), ...(user.tenantIds || [])].filter(Boolean));
+    if (!allowed.has(dash.companyId)) {
+      try {
+        const catalog = await fetchCatalog(false);
+        const matching = (catalog.tenants || []).find((t: any) => String(t.id) === dash.companyId);
+        if (matching?.slug && (user.tenantSlugs || []).includes(String(matching.slug))) {
+          // allowed through tenant slug -> tenant id mapping
+        } else {
+          return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+      }
+    }
   }
 
   try {
@@ -88,8 +115,21 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const dash = await getDashboard(id);
   if (!dash) return NextResponse.json({ error: 'Tapyimady' }, { status: 404 });
 
-  if (!isSuperAdmin(user) && dash.companyId !== user.companyId) {
-    return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+  if (!isSuperAdmin(user)) {
+    const allowed = new Set([user.companyId, ...(user.tenantSlugs || []), ...(user.tenantIds || [])].filter(Boolean));
+    if (!allowed.has(dash.companyId)) {
+      try {
+        const catalog = await fetchCatalog(false);
+        const matching = (catalog.tenants || []).find((t: any) => String(t.id) === dash.companyId);
+        if (matching?.slug && (user.tenantSlugs || []).includes(String(matching.slug))) {
+          // allowed through tenant slug -> tenant id mapping
+        } else {
+          return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+        }
+      } catch {
+        return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+      }
+    }
   }
 
   await deleteDashboard(id);

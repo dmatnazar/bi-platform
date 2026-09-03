@@ -45,6 +45,7 @@ interface Props {
   userCompanyId?: string;
   /** VPS slug → canonical company id for matching dashboards */
   companyIdBySlug?: Record<string, string>;
+  userTenantSlugs?: string[];
 }
 
 function downloadJson(filename: string, data: unknown) {
@@ -69,6 +70,7 @@ export function DashboardListClient({
   isSuperAdmin = false,
   userCompanyId = '',
   companyIdBySlug = {},
+  userTenantSlugs = [],
 }: Props) {
   const router = useRouter();
   const appAnimOn = useAppAnimations();
@@ -141,10 +143,13 @@ export function DashboardListClient({
   // Companies that have at least one visible dashboard (or all companies for admin)
   function matchesCompany(d: Dashboard, companyId: string, slug?: string) {
     if (d.companyId === companyId) return true;
-    if (slug && (d.companyId === slug || d.companyId === companyIdBySlug[slug])) return true;
-    // reverse: dashboard stores slug, selected is id
+    if (slug && d.companyId === slug) return true;
+    if (slug && d.companyId === companyIdBySlug[slug]) return true;
     const dashSlug = Object.entries(companyIdBySlug).find(([, id]) => id === d.companyId)?.[0];
     if (dashSlug && (dashSlug === slug || companyIdBySlug[dashSlug] === companyId)) return true;
+    // A dashboard may be stored under a VPS tenant slug even when the selected
+    // company object is represented by its numeric/UUID id.
+    if (userTenantSlugs.includes(d.companyId) && (!slug || userTenantSlugs.includes(slug))) return true;
     return false;
   }
 
@@ -737,13 +742,17 @@ export function DashboardListClient({
       const data = await res.json();
       if (res.ok) {
         const co = companyMap.get(d.companyId);
-        const slug = co?.slug;
+        const slug = co?.slug || companies.find((c) => c.id === d.companyId)?.slug || d.companyId;
         setStaffOpts(
           (data.staff || [])
             .filter((s: any) => {
               // Prefer same company: by companyId or tenantSlug
               if (s.companyId && s.companyId === d.companyId) return true;
-              if (slug && (s.tenantSlug === slug || s.companySlug === slug)) return true;
+              const memberships = Array.isArray(s.tenantSlugs) && s.tenantSlugs.length
+                ? s.tenantSlugs
+                : (s.tenantSlug ? [s.tenantSlug] : []);
+              if (slug && memberships.includes(slug)) return true;
+              if (d.companyId && memberships.includes(d.companyId)) return true;
               // If no company info on staff, include for admin
               if (!s.companyId && !s.tenantSlug) return true;
               return false;

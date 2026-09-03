@@ -7,9 +7,6 @@ export default async function DashboardsPage() {
   const user = await getSession();
   if (!user) return null;
 
-  const dashboards = await listDashboardsVisibleTo(user);
-  const canEdit = canEditDashboard(user.role);
-
   // Firms from VPS gateway catalog (source of truth), not local seed JSON
   let companies: { id: string; name: string; slug: string }[] = [];
   try {
@@ -23,9 +20,9 @@ export default async function DashboardsPage() {
       }));
     } else {
       // Viewer/editor: only their company (+ firms they already see dashboards for)
-      const slug = user.companySlug;
+      const allowedSlugs = new Set([user.companySlug, ...(user.tenantSlugs || [])].filter(Boolean));
       companies = tenants
-        .filter((t: any) => !slug || t.slug === slug)
+        .filter((t: any) => allowedSlugs.size === 0 || allowedSlugs.has(t.slug))
         .map((t: any) => ({
           id: String(t.id || t.slug),
           name: String(t.name || t.slug),
@@ -35,6 +32,14 @@ export default async function DashboardsPage() {
   } catch {
     companies = [];
   }
+
+  const catalogTenantIds = companies.map((c) => c.id);
+  const dashboards = await listDashboardsVisibleTo({
+    ...user,
+    tenantSlugs: user.tenantSlugs || [],
+    tenantIds: catalogTenantIds.filter((id) => (user.tenantSlugs || []).some((slug) => companies.find((c) => c.id === id)?.slug === slug)),
+  });
+  const canEdit = canEditDashboard(user.role);
 
   // Map dashboard.companyId (often slug or local id) — normalize so filter works
   const slugById = new Map(companies.map((c) => [c.id, c.slug]));
@@ -49,6 +54,7 @@ export default async function DashboardsPage() {
       isSuperAdmin={Boolean(user.isSuperAdmin || user.role === 'super_admin' || user.role === 'admin')}
       userCompanyId={user.companyId}
       companyIdBySlug={Object.fromEntries(idBySlug)}
+      userTenantSlugs={user.tenantSlugs || []}
     />
   );
 }

@@ -59,8 +59,7 @@ export default function StaffPage() {
     phoneLocal: '',
     email: '',
     active: true,
-    tenantSlug: '',
-    tenantSlugs: [] as string[],
+    tenantSlugs: [],
   });
   const [companies, setCompanies] = useState<{ slug: string; name: string }[]>([]);
   const [showPw, setShowPw] = useState(false);
@@ -70,7 +69,6 @@ export default function StaffPage() {
   const [syncing, setSyncing] = useState(false);
   const [meId, setMeId] = useState<string | null>(null);
   const [meUsername, setMeUsername] = useState<string | null>(null);
-  const [meSuperAdmin, setMeSuperAdmin] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -78,7 +76,6 @@ export default function StaffPage() {
       .then((d) => {
         if (d.user?.id) setMeId(d.user.id);
         if (d.user?.username) setMeUsername(d.user.username);
-        if (d.user?.isSuperAdmin) setMeSuperAdmin(true);
       })
       .catch(() => {});
   }, []);
@@ -134,7 +131,6 @@ export default function StaffPage() {
       phoneLocal: '',
       email: '',
       active: true,
-      tenantSlug: companies[0]?.slug || '',
       tenantSlugs: companies[0]?.slug ? [companies[0].slug] : [],
     });
     setShowPw(false);
@@ -152,12 +148,7 @@ export default function StaffPage() {
       phoneLocal: phoneLocal(row.phone),
       email: row.email || '',
       active: row.active,
-      tenantSlug: row.tenantSlug || '',
-      tenantSlugs: row.tenantSlugs?.length
-        ? row.tenantSlugs
-        : row.tenantSlug
-          ? [row.tenantSlug]
-          : [],
+      tenantSlugs: Array.isArray(row.tenantSlugs) && row.tenantSlugs.length ? row.tenantSlugs : (row.tenantSlug ? [row.tenantSlug] : []),
     });
     setShowPw(false);
     setError('');
@@ -183,9 +174,7 @@ export default function StaffPage() {
           phone,
           email: form.email,
           active: form.active,
-          tenantSlug: form.tenantSlugs?.[0] || form.tenantSlug || undefined,
           tenantSlugs: form.tenantSlugs?.length ? form.tenantSlugs : undefined,
-          previousTenantSlug: editing?.tenantSlug || undefined,
         }),
       });
       const data = await res.json();
@@ -478,53 +467,29 @@ export default function StaffPage() {
                 { value: 'admin', label: 'Admin — doly' },
               ]}
             />
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-slate-400">
-                Firma (kompaniýa){meSuperAdmin ? ' — birnäçe saýlap bolýar' : ''}
-              </label>
-              <div className="rounded-xl border border-slate-700 bg-slate-950/80 p-2 max-h-40 overflow-y-auto space-y-1">
-                {companies.length ? (
-                  companies.map((c) => {
-                    const checked = (form.tenantSlugs || []).includes(c.slug);
-                    return (
-                      <label
-                        key={c.slug}
-                        className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-200 hover:bg-slate-800/70 cursor-pointer"
-                      >
-                        <input
-                          type={meSuperAdmin ? 'checkbox' : 'radio'}
-                          name="staff-company"
-                          checked={checked}
-                          onChange={() =>
-                            setForm((f) => {
-                              if (meSuperAdmin) {
-                                const current = f.tenantSlugs || [];
-                                const next = checked
-                                  ? current.filter((x) => x !== c.slug)
-                                  : [...current, c.slug];
-                                return {
-                                  ...f,
-                                  tenantSlugs: next,
-                                  tenantSlug: next[0] || '',
-                                };
-                              }
-                              return { ...f, tenantSlugs: [c.slug], tenantSlug: c.slug };
-                            })
-                          }
-                        />
-                        <span>{c.name || c.slug}</span>
-                      </label>
-                    );
-                  })
-                ) : (
-                  <p className="px-2 py-2 text-xs text-slate-500">Firma ýok</p>
-                )}
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-slate-400">Firmalar (birnäçe saýlap bolýar)</label>
+              <div className="max-h-40 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
+                {companies.length ? companies.map((c) => {
+                  const checked = (form.tenantSlugs || []).includes(c.slug);
+                  return (
+                    <label key={c.slug} className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-200 hover:bg-slate-900 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => setForm((f) => ({
+                          ...f,
+                          tenantSlugs: e.target.checked
+                            ? Array.from(new Set([...(f.tenantSlugs || []), c.slug]))
+                            : (f.tenantSlugs || []).filter((slug) => slug !== c.slug),
+                        }))}
+                      />
+                      <span>{c.name || c.slug}</span>
+                    </label>
+                  );
+                }) : <div className="px-2 py-2 text-xs text-slate-500">Firma tapylmady</div>}
               </div>
-              {meSuperAdmin && (
-                <p className="text-[11px] text-slate-500">
-                  Işgär saýlanan firmalaryň hemmesine bir wagtda bagly bolar.
-                </p>
-              )}
+              <div className="text-[11px] text-slate-500">Saýlanan firmalaryň hemmesine bu işgär degişli bolar.</div>
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input

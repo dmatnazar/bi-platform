@@ -129,6 +129,7 @@ export interface CatalogStaff {
   id: string;
   tenantSlug: string;
   tenantSlugs: string[];
+  tenantIds?: string[];
   fullName: string;
   username: string;
   role: string;

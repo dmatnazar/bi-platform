@@ -37,11 +37,87 @@ export async function POST(req: NextRequest) {
 
     const { username, password } = parsed.data;
 
-    // 1) LOCAL first (demo admin always works offline)
-    const local = await getStaffByUsername(username);
-    if (local && local.active) {
-      const valid = await localVerify(password, local.passwordHash);
-      if (valid) {
+    // VPS is the source of truth for Electron-synced staff. This must be checked
+    // before the local cache, otherwise an old local record can hide tenantSlugs.
+    const remote = await staffLookup(username);
+
+    if (remote.status === 403 && remote.data?.error === 'registration_pending') {
+      return NextResponse.json(
+        { error: remote.data.message || 'Hasaba alyş heniz tassyklanmady.', code: 'registration_pending' },
+        { status: 403 }
+      );
+    }
+    if (remote.status === 403 && remote.data?.error === 'registration_rejected') {
+      return NextResponse.json(
+        { error: remote.data.message || 'Hasaba alyş ret edildi.', code: 'registration_rejected' },
+        { status: 403 }
+      );
+    }
+    if (remote.status === 403 && remote.data?.error === 'account_inactive') {
+      return NextResponse.json(
+        { error: remote.data.message || 'Hasap öçürilen', code: 'account_inactive' },
+        { status: 403 }
+      );
+    }
+
+    if (remote.ok && remote.data) {
+      const hash = remote.data.passwordHash || '';
+      if (!hash || remote.data.passwordUsable === false) {
+        return NextResponse.json(
+          { error: 'Parol VPS-de ýok ýa-da synag placeholder. Electron-da işgäre täze parol goýup Sync ediň.', code: 'password_missing' },
+          { status: 401 }
+        );
+      }
+      if (!verifyPasswordHash(password, hash)) {
+        return NextResponse.json(
+          { error: 'Parol nädogry (VPS hasaby tapyldy, parol gabat gelmedi)', code: 'bad_password' },
+          { status: 401 }
+        );
+      }
+
+      const role = mapRole(remote.data.role);
+      const tenantSlugs = Array.from(new Set(
+        (remote.data.tenantSlugs || [remote.data.tenantSlug]).map(String).filter(Boolean)
+      ));
+      const tenantIds = Array.from(new Set(
+        (remote.data.tenantIds || [remote.data.tenantId || remote.data.tenantSlug]).map(String).filter(Boolean)
+      ));
+      const user: SessionUser = {
+        id: remote.data.id,
+        username: remote.data.username,
+        fullName: remote.data.fullName,
+        role,
+        companyId: remote.data.tenantId || remote.data.tenantSlug,
+        companySlug: remote.data.tenantSlug,
+        companyName: remote.data.tenantName,
+        tenantSlugs,
+        tenantIds,
+        isSuperAdmin: role === 'super_admin',
+      };
+
+      const token = await createSessionToken(user);
+      await setSessionCookie(token);
+      return NextResponse.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          role: user.role,
+          companyId: user.companyId,
+          companyName: user.companyName,
+          tenantSlugs: user.tenantSlugs,
+          tenantIds: user.tenantIds,
+          companySlug: user.companySlug,
+          isSuperAdmin: user.isSuperAdmin,
+        },
+      });
+    }
+
+    // Offline/demo fallback only. A local cached record must never override a
+    // successful VPS staff lookup because it may contain only one company.
+    if (remote.status === 0) {
+      const local = await getStaffByUsername(username);
+      if (local && local.active && await localVerify(password, local.passwordHash)) {
         const company = await getCompanyById(local.companyId);
         const user: SessionUser = {
           id: local.id,
@@ -51,11 +127,9 @@ export async function POST(req: NextRequest) {
           companyId: local.companyId,
           companySlug: company?.slug,
           companyName: company?.name,
-          isSuperAdmin: Boolean(
-            local.isSuperAdmin ||
-              local.role === 'super_admin' ||
-              local.role === 'admin'
-          ),
+          tenantSlugs: (local as any).tenantSlugs || (company?.slug ? [company.slug] : []),
+          tenantIds: (local as any).tenantIds || (local.companyId ? [local.companyId] : []),
+          isSuperAdmin: Boolean(local.isSuperAdmin || local.role === 'super_admin' || local.role === 'admin'),
         };
         const token = await createSessionToken(user);
         await setSessionCookie(token);
@@ -68,88 +142,12 @@ export async function POST(req: NextRequest) {
             companyId: user.companyId,
             companyName: user.companyName,
             companySlug: user.companySlug,
+            tenantSlugs: user.tenantSlugs,
+            tenantIds: user.tenantIds,
             isSuperAdmin: user.isSuperAdmin,
           },
         });
       }
-    }
-
-    // 2) VPS hub staff (Electron-synced)
-    const remote = await staffLookup(username);
-
-    if (remote.status === 403 && remote.data?.error === 'registration_pending') {
-      return NextResponse.json(
-        {
-          error: remote.data.message || 'Hasaba alyş heniz tassyklanmady.',
-          code: 'registration_pending',
-        },
-        { status: 403 }
-      );
-    }
-    if (remote.status === 403 && remote.data?.error === 'registration_rejected') {
-      return NextResponse.json(
-        {
-          error: remote.data.message || 'Hasaba alyş ret edildi.',
-          code: 'registration_rejected',
-        },
-        { status: 403 }
-      );
-    }
-
-    if (remote.status === 403 && remote.data?.error === 'account_inactive') {
-      return NextResponse.json(
-        { error: remote.data.message || 'Hasap öçürilen', code: 'account_inactive' },
-        { status: 403 }
-      );
-    }
-
-    if (remote.ok && remote.data) {
-      const hash = remote.data.passwordHash || '';
-      if (!hash || remote.data.passwordUsable === false) {
-        return NextResponse.json(
-          {
-            error:
-              'Parol VPS-de ýok ýa-da synag placeholder. Electron-da işgäre täze parol goýup Sync ediň.',
-            code: 'password_missing',
-          },
-          { status: 401 }
-        );
-      }
-      const valid = verifyPasswordHash(password, hash);
-      if (!valid) {
-        return NextResponse.json(
-          { error: 'Parol nädogry (VPS hasaby tapyldy, parol gabat gelmedi)', code: 'bad_password' },
-          { status: 401 }
-        );
-      }
-
-      const role = mapRole(remote.data.role);
-      const user: SessionUser = {
-        id: remote.data.id,
-        username: remote.data.username,
-        fullName: remote.data.fullName,
-        role,
-        companyId: remote.data.tenantId || remote.data.tenantSlug,
-        companySlug: remote.data.tenantSlug,
-        companyName: remote.data.tenantName,
-        isSuperAdmin: role === 'super_admin',
-      };
-
-      const token = await createSessionToken(user);
-      await setSessionCookie(token);
-
-      return NextResponse.json({
-        user: {
-          id: user.id,
-          username: user.username,
-          fullName: user.fullName,
-          role: user.role,
-          companyId: user.companyId,
-          companyName: user.companyName,
-          companySlug: user.companySlug,
-          isSuperAdmin: user.isSuperAdmin,
-        },
-      });
     }
 
     if (remote.status === 404) {
