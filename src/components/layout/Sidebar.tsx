@@ -180,18 +180,6 @@ export function Sidebar({ user }: Props) {
           <p className="font-semibold text-sm text-white truncate">
             BI Platform <span className="text-[10px] font-normal text-slate-500">v1.0.0</span>
           </p>
-          <p
-            className="text-xs text-slate-500 truncate"
-            title={
-              Array.isArray(user.tenantSlugs) && user.tenantSlugs.length > 1
-                ? user.tenantSlugs.join(' / ')
-                : user.companyName || user.companySlug || 'Platform'
-            }
-          >
-            {Array.isArray(user.tenantSlugs) && user.tenantSlugs.length > 1
-              ? user.tenantSlugs.join(' / ')
-              : user.companyName || user.companySlug || 'Platform'}
-          </p>
         </div>
       </div>
 

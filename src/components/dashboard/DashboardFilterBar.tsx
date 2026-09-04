@@ -319,48 +319,34 @@ export function DashboardFilterBar({
         className
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
         <button
           type="button"
           onClick={() => setFiltersOpen((o) => !o)}
-          className="flex items-center gap-2 text-slate-300 hover:text-white transition-colors min-w-0"
+          className="flex items-center gap-1.5 sm:gap-2 text-slate-300 hover:text-white transition-colors min-w-0"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-400 shrink-0">
             <Filter className="h-3.5 w-3.5" />
           </div>
           <div className="text-left min-w-0">
-            <p className="text-xs font-semibold text-white leading-tight flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-white leading-tight flex items-center gap-1">
               Filterler
               {filtersOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
             </p>
-            <p className="text-[10px] text-slate-500 truncate">
+            <p className="text-[10px] text-slate-500 truncate hidden sm:block">
               {activeCount > 0 ? `${activeCount} aktif` : 'Ähli widget-lere täsir edýär'}
             </p>
           </div>
         </button>
 
-        {filtersOpen && filters.some((f) => f.type === 'daterange') && (
-          <div className="flex flex-wrap gap-1.5 w-full sm:w-auto sm:ml-auto order-last sm:order-none">
+        {filters.some((f) => f.type === 'daterange') && (
+          <div className="flex flex-wrap gap-1 sm:gap-1.5 ml-auto max-w-full justify-end">
             {PRESETS.map((p) => (
               <button
                 key={p.label}
                 type="button"
                 onClick={() => applyPreset(p)}
-                className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors"
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-        {!filtersOpen && filters.some((f) => f.type === 'daterange') && (
-          <div className="flex flex-wrap gap-1 ml-auto">
-            {PRESETS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                onClick={() => applyPreset(p)}
-                className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-200 border border-slate-700/80"
+                className="px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors whitespace-nowrap"
               >
                 {p.label}
               </button>

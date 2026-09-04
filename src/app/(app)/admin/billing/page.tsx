@@ -81,47 +81,126 @@ const levelLabel: Record<string, string> = {
 };
 
 
-function displayUser(e: LedgerEntry): string {
-  const meta = e.meta || {};
-  const candidates = [
-    meta.fullName,
-    meta.displayName,
-    meta.userName,
-    meta.username,
-    e.username,
-    e.user,
-    meta.login,
-    e.createdBy,
-  ];
-  for (const c of candidates) {
+function parseMeta(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    try {
+      const j = JSON.parse(raw);
+      return j && typeof j === 'object' ? (j as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  return {};
+}
+
+/** Gateway may use snake_case or nest actor under meta */
+function normalizeLedgerEntry(raw: any): LedgerEntry {
+  const meta = parseMeta(raw?.meta ?? raw?.Meta);
+  return {
+    id: String(raw?.id ?? raw?._id ?? ''),
+    tenantSlug: String(raw?.tenantSlug ?? raw?.tenant_slug ?? ''),
+    type: String(raw?.type ?? raw?.entryType ?? ''),
+    amount: Number(raw?.amount ?? 0),
+    balanceAfter: Number(raw?.balanceAfter ?? raw?.balance_after ?? 0),
+    reason: raw?.reason ?? raw?.description ?? meta.reason,
+    createdAt: String(raw?.createdAt ?? raw?.created_at ?? ''),
+    createdBy: raw?.createdBy ?? raw?.created_by ?? meta.createdBy ?? meta.created_by,
+    username: raw?.username ?? raw?.userName ?? meta.username ?? meta.userName,
+    user: raw?.user ?? meta.user,
+    deviceId: raw?.deviceId ?? raw?.device_id ?? meta.deviceId ?? meta.device_id,
+    deviceName:
+      raw?.deviceName ??
+      raw?.device_name ??
+      meta.deviceName ??
+      meta.device_name ??
+      meta.deviceLabel,
+    device: raw?.device ?? meta.device,
+    ip: raw?.ip ?? meta.ip,
+    path: raw?.path ?? meta.path,
+    method: raw?.method ?? meta.method,
+    endpoint: raw?.endpoint ?? meta.endpoint,
+    meta,
+  };
+}
+
+function pickStr(...vals: unknown[]): string | null {
+  for (const c of vals) {
     if (c == null || c === '') continue;
-    const s = String(c);
+    if (typeof c === 'object' && c !== null) {
+      const o = c as Record<string, unknown>;
+      const nested = pickStr(
+        o.fullName,
+        o.displayName,
+        o.userName,
+        o.username,
+        o.name,
+        o.login,
+        o.label,
+        o.deviceName,
+        o.deviceLabel,
+        o.actor
+      );
+      if (nested) return nested;
+      continue;
+    }
+    const s = String(c).trim();
+    if (!s) continue;
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) continue;
     if (/^[0-9a-f]{24}$/i.test(s)) continue;
     return s;
   }
-  return '—';
+  return null;
+}
+
+function displayUser(e: LedgerEntry): string {
+  const meta = parseMeta(e.meta);
+  return (
+    pickStr(
+      meta.fullName,
+      meta.displayName,
+      meta.userName,
+      meta.username,
+      meta.user,
+      meta.staff,
+      meta.actor,
+      meta.createdBy,
+      meta.created_by,
+      e.username,
+      e.user,
+      meta.login,
+      e.createdBy,
+      (e as any).userFullName,
+      (e as any).staffName,
+      (e as any).created_by,
+      (e as any).user_name
+    ) || '—'
+  );
 }
 
 function displayDevice(e: LedgerEntry): string {
-  const meta = e.meta || {};
-  const candidates = [
-    e.deviceName,
-    meta.deviceName,
-    meta.deviceLabel,
-    e.device,
-    meta.device,
-    e.deviceId,
-    meta.deviceId,
-    meta.userAgent,
-  ];
-  for (const c of candidates) {
-    if (c == null || c === '') continue;
-    const s = String(c);
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) continue;
-    return s.length > 40 ? s.slice(0, 38) + '…' : s;
-  }
-  return '—';
+  const meta = parseMeta(e.meta);
+  const s =
+    pickStr(
+      e.deviceName,
+      meta.deviceName,
+      meta.device_name,
+      meta.deviceLabel,
+      meta.device,
+      e.device,
+      meta.clientName,
+      meta.hostname,
+      meta.source === 'web' ? 'Web admin' : null,
+      e.deviceId,
+      meta.deviceId,
+      meta.device_id,
+      meta.userAgent,
+      (e as any).device_name,
+      (e as any).deviceLabel
+    ) || null;
+  if (!s) return '—';
+  return s.length > 40 ? s.slice(0, 38) + '…' : s;
 }
 
 export default function BillingPage() {
@@ -162,7 +241,8 @@ export default function BillingPage() {
       }
       setTariffs(ov.tariffs || []);
       setWallets(ov.wallets || []);
-      setLedger(led.entries || []);
+      const list = led.entries || led.ledger || led.rows || led.items || [];
+      setLedger(Array.isArray(list) ? list.map(normalizeLedgerEntry) : []);
 
       // Beautiful warnings for low balances
       const bad = (ov.wallets || []).filter(

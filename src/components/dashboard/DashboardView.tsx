@@ -353,8 +353,8 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center gap-2 sm:gap-3 justify-between">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <button
             type="button"
             onClick={() => void handleBack()}
@@ -390,7 +390,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
             </div>
           ) : (
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-white truncate">{dashboard.name}</h1>
+              <h1 className="text-base sm:text-xl font-bold text-white truncate">{dashboard.name}</h1>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                 {(companyName || companySlug) && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300/90">
@@ -402,44 +402,45 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                   </span>
                 )}
                 {dashboard.description && (
-                  <span className="text-sm text-slate-400 truncate">{dashboard.description}</span>
+                  <span className="text-sm text-slate-400 truncate hidden sm:inline">{dashboard.description}</span>
                 )}
               </div>
             </div>
           )}
         </div>
 
-        {editable && (
-          <div className="flex items-center gap-2 shrink-0">
-            {editMode ? (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => void handleExitEdit()}>
-                  <Eye className="h-4 w-4" />
-                  Görüş
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => void save()}
-                  loading={saving}
-                  disabled={!dirty && name === initial.name}
-                >
-                  <Save className="h-4 w-4" />
-                  Ýatda sakla
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => refreshAllWidgets()}
-                  loading={refreshingAll}
-                  title="Ähli widget-leri täzele"
-                >
-                  {/* loading prop already shows spinner — no second spinning icon */}
-                  {!refreshingAll && <RefreshCw className="h-4 w-4" />}
-                  Täzele
-                </Button>
+        {/* Same row as title on mobile — compact buttons */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {editMode && editable ? (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => void handleExitEdit()}>
+                <Eye className="h-4 w-4" />
+                <span className="hidden xs:inline sm:inline">Görüş</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => void save()}
+                loading={saving}
+                disabled={!dirty && name === initial.name}
+              >
+                <Save className="h-4 w-4" />
+                <span className="hidden sm:inline">Ýatda sakla</span>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refreshAllWidgets()}
+                loading={refreshingAll}
+                title="Ähli widget-leri täzele"
+                className="px-2 sm:px-3"
+              >
+                {!refreshingAll && <RefreshCw className="h-4 w-4" />}
+                <span className="text-xs sm:text-sm">Täzele</span>
+              </Button>
+              {editable && (
                 <Button
                   variant="secondary"
                   size="sm"
@@ -447,20 +448,20 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                   loading={editOpening}
                   onClick={() => {
                     setEditOpening(true);
-                    // Allow React to paint loading state before heavy edit chrome mounts
                     requestAnimationFrame(() => {
                       setEditMode(true);
                       setTimeout(() => setEditOpening(false), 120);
                     });
                   }}
+                  className="px-2 sm:px-3"
                 >
                   {!editOpening && <Pencil className="h-4 w-4" />}
-                  {editOpening ? 'Garaşyň…' : 'Üýtget'}
+                  <span className="text-xs sm:text-sm">{editOpening ? '…' : 'Üýtget'}</span>
                 </Button>
-              </>
-            )}
-          </div>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Global filter bar — always visible when filters exist or in edit mode */}
@@ -539,7 +540,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 { passive: false, capture: true }
               );
             }}
-            className="lg:w-[22rem] xl:w-96 w-full shrink-0 flex flex-col gap-2 sticky top-[4.75rem] self-start h-[calc(100dvh-5.25rem)] max-h-[calc(100dvh-5.25rem)] overflow-hidden pr-0.5"
+            className="lg:w-[22rem] xl:w-96 w-full shrink-0 flex flex-col gap-2 lg:sticky lg:top-[4.75rem] lg:self-start h-[calc(100dvh-5.25rem)] max-h-[calc(100dvh-5.25rem)] overflow-hidden pr-0.5 lg:z-10"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
 

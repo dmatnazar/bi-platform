@@ -185,15 +185,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Diňe super admin' }, { status: 403 });
   }
 
+  // Actor info so ledger "Ulanyjy / Device" columns fill for admin actions
+  const actorName =
+    (typeof user.fullName === 'string' && user.fullName.trim()) ||
+    (typeof user.username === 'string' && user.username.trim()) ||
+    'admin';
+  const actorPayload = {
+    createdBy: actorName,
+    username: user.username || actorName,
+    actor: actorName,
+    deviceName: 'Web admin',
+    source: 'web',
+  };
+
   let res;
   if (action === 'tariff-upsert') {
-    res = await upsertTariffOnGateway(body);
+    res = await upsertTariffOnGateway({ ...body, ...actorPayload });
   } else if (action === 'assign-tariff') {
-    res = await assignTariffOnGateway(body);
+    res = await assignTariffOnGateway({ ...body, ...actorPayload });
   } else if (action === 'topup') {
-    res = await topUpOnGateway(body);
+    res = await topUpOnGateway({ ...body, ...actorPayload });
   } else if (action === 'adjust') {
-    res = await adjustBalanceOnGateway(body);
+    res = await adjustBalanceOnGateway({ ...body, ...actorPayload });
   } else if (action === 'resolve-tariff-request') {
     res = await resolveTariffRequestOnGateway({
       requestId: body.requestId,

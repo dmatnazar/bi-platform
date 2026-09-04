@@ -37,10 +37,8 @@ export function FullscreenController() {
     const onChange = () => setActive(isFullscreenActive());
     document.addEventListener('fullscreenchange', onChange);
 
-    if (fullscreenPrefDisabled() || isFullscreenActive()) {
-      document.addEventListener('fullscreenchange', onChange);
-      return () => document.removeEventListener('fullscreenchange', onChange);
-    }
+    // Always listen for fullscreen changes
+    // (early return above removed so refresh always re-tries when preferred)
 
     let tried = false;
     try {
@@ -48,26 +46,32 @@ export function FullscreenController() {
     } catch { /* ignore */ }
 
     const onFirstGesture = () => {
-      if (tried) return;
+      if (fullscreenPrefDisabled()) return;
+      if (tried && isFullscreenActive()) return;
       tried = true;
       try { sessionStorage.setItem(SESSION_FLAG, '1'); } catch { /* ignore */ }
       requestFullscreenSafe();
       window.removeEventListener('pointerdown', onFirstGesture);
     };
-    if (!tried) window.addEventListener('pointerdown', onFirstGesture, { once: true });
+    if (!tried || !isFullscreenActive()) {
+      window.addEventListener('pointerdown', onFirstGesture, { once: true });
+    }
 
-    // Desktop refresh (F5) / back-forward: try fullscreen again if preferred
-    const onPageShow = () => {
+    // Every refresh / F5 / back-forward / tab restore: re-enter fullscreen when preferred
+    const tryFullscreen = () => {
       if (fullscreenPrefDisabled()) return;
       if (isFullscreenActive()) return;
-      // Need a user gesture on some browsers — try anyway after short delay
-      setTimeout(() => {
-        if (!isFullscreenActive() && !fullscreenPrefDisabled()) {
-          requestFullscreenSafe();
-        }
-      }, 300);
+      requestFullscreenSafe();
+    };
+    const onPageShow = () => {
+      tryFullscreen();
+      setTimeout(tryFullscreen, 200);
+      setTimeout(tryFullscreen, 600);
     };
     window.addEventListener('pageshow', onPageShow);
+    // Hard refresh / first paint
+    tryFullscreen();
+    setTimeout(tryFullscreen, 300);
 
     return () => {
       document.removeEventListener('fullscreenchange', onChange);

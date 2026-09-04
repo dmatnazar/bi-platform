@@ -529,6 +529,11 @@ export async function assignTariffOnGateway(payload: {
   tenantSlug: string;
   tariffId: string;
   grantIncludedCredits?: boolean;
+  createdBy?: string;
+  username?: string;
+  actor?: string;
+  deviceName?: string;
+  source?: string;
 }) {
   return gatewayFetch('POST', '/api/admin/billing/assign-tariff', payload);
 }
@@ -537,6 +542,11 @@ export async function topUpOnGateway(payload: {
   tenantSlug: string;
   amount: number;
   reason?: string;
+  createdBy?: string;
+  username?: string;
+  actor?: string;
+  deviceName?: string;
+  source?: string;
 }) {
   return gatewayFetch('POST', '/api/admin/billing/topup', payload);
 }
@@ -545,6 +555,11 @@ export async function adjustBalanceOnGateway(payload: {
   tenantSlug: string;
   amount: number;
   reason: string;
+  createdBy?: string;
+  username?: string;
+  actor?: string;
+  deviceName?: string;
+  source?: string;
 }) {
   return gatewayFetch('POST', '/api/admin/billing/adjust', payload);
 }
