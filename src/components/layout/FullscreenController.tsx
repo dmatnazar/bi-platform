@@ -56,9 +56,23 @@ export function FullscreenController() {
     };
     if (!tried) window.addEventListener('pointerdown', onFirstGesture, { once: true });
 
+    // Desktop refresh (F5) / back-forward: try fullscreen again if preferred
+    const onPageShow = () => {
+      if (fullscreenPrefDisabled()) return;
+      if (isFullscreenActive()) return;
+      // Need a user gesture on some browsers — try anyway after short delay
+      setTimeout(() => {
+        if (!isFullscreenActive() && !fullscreenPrefDisabled()) {
+          requestFullscreenSafe();
+        }
+      }, 300);
+    };
+    window.addEventListener('pageshow', onPageShow);
+
     return () => {
       document.removeEventListener('fullscreenchange', onChange);
       window.removeEventListener('pointerdown', onFirstGesture);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 

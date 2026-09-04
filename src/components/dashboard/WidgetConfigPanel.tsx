@@ -16,6 +16,7 @@ import { flattenParamsSchema, suggestFiltersFromSchema } from '@/lib/types';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
+import { ApiPickerModal } from '@/components/ApiPickerModal';
 import { Link2, X, Sparkles } from 'lucide-react';
 
 interface EndpointOpt {
@@ -34,6 +35,8 @@ interface Props {
   onClose: () => void;
   globalFilters?: GlobalFilterDef[];
   onSuggestGlobalFilters?: (filters: GlobalFilterDef[]) => void;
+  /** Dashboard company slug — API picker auto-filters to this firm */
+  preferredTenantSlug?: string;
 }
 
 export function WidgetConfigPanel({
@@ -42,7 +45,9 @@ export function WidgetConfigPanel({
   onClose,
   globalFilters = [],
   onSuggestGlobalFilters,
+  preferredTenantSlug,
 }: Props) {
+  const [apiPickerOpen, setApiPickerOpen] = useState(false);
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
   const [sampleColumns, setSampleColumns] = useState<string[]>([]);
   const [drillSampleColumns, setDrillSampleColumns] = useState<string[]>([]);
@@ -451,9 +456,17 @@ export function WidgetConfigPanel({
       </div>
 
       <Input
-        label="Ady"
+        label="Ady (esasy)"
         value={widget.title}
         onChange={(e) => onChange({ ...widget, title: e.target.value })}
+      />
+      <Input
+        label="Mobile ady (islege görä)"
+        value={widget.mobileTitle || ''}
+        onChange={(e) =>
+          onChange({ ...widget, mobileTitle: e.target.value.trim() ? e.target.value : undefined })
+        }
+        placeholder="Boş bolsa esasy ady görkezilýär"
       />
 
       {(widget.type === 'kpi' || widget.type === 'text') && (
@@ -464,18 +477,34 @@ export function WidgetConfigPanel({
         />
       )}
 
-      <Select
-        label="API (data source)"
-        value={ds?.endpointId || ''}
-        onChange={(e) => selectEndpoint(e.target.value)}
-        options={[
-          { value: '', label: '— saýlaň —' },
-          ...endpoints.map((e) => ({
-            value: e.id,
-            label: `${e.method} ${e.name} (${e.tenantSlug})`,
-          })),
-        ]}
-      />
+      <div className="space-y-1.5">
+        <label className="text-xs text-slate-400">API (data source)</label>
+        <button
+          type="button"
+          onClick={() => setApiPickerOpen(true)}
+          className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-left text-sm text-white hover:border-indigo-500/50 transition-colors flex items-center justify-between gap-2"
+        >
+          <span className="truncate">
+            {ds?.endpointId
+              ? (() => {
+                  const ep = endpoints.find((e) => e.id === ds.endpointId);
+                  return ep
+                    ? `${ep.method} ${ep.name} (${ep.tenantSlug})`
+                    : ds.path || ds.endpointId;
+                })()
+              : '— saýlaň —'}
+          </span>
+          <span className="text-[10px] text-indigo-400 shrink-0">Saýla</span>
+        </button>
+        <ApiPickerModal
+          open={apiPickerOpen}
+          onClose={() => setApiPickerOpen(false)}
+          endpoints={endpoints}
+          value={ds?.endpointId}
+          preferredTenantSlug={preferredTenantSlug || ds?.tenantSlug}
+          onSelect={(ep) => selectEndpoint(ep.id)}
+        />
+      </div>
 
       {ds?.path && (
         <p className="text-[10px] font-mono text-slate-500 break-all">
@@ -1563,24 +1592,36 @@ export function WidgetConfigPanel({
           </label>
 
           <div className="space-y-2 pt-2 border-t border-slate-800">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-medium text-slate-400">Aşaky jemi (Sum / Count / Max)</p>
-              <button
-                type="button"
-                className="text-[11px] text-indigo-400 hover:text-indigo-300"
-                onClick={() => {
-                  const cols = sampleColumns.length ? sampleColumns : (ds?.columns || []);
-                  const col = cols[0] || '';
-                  patchDs({
-                    tableAggregates: [
-                      ...(ds?.tableAggregates || []),
-                      { column: col, fn: 'sum', label: col || 'Jemi', suffix: '' },
-                    ],
-                  });
-                }}
-              >
-                + Aggregate
-              </button>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-medium text-slate-400">Aşaky jemi (Sum / Count / Max / Distinct)</p>
+              <div className="flex items-center gap-2">
+                {(ds?.tableAggregates || []).length > 0 && (
+                  <button
+                    type="button"
+                    className="text-[11px] text-rose-400 hover:text-rose-300"
+                    onClick={() => patchDs({ tableAggregates: [] })}
+                    title="Ähli aggregatlary aýyr"
+                  >
+                    Aýyr
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="text-[11px] text-indigo-400 hover:text-indigo-300"
+                  onClick={() => {
+                    const cols = sampleColumns.length ? sampleColumns : (ds?.columns || []);
+                    const col = cols[0] || '';
+                    patchDs({
+                      tableAggregates: [
+                        ...(ds?.tableAggregates || []),
+                        { column: col, fn: 'sum', label: col || 'Jemi', suffix: '' },
+                      ],
+                    });
+                  }}
+                >
+                  + Aggregate
+                </button>
+              </div>
             </div>
             {(ds?.tableAggregates || []).map((a, i) => (
               <div key={i} className="grid grid-cols-2 gap-1.5 rounded-lg border border-slate-800 p-2">
@@ -1613,7 +1654,7 @@ export function WidgetConfigPanel({
                   value={a.fn}
                   onChange={(e) => {
                     const next = [...(ds?.tableAggregates || [])];
-                    next[i] = { ...next[i], fn: e.target.value as 'sum' | 'count' | 'max' | 'min' };
+                    next[i] = { ...next[i], fn: e.target.value as 'sum' | 'count' | 'max' | 'min' | 'distinct' };
                     patchDs({ tableAggregates: next });
                   }}
                 >
@@ -1621,6 +1662,7 @@ export function WidgetConfigPanel({
                   <option value="count">Count</option>
                   <option value="max">Max</option>
                   <option value="min">Min</option>
+                  <option value="distinct">Distinct</option>
                 </select>
                 <input
                   className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white"
@@ -2033,7 +2075,7 @@ export function WidgetConfigPanel({
                       value={a.fn}
                       onChange={(e) => {
                         const next = [...(ds.drillDown?.aggregates || [])];
-                        next[i] = { ...next[i], fn: e.target.value as 'sum' | 'count' | 'max' | 'min' };
+                        next[i] = { ...next[i], fn: e.target.value as 'sum' | 'count' | 'max' | 'min' | 'distinct' };
                         patchDs({ drillDown: { ...ds.drillDown!, aggregates: next } });
                       }}
                     >

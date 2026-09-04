@@ -300,9 +300,29 @@ export function DashboardCanvas({
     try {
       const res = await fetch('/api/dashboards');
       const data = await res.json();
-      const list: Dashboard[] = (data.dashboards || data || []).filter(
+      let list: Dashboard[] = (data.dashboards || data || []).filter(
         (d: Dashboard) => d.id !== dashboard.id
       );
+      // Attach company name/slug for picker UI
+      try {
+        const cres = await fetch('/api/catalog');
+        const cat = await cres.json();
+        const byId = new Map<string, { name: string; slug: string }>();
+        for (const t of cat.tenants || []) {
+          if (t.id) byId.set(String(t.id), { name: t.name || t.slug, slug: t.slug });
+          if (t.slug) byId.set(String(t.slug), { name: t.name || t.slug, slug: t.slug });
+        }
+        list = list.map((d) => {
+          const co = byId.get(String(d.companyId)) || byId.get(String((d as any).companySlug || ''));
+          return {
+            ...d,
+            companyName: (d as any).companyName || co?.name,
+            companySlug: (d as any).companySlug || co?.slug,
+          } as Dashboard;
+        });
+      } catch {
+        /* */
+      }
       setTargetDashboards(list);
     } catch (e) {
       setTransferMsg(String(e));
@@ -564,7 +584,7 @@ export function DashboardCanvas({
                   <GripVertical className="h-4 w-4" />
                 </button>
               )}
-              <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 truncate">{widget.title}</h4>
+              <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 truncate">{widget.mobileTitle ? (<><span className="hidden sm:inline">{widget.title}</span><span className="sm:hidden">{widget.mobileTitle || widget.title}</span></>) : widget.title}</h4>
               
               {/* Task 16: Buttons positioned right - Maximize first, then others */}
               <div className="flex items-center gap-0.5 shrink-0 ml-auto">
@@ -729,24 +749,42 @@ export function DashboardCanvas({
               </p>
               <div className="space-y-2">
                 <label className="text-xs text-slate-400">Maksat dashboard</label>
-                <select
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
-                  value={selectedTargetId}
-                  disabled={transferBusy}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedTargetId(id);
-                    const t = targetDashboards.find((d) => d.id === id);
-                    if (t) void loadDbOptionsForTarget(t);
-                  }}
-                >
-                  <option value="">— saýlaň —</option>
-                  {targetDashboards.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} ({(d.widgets || []).length} widget)
-                    </option>
-                  ))}
-                </select>
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-slate-700 divide-y divide-slate-800">
+                  {targetDashboards.length === 0 ? (
+                    <p className="text-xs text-slate-500 p-3">Başga dashboard ýok</p>
+                  ) : (
+                    targetDashboards.map((d) => {
+                      const selected = selectedTargetId === d.id;
+                      const firm =
+                        (d as any).companyName ||
+                        (d as any).companySlug ||
+                        d.companyId ||
+                        '';
+                      return (
+                        <button
+                          key={d.id}
+                          type="button"
+                          disabled={transferBusy}
+                          onClick={() => {
+                            setSelectedTargetId(d.id);
+                            void loadDbOptionsForTarget(d);
+                          }}
+                          className={`w-full text-left px-3 py-2.5 text-sm transition-colors ${
+                            selected
+                              ? 'bg-indigo-500/15 text-white'
+                              : 'hover:bg-slate-800/70 text-slate-200'
+                          }`}
+                        >
+                          <span className="font-medium block truncate">{d.name}</span>
+                          <span className="text-[10px] text-slate-500">
+                            {(d.widgets || []).length} widget
+                            {firm ? ` · ${firm}` : ''}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
               {selectedTargetId && (
                 <div className="space-y-2">
@@ -850,13 +888,16 @@ export function DashboardCanvas({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex-1 min-h-0 p-2 sm:p-4 overflow-auto">
-                <LiveWidget
-                  widget={expandedWidget}
-                  editable={false}
-                  globalFilters={globalFilters}
-                  refreshToken={refreshTokens[expandedWidget.id]}
-                />
+              <div className="flex-1 min-h-0 p-2 sm:p-4 overflow-hidden flex flex-col">
+                <div className="flex-1 min-h-0 h-full w-full">
+                  <LiveWidget
+                    widget={expandedWidget}
+                    editable={false}
+                    globalFilters={globalFilters}
+                    refreshToken={refreshTokens[expandedWidget.id]}
+                    className="h-full min-h-[50dvh]"
+                  />
+                </div>
               </div>
             </div>
           </div>,

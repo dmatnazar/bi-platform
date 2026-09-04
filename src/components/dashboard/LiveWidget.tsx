@@ -11,6 +11,7 @@ import {
   filterRowsByGlobalSearch,
 } from '@/lib/types';
 import { ChartWidget } from '@/components/charts/ChartWidget';
+import { cn } from '@/lib/utils';
 import { Settings2 } from 'lucide-react';
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
   globalFilters?: GlobalFilterValues;
   /** bump this number to force an immediate re-fetch (manual refresh button) */
   refreshToken?: number;
+  className?: string;
 }
 
 const SEARCH_KEY_RE = /search|gözleg|gozleg|keyword|^q$|query/i;
@@ -95,7 +97,7 @@ function LoadingOverlay({ active }: { active: boolean }) {
   );
 }
 
-export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, refreshToken }: Props) {
+export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, refreshToken, className }: Props) {
   const [rows, setRows] = useState<Record<string, unknown>[] | undefined>(undefined);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -194,7 +196,7 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
           data={displayRows}
           globalSearch={searchQuery}
           globalFilters={apiFilters}
-          className="h-full"
+          className={cn('h-full', className)}
         />
       </div>
     </div>

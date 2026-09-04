@@ -136,7 +136,7 @@ export interface WidgetDataSource {
   /** Footer aggregates: Sum/Count/Max shown under table */
   tableAggregates?: Array<{
     column: string;
-    fn: 'sum' | 'count' | 'max' | 'min';
+    fn: 'sum' | 'count' | 'max' | 'min' | 'distinct';
     label?: string;
     suffix?: string;
   }>;
@@ -170,7 +170,7 @@ export interface WidgetDataSource {
     /** Footer aggregates for drill-down table */
     aggregates?: Array<{
       column: string;
-      fn: 'sum' | 'count' | 'max' | 'min';
+      fn: 'sum' | 'count' | 'max' | 'min' | 'distinct';
       label?: string;
       suffix?: string;
     }>;
@@ -225,6 +225,8 @@ export interface DashboardWidget {
   id: string;
   type: WidgetType;
   title: string;
+  /** Optional shorter title on small screens */
+  mobileTitle?: string;
   /** react-grid-layout position */
   x: number;
   y: number;

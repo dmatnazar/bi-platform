@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { Dashboard, DashboardExportPayload, DashboardWidget } from '@/lib/types';
 import { generateId, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/Button';
@@ -71,10 +71,33 @@ export function DashboardListClient({
   userTenantSlugs = [],
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState(initial);
   // Company drill-down: null = company list (admin/multi), set = dashboards of that company
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(() => {
+    try {
+      const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('companyId') : null;
+      if (q) return q;
+      const s = typeof window !== 'undefined' ? sessionStorage.getItem('bi-dash-selected-company') : null;
+      return s || null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Sync from ?companyId= when landing from dashboard back button
+  useEffect(() => {
+    const q = searchParams?.get('companyId');
+    if (q) {
+      setSelectedCompanyId(q);
+      try {
+        sessionStorage.setItem('bi-dash-selected-company', q);
+      } catch {
+        /* */
+      }
+    }
+  }, [searchParams]);
 
   // Soft restore: if user navigates back to /dashboards list after viewing one, keep list;
   // deep-links already open /dashboards/[id]. Remember last id for "soňky" badge only.
@@ -103,6 +126,7 @@ export function DashboardListClient({
   const [xferTarget, setXferTarget] = useState<Dashboard | null>(null);
   const [xferMode, setXferMode] = useState<'copy' | 'move'>('copy');
   const [xferCompanyId, setXferCompanyId] = useState('');
+  const [xferCompanyIds, setXferCompanyIds] = useState<string[]>([]);
   const [xferBusy, setXferBusy] = useState(false);
   /** 1 = firma saýla, 2 = API deňeşdirme / confirm */
   const [xferStep, setXferStep] = useState<1 | 2>(1);
@@ -328,6 +352,7 @@ export function DashboardListClient({
     setXferTarget(d);
     setXferMode(mode);
     setXferCompanyId('');
+    setXferCompanyIds([]);
     setXferStep(1);
     setXferApiRows([]);
     setXferDbKey('primary');
@@ -341,10 +366,15 @@ export function DashboardListClient({
     setXferTarget(null);
     setXferStep(1);
     setXferApiRows([]);
+    setXferCompanyId('');
+    setXferCompanyIds([]);
   }
 
   /** Widget + drillDown dataSource-lardan API salgylary */
-  function collectWidgetApiKeys(widgets: DashboardWidget[]) {
+  function collectWidgetApiKeys(
+    widgets: DashboardWidget[],
+    globalFilters?: Dashboard['globalFilters']
+  ) {
     const keys: { path: string; method: string; tenantSlug: string; endpointId?: string }[] = [];
     const push = (ds?: DashboardWidget['dataSource'] | NonNullable<DashboardWidget['dataSource']>['drillDown']) => {
       if (!ds || !('path' in ds) || !ds.path) return;
@@ -360,25 +390,44 @@ export function DashboardListClient({
       push(w.dataSource);
       push(w.dataSource?.drillDown as any);
     }
+    // Custom / global filters may load options from a separate API
+    for (const f of globalFilters || []) {
+      const os = f.optionsSource;
+      if (!os?.path) continue;
+      const path = os.path.startsWith('/') ? os.path : `/${os.path}`;
+      keys.push({
+        path,
+        method: (os.method || 'GET').toUpperCase(),
+        tenantSlug: os.tenantSlug || '',
+      });
+    }
     return keys;
   }
 
   async function analyzeXferApis() {
-    if (!xferTarget || !xferCompanyId) {
+    const targets: string[] =
+      xferMode === 'copy' && xferCompanyIds.length > 0
+        ? xferCompanyIds
+        : xferCompanyId
+          ? [xferCompanyId]
+          : [];
+    if (!xferTarget || targets.length === 0) {
       flash('Maksat firma saýlaň');
       return;
     }
+    // Analyze against first target (API policies apply per firm on confirm)
+    const primaryTargetId = targets[0];
     setXferBusy(true);
     setXferAnalyzeMsg('API-lar deňeşdirilýär…');
     try {
-      const targetCo = companies.find((c) => c.id === xferCompanyId);
-      const targetSlug = targetCo?.slug || xferCompanyId;
+      const targetCo = companies.find((c) => c.id === primaryTargetId);
+      const targetSlug = targetCo?.slug || primaryTargetId;
       const res = await fetch('/api/catalog?force=1');
       const cat = await res.json();
       if (!res.ok) throw new Error(cat.error || 'Catalog alynmady');
 
       const allEps: any[] = cat.endpoints || [];
-      const sourceKeys = collectWidgetApiKeys(xferTarget.widgets || []);
+      const sourceKeys = collectWidgetApiKeys(xferTarget.widgets || [], xferTarget.globalFilters);
       // unique by path+method (prefer source tenant match)
       const seen = new Set<string>();
       const uniqueKeys: typeof sourceKeys = [];
@@ -397,7 +446,7 @@ export function DashboardListClient({
 
       const dbOpts =
         (cat.tenants || [])
-          .find((t: any) => t.slug === targetSlug || t.id === xferCompanyId)
+          .find((t: any) => t.slug === targetSlug || t.id === primaryTargetId)
           ?.connections?.map((c: any) => ({
             dbKey: c.dbKey || 'primary',
             label: c.label || c.database || c.dbKey || 'primary',
@@ -463,7 +512,13 @@ export function DashboardListClient({
   }
 
   async function confirmXfer() {
-    if (!xferTarget || !xferCompanyId) {
+    const targetIds: string[] =
+      xferMode === 'copy' && xferCompanyIds.length > 0
+        ? xferCompanyIds
+        : xferCompanyId
+          ? [xferCompanyId]
+          : [];
+    if (!xferTarget || targetIds.length === 0) {
       flash('Maksat firma saýlaň');
       return;
     }
@@ -473,14 +528,16 @@ export function DashboardListClient({
     }
     setXferBusy(true);
     try {
-      const targetCo = companies.find((c) => c.id === xferCompanyId);
-      const targetSlug = targetCo?.slug || xferCompanyId;
+      // Process each target firm (copy can multi-select)
+      for (const targetCompanyId of targetIds) {
+      const targetCo = companies.find((c) => c.id === targetCompanyId);
+      const targetSlug = targetCo?.slug || targetCompanyId;
 
       // Dashboard name conflict
       const sameName = items.find(
         (x) =>
           x.id !== xferTarget.id &&
-          matchesCompany(x, xferCompanyId) &&
+          matchesCompany(x, targetCompanyId) &&
           x.name.trim().toLowerCase() === xferTarget.name.trim().toLowerCase()
       );
       if (sameName) {
@@ -611,16 +668,36 @@ export function DashboardListClient({
         }))
       );
 
+      const globalFiltersRemapped = (xferTarget.globalFilters || []).map((f) => {
+        if (!f.optionsSource?.path) return f;
+        const path = f.optionsSource.path.startsWith('/')
+          ? f.optionsSource.path
+          : `/${f.optionsSource.path}`;
+        const method = String(f.optionsSource.method || 'GET').toUpperCase();
+        const hit = pathMap.get(`${method}|${path.toLowerCase()}`);
+        return {
+          ...f,
+          optionsSource: {
+            ...f.optionsSource,
+            tenantSlug: hit?.tenantSlug || targetSlug,
+            path: hit?.path || f.optionsSource.path,
+            method: (hit?.method as 'GET' | 'POST') || f.optionsSource.method || 'GET',
+            dbKey: xferDbKey,
+          },
+        };
+      });
+
       if (xferMode === 'move') {
         const res = await fetch(`/api/dashboards/${xferTarget.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            companyId: xferCompanyId,
+            companyId: targetCompanyId,
             widgets: widgetsRemapped.map((w, i) => ({
               ...w,
               id: (xferTarget.widgets || [])[i]?.id || w.id,
             })),
+            globalFilters: globalFiltersRemapped,
           }),
         });
         const data = await res.json();
@@ -628,12 +705,11 @@ export function DashboardListClient({
         setItems((prev) =>
           prev.map((x) =>
             x.id === xferTarget.id
-              ? { ...x, companyId: xferCompanyId, widgets: data.dashboard?.widgets || widgetsRemapped }
+              ? { ...x, companyId: targetCompanyId, widgets: data.dashboard?.widgets || widgetsRemapped }
               : x
           )
         );
-        flash('Dashboard firmaya göçürildi (API baglanyşyklar täzelendi)');
-      } else {
+        } else {
         const res = await fetch('/api/dashboards', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -641,15 +717,20 @@ export function DashboardListClient({
             name: xferTarget.name,
             description: xferTarget.description,
             widgets: widgetsRemapped,
-            globalFilters: xferTarget.globalFilters || [],
-            companyId: xferCompanyId,
+            globalFilters: globalFiltersRemapped,
+            companyId: targetCompanyId,
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Nusga alynmady');
         setItems((prev) => [data.dashboard, ...prev]);
-        flash('Dashboard nusga alyndy · API-lar maksat firmada sazlandy');
       }
+      } // end for each target
+      flash(
+        xferMode === 'move'
+          ? 'Dashboard firmaya göçürildi (API + filter API-lar täzelendi)'
+          : `Dashboard nusga alyndy · ${targetIds.length} firma · API/filter API sazlandy`
+      );
       closeXfer();
       router.refresh();
     } catch (e) {
@@ -694,7 +775,6 @@ export function DashboardListClient({
         widgets = remapWidgetIds(raw.dashboard.widgets || []);
         globalFilters = raw.dashboard.globalFilters || [];
       } else if (raw?.widgets && raw?.name) {
-        // raw dashboard object
         name = raw.name;
         description = raw.description;
         widgets = remapWidgetIds(raw.widgets || []);
@@ -703,25 +783,34 @@ export function DashboardListClient({
         throw new Error('Nädogry export faýly');
       }
 
-      const res = await fetch('/api/dashboards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, widgets, globalFilters }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import şowsuz');
+      // Import into the company currently selected in the list (not the export's company)
+      const targetCompanyId =
+        effectiveCompanyId ||
+        userCompanyId ||
+        companies[0]?.id ||
+        '';
 
-      if (globalFilters?.length) {
-        await fetch(`/api/dashboards/${data.dashboard.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ globalFilters }),
-        });
-      }
-
-      setItems((prev) => [data.dashboard, ...prev]);
-      flash('Import üstünlikli');
-      router.refresh();
+      // Open copy/xfer flow so user can map APIs (replace/skip/create)
+      const tempDash: Dashboard = {
+        id: 'import-temp',
+        name,
+        description,
+        companyId: targetCompanyId,
+        ownerId: '',
+        sharedWith: [],
+        widgets,
+        globalFilters,
+        version: 1,
+        isPublic: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setXferTarget(tempDash);
+      setXferMode('copy');
+      setXferCompanyId(targetCompanyId);
+      setXferCompanyIds(targetCompanyId ? [targetCompanyId] : []);
+      setXferStep(1);
+      flash('Import: maksat firma / API deňeşdirmesini tassyklaň');
     } catch (e) {
       flash(String(e));
     } finally {
@@ -801,7 +890,16 @@ export function DashboardListClient({
           {showCompanyPicker && effectiveCompanyId ? (
             <button
               type="button"
-              onClick={() => { setSelectedCompanyId(null); setQ(''); }}
+              onClick={() => {
+                setSelectedCompanyId(null);
+                setQ('');
+                try {
+                  sessionStorage.removeItem('bi-dash-selected-company');
+                } catch {
+                  /* */
+                }
+                router.replace('/dashboards');
+              }}
               className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 mb-1"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -881,6 +979,11 @@ export function DashboardListClient({
                 onClick={() => {
                   setNavPending(`co:${c.id}`);
                   setSelectedCompanyId(c.id);
+                  try {
+                    sessionStorage.setItem('bi-dash-selected-company', c.id);
+                  } catch {
+                    /* */
+                  }
                   // brief loading UX then clear
                   window.setTimeout(() => setNavPending(null), 400);
                 }}
@@ -1113,26 +1216,83 @@ export function DashboardListClient({
 
             {xferStep === 1 && (
               <>
-                <label className="block space-y-1.5">
-                  <span className="text-xs text-slate-400">Maksat firma</span>
-                  <select
-                    value={xferCompanyId}
-                    onChange={(e) => setXferCompanyId(e.target.value)}
-                    className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
-                  >
-                    <option value="">— Saýlaň —</option>
-                    {companies
-                      .filter((c) => c.id !== xferTarget.companyId && c.slug !== xferTarget.companyId)
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} ({c.slug})
-                        </option>
-                      ))}
-                  </select>
-                </label>
+                <div className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs space-y-1">
+                  <p className="text-slate-500">Çeşik dashboard</p>
+                  <p className="text-white font-medium truncate">{xferTarget.name}</p>
+                  <p className="text-indigo-300/90">
+                    Firma:{' '}
+                    {companies.find((c) => c.id === xferTarget.companyId || c.slug === xferTarget.companyId)?.name ||
+                      xferTarget.companyId ||
+                      '—'}
+                    <span className="text-slate-600 font-mono ml-1">
+                      (
+                      {companies.find((c) => c.id === xferTarget.companyId || c.slug === xferTarget.companyId)?.slug ||
+                        xferTarget.companyId}
+                      )
+                    </span>
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-xs text-slate-400">
+                    Maksat firma{xferMode === 'copy' ? 'lar (birnäçe saýlap bolýar)' : ''}
+                  </span>
+                  {xferMode === 'copy' ? (
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-700 divide-y divide-slate-800">
+                      {companies
+                        .filter((c) =>
+                          xferTarget.id === 'import-temp'
+                            ? true
+                            : c.id !== xferTarget.companyId && c.slug !== xferTarget.companyId
+                        )
+                        .map((c) => {
+                          const checked = xferCompanyIds.includes(c.id);
+                          return (
+                            <label
+                              key={c.id}
+                              className="flex items-center gap-2 px-3 py-2.5 text-sm cursor-pointer hover:bg-slate-800/50"
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded border-slate-600"
+                                checked={checked}
+                                onChange={() => {
+                                  setXferCompanyIds((prev) =>
+                                    checked ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                                  );
+                                  setXferCompanyId(c.id);
+                                }}
+                              />
+                              <span className="text-white">{c.name}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">({c.slug})</span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <select
+                      value={xferCompanyId}
+                      onChange={(e) => setXferCompanyId(e.target.value)}
+                      className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                    >
+                      <option value="">— Saýlaň —</option>
+                      {companies
+                        .filter((c) =>
+                          xferTarget.id === 'import-temp'
+                            ? true
+                            : c.id !== xferTarget.companyId && c.slug !== xferTarget.companyId
+                        )
+                        .map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.slug})
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                </div>
                 <p className="text-[11px] text-slate-500">
-                  Soňky ädimde widget API-lary maksat firmadaky atlar bilen deňeşdiriler (Replace / Skip /
-                  täze döret).
+                  Soňky ädimde widget we custom filter API-lary maksat firmadaky atlar bilen deňeşdiriler
+                  (Replace / Skip / täze döret).
                 </p>
               </>
             )}
@@ -1278,7 +1438,7 @@ export function DashboardListClient({
               <Button
                 className="flex-1"
                 loading={xferBusy}
-                disabled={xferStep === 1 ? !xferCompanyId : false}
+                disabled={xferStep === 1 ? (xferMode === 'copy' ? xferCompanyIds.length === 0 : !xferCompanyId) : false}
                 onClick={() => void confirmXfer()}
               >
                 {xferStep === 1

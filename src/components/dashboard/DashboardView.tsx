@@ -27,6 +27,8 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 interface Props {
   initial: Dashboard;
   editable: boolean;
+  companyName?: string;
+  companySlug?: string;
 }
 
 function localDateISO(d = new Date()) {
@@ -58,10 +60,11 @@ function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
   return v;
 }
 
-export function DashboardView({ initial, editable }: Props) {
+export function DashboardView({ initial, editable, companyName, companySlug }: Props) {
   const router = useRouter();
   const [dashboard, setDashboard] = useState(initial);
   const [editMode, setEditMode] = useState(false);
+  const [editOpening, setEditOpening] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(initial.name);
   const [dirty, setDirty] = useState(false);
@@ -333,7 +336,17 @@ export function DashboardView({ initial, editable }: Props) {
 
   async function handleBack() {
     const allow = await confirmLeave();
-    if (allow) {
+    if (!allow) return;
+    // Return to this company's dashboard list (not the firm picker)
+    const cid = initial.companyId || '';
+    if (cid) {
+      try {
+        sessionStorage.setItem('bi-dash-selected-company', cid);
+      } catch {
+        /* */
+      }
+      router.push(`/dashboards?companyId=${encodeURIComponent(cid)}`);
+    } else {
       router.push('/dashboards');
     }
   }
@@ -351,20 +364,47 @@ export function DashboardView({ initial, editable }: Props) {
             <ArrowLeft className="h-5 w-5" />
           </button>
           {editMode ? (
-            <Input
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setDirty(true);
-              }}
-              className="max-w-xs h-10"
-            />
+            <div className="min-w-0 flex-1 space-y-1">
+              <Input
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setDirty(true);
+                }}
+                className="max-w-md h-10"
+              />
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+                {(companyName || companySlug) && (
+                  <span className="text-indigo-300/90">
+                    <span className="text-slate-500">Firma:</span>{' '}
+                    {companyName || companySlug}
+                    {companySlug && companyName ? (
+                      <span className="text-slate-600 font-mono"> ({companySlug})</span>
+                    ) : null}
+                  </span>
+                )}
+                {dashboard.description ? (
+                  <span className="text-slate-400 truncate max-w-md">{dashboard.description}</span>
+                ) : null}
+              </div>
+            </div>
           ) : (
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-white truncate">{dashboard.name}</h1>
-              {dashboard.description && (
-                <p className="text-sm text-slate-400 truncate">{dashboard.description}</p>
-              )}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                {(companyName || companySlug) && (
+                  <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300/90">
+                    <span className="text-slate-500">Firma:</span>
+                    <span className="font-medium">{companyName || companySlug}</span>
+                    {companySlug && companyName ? (
+                      <span className="text-slate-600 font-mono">({companySlug})</span>
+                    ) : null}
+                  </span>
+                )}
+                {dashboard.description && (
+                  <span className="text-sm text-slate-400 truncate">{dashboard.description}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -396,12 +436,26 @@ export function DashboardView({ initial, editable }: Props) {
                   loading={refreshingAll}
                   title="Ähli widget-leri täzele"
                 >
-                  <RefreshCw className={`h-4 w-4 ${refreshingAll ? 'animate-spin' : ''}`} />
+                  {/* loading prop already shows spinner — no second spinning icon */}
+                  {!refreshingAll && <RefreshCw className="h-4 w-4" />}
                   Täzele
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => setEditMode(true)}>
-                  <Pencil className="h-4 w-4" />
-                  Üýtget
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={editOpening}
+                  loading={editOpening}
+                  onClick={() => {
+                    setEditOpening(true);
+                    // Allow React to paint loading state before heavy edit chrome mounts
+                    requestAnimationFrame(() => {
+                      setEditMode(true);
+                      setTimeout(() => setEditOpening(false), 120);
+                    });
+                  }}
+                >
+                  {!editOpening && <Pencil className="h-4 w-4" />}
+                  {editOpening ? 'Garaşyň…' : 'Üýtget'}
                 </Button>
               </>
             )}
@@ -562,6 +616,7 @@ export function DashboardView({ initial, editable }: Props) {
                     onClose={() => setConfigId(null)}
                     globalFilters={filterDefs}
                     onSuggestGlobalFilters={updateGlobalFilters}
+                    preferredTenantSlug={companySlug}
                   />
                 )}
               </div>

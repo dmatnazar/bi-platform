@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import ReactECharts from 'echarts-for-react';
 import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatCellValue } from '@/lib/utils';
 import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Download, Filter, GripVertical, Loader2, Maximize2, RotateCcw, Search, X, Undo2, ChevronRight } from 'lucide-react';
 
 const DEMO_BAR = [
@@ -354,18 +354,41 @@ function TableWidgetBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataKeysKey]);
 
+  function resolveDrillValue(row: Record<string, unknown>, sourceField: string): unknown {
+    if (row[sourceField] != null && row[sourceField] !== '') return row[sourceField];
+    // Column hidden in UI but still present under alternate casing / common id keys
+    const keys = Object.keys(row);
+    const lower = sourceField.toLowerCase();
+    const hit =
+      keys.find((k) => k.toLowerCase() === lower) ||
+      keys.find((k) => k.replace(/\s+/g, '').toLowerCase() === lower.replace(/\s+/g, '')) ||
+      (lower === 'id' || lower.endsWith('id')
+        ? keys.find((k) => /^(id|.*_id|.*Id)$/i.test(k) && row[k] != null && row[k] !== '')
+        : undefined);
+    return hit != null ? row[hit] : undefined;
+  }
+
   async function openDrillDown(row: Record<string, unknown>) {
     if (!dd?.enabled || !dd.sourceField || !dd.path || !dd.tenantSlug) return;
-    const value = row[dd.sourceField];
+    const value = resolveDrillValue(row, dd.sourceField);
     if (value == null || value === '') return;
 
     let title = dd.titleTemplate || '{field}: {value}';
-    title = title.replace(/\{field\}/g, dd.sourceField).replace(/\{value\}/g, String(value));
-    // Any {columnName} from the clicked row
-    title = title.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, col: string) => {
-      if (col === 'field' || col === 'value') return _;
-      const v = row[col];
-      return v == null ? '' : String(v);
+    title = title.replace(/\{field\}/gi, dd.sourceField).replace(/\{value\}/gi, String(value));
+    // Any {column name} from the clicked row — supports spaces & unicode (e.g. {Müşderi ady})
+    title = title.replace(/\{([^}]+)\}/g, (full, colRaw: string) => {
+      const col = String(colRaw).trim();
+      if (/^(field|value)$/i.test(col)) return full;
+      // exact key
+      if (Object.prototype.hasOwnProperty.call(row, col) && row[col] != null) return String(row[col]);
+      // case-insensitive / trim match
+      const keys = Object.keys(row);
+      const hit =
+        keys.find((k) => k === col) ||
+        keys.find((k) => k.toLowerCase() === col.toLowerCase()) ||
+        keys.find((k) => k.replace(/\s+/g, '').toLowerCase() === col.replace(/\s+/g, '').toLowerCase());
+      if (hit != null && row[hit] != null) return String(row[hit]);
+      return full; // keep token if unknown so user sees mismatch
     });
     setDrillTitle(title);
     setDrillOpen(true);
@@ -486,9 +509,13 @@ function TableWidgetBody({
   function computeAgg(
     rows: Record<string, unknown>[],
     col: string,
-    fn: 'sum' | 'count' | 'max' | 'min'
+    fn: 'sum' | 'count' | 'max' | 'min' | 'distinct'
   ): string {
     if (fn === 'count') return String(rows.length);
+    if (fn === 'distinct') {
+      const set = new Set(rows.map((r) => String(r[col] ?? '')));
+      return String(set.size);
+    }
     const nums = rows.map((r) => Number(r[col])).filter((n) => Number.isFinite(n));
     if (!nums.length) return '—';
     if (fn === 'sum') return String(Math.round(nums.reduce((a, b) => a + b, 0) * 1000) / 1000);
@@ -858,7 +885,7 @@ function TableWidgetBody({
                       key={c}
                       className="py-1.5 pr-2 whitespace-nowrap max-w-[220px] truncate border-b border-slate-800/60"
                     >
-                      {String(row[c] ?? '')}
+                      {formatCellValue(row[c])}
                     </td>
                   ))}
                 </tr>
@@ -912,7 +939,7 @@ function TableWidgetBody({
                           (primary.length === 1 || j === 0) && 'font-medium text-white'
                         )}
                       >
-                        {String(row[c] ?? '—')}
+                        {formatCellValue(row[c])}
                       </span>
                     </div>
                   ))}
@@ -923,7 +950,7 @@ function TableWidgetBody({
                     {secondary.map((c) => (
                       <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
                         <span className="text-slate-500">{c}: </span>
-                        <span className="text-slate-300">{String(row[c] ?? '—')}</span>
+                        <span className="text-slate-300">{formatCellValue(row[c])}</span>
                       </div>
                     ))}
                   </div>
@@ -1360,7 +1387,8 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           lineStyle: { width: 2.5 },
           label: {
                 // Always show one label per value-field series when multi-selected
-                show: showLabels || valueKeys.length > 1,
+                show: !!showLabels,
+                // Overlap handling via hideOverlap; dense points still labeled until zoom
                 position: horizontal ? 'right' : 'top',
                 color: palette[i % palette.length],
                 fontSize: Math.max(9, (widget.config?.labelFontSize || 10) - (valueKeys.length > 2 ? 1 : 0)),
@@ -1400,6 +1428,10 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             yAxisIndex: multiScale && !horizontal ? i % 2 : 0,
             data: rows.map((r) => Number(r[vk] ?? 0)),
             smooth,
+            // Dense line/area: sample points so labels/markers don't stack
+            ...(seriesType === 'line' && rows.length > 40
+              ? { sampling: 'lttb', large: true, showSymbol: false }
+              : {}),
             barGap: valueKeys.length > 1 ? '20%' : undefined,
             barMaxWidth: 48,
             areaStyle: widget.type === 'area' ? { opacity: multiScale ? 0.08 : 0.15 } : undefined,
@@ -1410,12 +1442,13 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             lineStyle: { width: 2.5 },
             // One label per series, always when multi value fields
             label: {
-              show: showLabels || valueKeys.length > 1,
+              show: !!showLabels,
               position: horizontal ? 'right' : 'top',
               color,
               fontSize: Math.max(9, (widget.config?.labelFontSize || 10) - (valueKeys.length > 2 ? 1 : 0)),
               distance: 6,
-              overflow: 'none',
+              overflow: 'truncate',
+              hideOverlap: true,
               formatter: (p: any) => {
                 const v = p.value;
                 if (v == null || v === '') return '';
@@ -1431,6 +1464,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
                 return text;
               },
             },
+            labelLayout: { hideOverlap: true },
           };
         });
       }
@@ -1464,12 +1498,12 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         axisLabel: {
           color: axisLabelColor,
           fontSize: baseLabelFs,
-          hideOverlap: false,
-          interval: 0 as const,
-          // horizontal bar: full category names on left
+          // Dense categories: auto-hide overlapping tick labels (zoom reveals more)
+          hideOverlap: true,
+          interval: rows.length > 24 ? 'auto' : 0,
           width: horizontal ? 120 : undefined,
-          overflow: horizontal ? 'truncate' : 'none',
-          ellipsis: horizontal ? '…' : undefined,
+          overflow: horizontal ? 'truncate' : 'truncate',
+          ellipsis: '…',
         },
         axisLine: { lineStyle: { color: '#334155' } },
         axisTick: { alignWithLabel: true },
@@ -1531,8 +1565,15 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         grid: {
           left: horizontal ? 8 : leftPad,
           right: rightPad,
-          top: showLegend && series.length > 1 ? 28 : multiY ? 44 : 28,
-          bottom: showLegend && series.length > 1 ? (horizontal ? 48 : 72) : 40,
+          top: horizontal
+            ? (showLegend || series.length > 1 ? 36 : 16)
+            : showLegend && series.length > 1
+              ? 28
+              : multiY
+                ? 44
+                : 28,
+          // Room for dataZoom slider; legend is top when horizontal
+          bottom: horizontal ? 44 : showLegend && series.length > 1 ? 72 : 40,
           containLabel: true,
         },
         dataZoom: [
@@ -1551,16 +1592,18 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         ],
         tooltip: { trigger: 'axis' },
         legend:
-          series.length > 1
+          series.length > 1 || showLegend
             ? {
-                bottom: horizontal ? 4 : 36,
+                // Horizontal bars: legend ABOVE chart so it never sits under dataZoom slider
+                ...(horizontal
+                  ? { top: 4, left: 'center' }
+                  : { bottom: series.length > 1 ? 36 : 8 }),
                 type: 'scroll',
+                orient: 'horizontal',
                 textStyle: { color: labelColor, fontSize: baseLabelFs },
-                // each value field = own color in legend
+                pageTextStyle: { color: '#94a3b8' },
               }
-            : showLegend
-              ? { bottom: 36, textStyle: { color: labelColor, fontSize: baseLabelFs } }
-              : undefined,
+            : undefined,
         xAxis: horizontal ? valueAxis : categoryAxis,
         yAxis: horizontal ? categoryAxis : multiY ? [valueAxis, valueAxisRight] : valueAxis,
         series,
@@ -1610,14 +1653,25 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       const centerAgg = widget.config?.pieCenterAgg || 'sum';
       // Task 13: which column to aggregate in donut center (default = pie value field)
       const centerField = widget.config?.pieCenterField || valKey;
+      const pieSourceField =
+        widget.dataSource?.drillDown?.sourceField ||
+        widget.dataSource?.categoryField ||
+        catKey;
       const pieData = rows.map((r, i) => {
         const value =
           valueKeys.length > 1
             ? valueKeys.reduce((sum, k) => sum + Number(r[k] ?? 0), 0)
             : Number(r[valKey] ?? 0);
+        // Keep hierarchy id even if column is hidden in table UI
+        const drillId =
+          r[pieSourceField] != null && r[pieSourceField] !== ''
+            ? r[pieSourceField]
+            : r['fich_id'] ?? r['fish_id'] ?? r['id'] ?? r['Id'];
         return {
           name: String(r[catKey] ?? ''),
           value,
+          _drillId: drillId,
+          _row: r,
           itemStyle: { color: palette[i % palette.length] },
         };
       });
@@ -1724,40 +1778,51 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               fontSize: widget.config?.labelFontSize || 10,
               show: showLabels,
               position: labelInside ? 'inside' : 'outside',
-              // Word-aware wrap only (no letter-by-letter). Prefer 1–2 lines.
+              // Word-aware wrap. Auto-size ON → tighter wrap; OFF → wider single-line prefer.
               formatter: (p: any) => {
                 const name = String(p.name ?? '');
-                const wrapName = (s: string, max = 18) => {
-                  if (s.length <= max) return s;
+                const auto = !!widget.config?.enableAutoTextSize;
+                const max = auto ? 14 : 28;
+                const wrapName = (s: string, maxChars: number) => {
+                  if (s.length <= maxChars) return s;
                   const words = s.split(/\s+/);
+                  if (words.length === 1) {
+                    // long token: soft-break only when auto (else keep one line, chart may truncate)
+                    if (!auto) return s;
+                    const parts: string[] = [];
+                    for (let i = 0; i < s.length; i += maxChars) parts.push(s.slice(i, i + maxChars));
+                    return parts.slice(0, 2).join('\n');
+                  }
                   const lines: string[] = [];
                   let cur = '';
                   for (const w of words) {
                     if (!cur) cur = w;
-                    else if ((cur + ' ' + w).length <= max) cur = cur + ' ' + w;
+                    else if ((cur + ' ' + w).length <= maxChars) cur = cur + ' ' + w;
                     else {
                       lines.push(cur);
                       cur = w;
                     }
                   }
                   if (cur) lines.push(cur);
-                  return lines.slice(0, 3).join('\n');
+                  return lines.slice(0, auto ? 3 : 2).join('\n');
                 };
-                const lines = [wrapName(name)];
+                const lines = [wrapName(name, max)];
                 if (showValueInLabel && p.value != null) lines.push(String(p.value));
                 if (showPercent && p.percent != null) lines.push(p.percent + '%');
                 return lines.join('\n');
               },
-              overflow: 'none',
-              lineHeight: 13,
-              alignTo: labelInside ? undefined : 'labelLine',
-              edgeDistance: 4,
-              bleedMargin: 4,
-              distanceToLabelLine: 3,
+              overflow: 'break',
+              lineHeight: 14,
+              alignTo: labelInside ? undefined : 'none',
+              edgeDistance: 6,
+              bleedMargin: 2,
+              distanceToLabelLine: 4,
             },
             labelLayout: {
-              hideOverlap: false,
+              // Keep labels inside widget bounds; hide if still overlapping heavily
+              hideOverlap: true,
               moveOverlap: 'shiftY',
+              draggable: false,
             },
             labelLine: {
               show: showLabels && !labelInside,
@@ -2267,11 +2332,14 @@ function ChartCanvas({
     // Prefer id-like field from row; fallback to category name
     let paramVal: string | number | boolean = categoryName;
     if (row) {
-      if (row[sourceField] != null && row[sourceField] !== '') {
-        paramVal = row[sourceField] as string | number | boolean;
-      } else if (row['id'] != null) {
-        paramVal = row['id'] as string | number | boolean;
-      }
+      const keys = Object.keys(row);
+      const lower = String(sourceField || '').toLowerCase();
+      const hit =
+        (row[sourceField] != null && row[sourceField] !== '' ? sourceField : null) ||
+        keys.find((k) => k.toLowerCase() === lower && row[k] != null && row[k] !== '') ||
+        keys.find((k) => /fich_id|fish_id/i.test(k) && row[k] != null && row[k] !== '') ||
+        keys.find((k) => /^(id|.*_id)$/i.test(k) && row[k] != null && row[k] !== '');
+      if (hit) paramVal = row[hit] as string | number | boolean;
     }
     const targetParam = cfg.targetParam;
     const params: Record<string, string | number | boolean> = {
@@ -2344,9 +2412,15 @@ function ChartCanvas({
     if (!params?.data?.name) return;
     if (!dd?.enabled) return;
     const name = String(params.data.name);
-    // find matching root row for id
     const catKey = widget.dataSource?.categoryField || 'name';
-    const row = (data || []).find((r) => String(r[catKey] ?? '') === name);
+    // Prefer embedded row from pie data (keeps hidden hierarchy id columns)
+    let row: Record<string, unknown> | undefined = params.data._row;
+    if (!row) {
+      row = (data || []).find((r) => String(r[catKey] ?? '') === name);
+    }
+    if (row && params.data._drillId != null && dd.sourceField) {
+      row = { ...row, [dd.sourceField]: params.data._drillId };
+    }
     void openPieDrill(name, row);
   }
 

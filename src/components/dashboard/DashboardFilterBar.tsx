@@ -370,7 +370,7 @@ export function DashboardFilterBar({
       </div>
 
       {filtersOpen && (
-      <div className="flex flex-wrap items-end gap-2 mt-2.5 pt-2.5 border-t border-slate-800/80">
+      <div className="flex flex-wrap items-end gap-1.5 sm:gap-2 mt-2.5 pt-2.5 border-t border-slate-800/80">
         {filters.map((f) => {
           if (f.type === 'daterange') {
             return (
