@@ -289,6 +289,8 @@ export interface DashboardWidget {
     unit?: string;
     /** KPI number format decimals */
     decimals?: number;
+    /** Chart Y/X value axis: compact (400k) | grouped (400,000) | full (400000) */
+    axisNumberFormat?: 'compact' | 'grouped' | 'full';
     /** KPI prefix/suffix e.g. currency */
     prefix?: string;
     suffix?: string;

@@ -1453,9 +1453,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
                 const v = p.value;
                 if (v == null || v === '') return '';
                 const num = typeof v === 'number' ? v : Number(v);
-                const text = Number.isFinite(num)
-                  ? num.toLocaleString(undefined, { maximumFractionDigits: 1 })
-                  : String(v);
+                const text = Number.isFinite(num) ? formatAxisNumber(num) : String(v);
                 if (valueKeys.length > 1) {
                   const nm = String(p.seriesName || vk);
                   const short = nm.length > 14 ? nm.slice(0, 13) + '…' : nm;
@@ -1508,6 +1506,23 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         axisLine: { lineStyle: { color: '#334155' } },
         axisTick: { alignWithLabel: true },
       };
+      // Axis number format: compact (400k) | full (400000) | grouped (400,000)
+      const axisNumFmt = (widget.config?.axisNumberFormat as 'compact' | 'full' | 'grouped') || 'compact';
+      const formatAxisNumber = (v: number) => {
+        if (v == null || !Number.isFinite(v)) return '';
+        const abs = Math.abs(v);
+        if (axisNumFmt === 'full') {
+          return String(Math.round(v * 1000) / 1000);
+        }
+        if (axisNumFmt === 'grouped') {
+          return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+        }
+        // compact default — fewer digits, less left padding
+        if (abs >= 1e9) return (v / 1e9).toFixed(abs >= 1e10 ? 0 : 1).replace(/\.0$/, '') + 'B';
+        if (abs >= 1e6) return (v / 1e6).toFixed(abs >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+        if (abs >= 1e3) return (v / 1e3).toFixed(abs >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
+        return String(Math.round(v * 100) / 100);
+      };
       const valueAxisLeft = {
         type: 'value' as const,
         name: multiY ? String(series[0]?.name || '') : undefined,
@@ -1516,6 +1531,8 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           color: multiY ? palette[0] || axisLabelColor : axisLabelColor,
           fontSize: baseLabelFs,
           hideOverlap: true,
+          margin: 4,
+          formatter: formatAxisNumber,
         },
         splitLine: { lineStyle: { color: '#1e293b' } },
         scale: true,
@@ -1531,13 +1548,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           fontSize: baseLabelFs,
           hideOverlap: true,
           margin: 10,
-          formatter: (v: number) => {
-            if (v == null || !Number.isFinite(v)) return '';
-            const abs = Math.abs(v);
-            if (abs >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-            if (abs >= 1e4) return (v / 1e3).toFixed(1) + 'k';
-            return String(v);
-          },
+          formatter: formatAxisNumber,
         },
         splitLine: { show: false },
         scale: true,
@@ -1547,14 +1558,13 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
 
       // Left padding grows with label size so Y labels stay visible (Task 15)
       // Horizontal bar: category labels on LEFT (Y axis) — need real space
-      const leftPad = horizontal
-        ? Math.max(72, Math.round(baseLabelFs * 7))
-        : Math.max(48, Math.round(baseLabelFs * 4.5));
+      // Tight padding — containLabel sizes for axis text; chart fills widget
+      const leftPad = horizontal ? 4 : 4;
       const rightPad = horizontal
-        ? Math.max(56, Math.round(baseLabelFs * 5.5)) // room for bar-end value labels
+        ? (showLabels ? 36 : 8)
         : multiY
-          ? Math.max(56, Math.round(baseLabelFs * 5.5))
-          : 20;
+          ? 8
+          : 6;
 
       // Multi value fields → each series keeps its own color + legend entry
       // (already separate series from valueKeys map)

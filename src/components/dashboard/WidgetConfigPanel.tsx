@@ -1198,6 +1198,26 @@ export function WidgetConfigPanel({
                     className="w-full"
                   />
                 </div>
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">Oks san formaty</label>
+                  <select
+                    className="w-full h-9 rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-white"
+                    value={widget.config?.axisNumberFormat || 'compact'}
+                    onChange={(e) =>
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          axisNumberFormat: e.target.value as 'compact' | 'grouped' | 'full',
+                        },
+                      })
+                    }
+                  >
+                    <option value="compact">Gysga (400k, 1.2M)</option>
+                    <option value="grouped">Bölünen (400,000)</option>
+                    <option value="full">Doly (400000)</option>
+                  </select>
+                </div>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"

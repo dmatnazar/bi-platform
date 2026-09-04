@@ -481,7 +481,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
       {/* Task 11: Hydration fix - ensure container is fully ready before rendering grid */}
       {isHydrated && (
         <div
-          className={editMode ? 'flex flex-col lg:flex-row gap-4 w-full max-w-full' : 'w-full max-w-full'}
+          className={editMode ? 'flex flex-col lg:flex-row lg:items-stretch gap-4 w-full max-w-full min-h-[calc(100dvh-6rem)]' : 'w-full max-w-full'}
           style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}
         >
           {/* Task 11: host must be full content width on mobile (no half-width flex shrink) */}
@@ -493,7 +493,10 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
               dashboard={{ ...dashboard, name }}
               editable={editMode}
               onChange={updateWidgets}
-              onConfigureWidget={(id) => setConfigId(id)}
+              onConfigureWidget={(id) => {
+                setConfigId(id);
+                setPanelOpen({ palette: false, filters: false, config: true });
+              }}
               globalFilters={effectiveFilterValues}
             />
           </div>
@@ -504,51 +507,45 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
               const el = node as HTMLElement & { __wheelBound?: boolean };
               if (el.__wheelBound) return;
               el.__wheelBound = true;
-              // Manual scroll so page/dashboard never moves while over panel
+              // Always keep wheel inside panel (page must not scroll while hovering settings)
               el.addEventListener(
                 'wheel',
                 (e: WheelEvent) => {
-                  const { scrollTop, scrollHeight, clientHeight } = el;
-                  const maxScroll = Math.max(0, scrollHeight - clientHeight);
-                  const atTop = scrollTop <= 0;
-                  const atBottom = scrollTop >= maxScroll - 1;
-                  const goingUp = e.deltaY < 0;
-                  const goingDown = e.deltaY > 0;
-
-                  // Panel still has room to scroll → keep scroll inside panel
-                  if (maxScroll > 0 && !((atTop && goingUp) || (atBottom && goingDown))) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    el.scrollTop += e.deltaY;
-                    return;
-                  }
-
-                  // At edge: scroll nearest page scroll parent (not only window)
                   e.preventDefault();
                   e.stopPropagation();
-                  let node: HTMLElement | null = el.parentElement;
-                  while (node && node !== document.body) {
-                    const st = getComputedStyle(node);
+                  // Prefer the deepest scrollable child under the pointer
+                  let target: HTMLElement | null = e.target as HTMLElement;
+                  let scrollEl: HTMLElement | null = null;
+                  while (target && target !== el) {
+                    const st = getComputedStyle(target);
                     const oy = st.overflowY;
                     if (
                       (oy === 'auto' || oy === 'scroll' || oy === 'overlay') &&
-                      node.scrollHeight > node.clientHeight + 1
+                      target.scrollHeight > target.clientHeight + 1
                     ) {
-                      node.scrollTop += e.deltaY;
-                      return;
+                      scrollEl = target;
+                      break;
                     }
-                    node = node.parentElement;
+                    target = target.parentElement;
                   }
-                  window.scrollBy(0, e.deltaY);
+                  if (!scrollEl) {
+                    // Fall back to any scrollable descendant (config body)
+                    scrollEl =
+                      (el.querySelector('[data-widget-config-scroll]') as HTMLElement) ||
+                      el;
+                  }
+                  scrollEl.scrollTop += e.deltaY;
                 },
-                { passive: false }
+                { passive: false, capture: true }
               );
             }}
-            className="lg:w-80 w-full shrink-0 flex flex-col gap-3 sticky top-4 max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain pr-1"
+            className="lg:w-[22rem] xl:w-96 w-full shrink-0 flex flex-col gap-2 sticky top-[4.75rem] self-start h-[calc(100dvh-5.25rem)] max-h-[calc(100dvh-5.25rem)] overflow-hidden pr-0.5"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            {/* Collapsible: Widget goş */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+
+            {/* Collapsible: Widget goş — gizle when config open so settings fills panel */}
+            {!configId && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shrink-0">
               <button
                 type="button"
                 className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
@@ -567,9 +564,11 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 </div>
               )}
             </div>
+            )}
 
             {/* Collapsible: Global filters */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+            {!configId && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shrink-0">
               <button
                 type="button"
                 className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
@@ -591,13 +590,14 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 </div>
               )}
             </div>
+            )}
 
-            {/* Collapsible: Widget config */}
+            {/* Collapsible: Widget config — full remaining height of sticky panel */}
             {configId && dashboard.widgets.find((w) => w.id === configId) && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/50">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
                 <button
                   type="button"
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 shrink-0"
                   onClick={() => setPanelOpen((p) => ({ ...p, config: !p.config }))}
                 >
                   {panelOpen.config ? (
@@ -608,16 +608,21 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                   Widget sazlamasy
                 </button>
                 {panelOpen.config && (
-                  <WidgetConfigPanel
-                    widget={dashboard.widgets.find((w) => w.id === configId)!}
-                    onChange={(w) => {
-                      updateWidgets(dashboard.widgets.map((x) => (x.id === w.id ? w : x)));
-                    }}
-                    onClose={() => setConfigId(null)}
-                    globalFilters={filterDefs}
-                    onSuggestGlobalFilters={updateGlobalFilters}
-                    preferredTenantSlug={companySlug}
-                  />
+                  <div
+                    data-widget-config-scroll
+                    className="flex-1 min-h-0 h-full overflow-y-auto overscroll-contain px-2 pb-6"
+                  >
+                    <WidgetConfigPanel
+                      widget={dashboard.widgets.find((w) => w.id === configId)!}
+                      onChange={(w) => {
+                        updateWidgets(dashboard.widgets.map((x) => (x.id === w.id ? w : x)));
+                      }}
+                      onClose={() => setConfigId(null)}
+                      globalFilters={filterDefs}
+                      onSuggestGlobalFilters={updateGlobalFilters}
+                      preferredTenantSlug={companySlug}
+                    />
+                  </div>
                 )}
               </div>
             )}

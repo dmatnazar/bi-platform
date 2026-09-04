@@ -200,16 +200,37 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       >
         <Dot ok={!!status?.biClientDataAvailable} warn={status?.fromCache && status?.biClientDataAvailable} />
         <Database className="h-3.5 w-3.5 text-slate-400" />
-        <span
-          className={
-            status?.biClientDataAvailable
-              ? status.fromCache
-                ? 'text-amber-300'
-                : 'text-emerald-300'
-              : 'text-rose-300'
-          }
-        >
-          BI Client ({formatAdminClientSummary(status)})
+        <span className="text-slate-300 inline-flex items-center gap-1 flex-wrap">
+          BI Client (
+          {(() => {
+            const list = status?.tenantStatuses || [];
+            if (list.length <= 1) {
+              return (
+                <span className={status?.biClientDataAvailable ? 'text-emerald-300' : 'text-rose-300'}>
+                  {formatAdminClientSummary(status)}
+                </span>
+              );
+            }
+            let live = 0;
+            let offline = 0;
+            for (const t of list) {
+              if (t.online || t.live) live += 1;
+              else offline += 1;
+            }
+            return (
+              <>
+                {live > 0 && (
+                  <span className="text-emerald-300 font-medium">live({live})</span>
+                )}
+                {live > 0 && offline > 0 && <span className="text-slate-500">,</span>}
+                {offline > 0 && (
+                  <span className="text-amber-300 font-medium">offline({offline})</span>
+                )}
+                {live === 0 && offline === 0 && <span className="text-slate-500">—</span>}
+              </>
+            );
+          })()}
+          )
         </span>
       </button>
 
@@ -229,9 +250,9 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       )}
 
       {clientModal && (
-        <div className="fixed inset-0 z-[2147483000] flex items-center justify-center p-3 sm:p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setClientModal(false)} />
-          <div className="relative w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden max-h-[min(70dvh,420px)] flex flex-col">
+        <div className="fixed inset-0 z-[2147483000] flex items-start justify-center pt-[4.5rem] sm:pt-20 px-3 sm:px-4 pb-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setClientModal(false)} />
+          <div className="relative w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden max-h-[min(65dvh,400px)] flex flex-col mt-1">
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800 shrink-0">
               <p className="text-sm font-semibold text-white">BI Client — firmalar</p>
               <button
@@ -252,7 +273,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
                   const color =
                     state === 'online' || state === 'live'
                       ? 'text-emerald-300'
-                      : 'text-rose-300';
+                      : 'text-amber-300';
                   return (
                     <li key={t.slug} className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm">
                       <span className="text-slate-200 truncate">{t.name}</span>

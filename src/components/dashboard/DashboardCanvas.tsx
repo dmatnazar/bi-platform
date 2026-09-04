@@ -118,6 +118,8 @@ export function DashboardCanvas({
   // listeners, keeps `width` accurate on real devices, not just in the
   // desktop simulator.
   const containerElRef = useRef<HTMLDivElement | null>(null);
+  const dragScrollRaf = useRef<number | null>(null);
+  const dragScrollDir = useRef<number>(0);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     containerElRef.current = node;
     // measure immediately when node mounts (before paint settles)
@@ -539,10 +541,78 @@ export function DashboardCanvas({
     );
   }
 
+
+  function stopDragScroll() {
+    dragScrollDir.current = 0;
+    if (dragScrollRaf.current != null) {
+      cancelAnimationFrame(dragScrollRaf.current);
+      dragScrollRaf.current = null;
+    }
+  }
+
+  function applyScroll(delta: number) {
+    // Prefer documentElement / body (works with sticky headers)
+    const se = document.scrollingElement || document.documentElement;
+    if (se) {
+      se.scrollTop += delta;
+    }
+    window.scrollBy(0, delta);
+  }
+
+  function tickDragScroll() {
+    const dir = dragScrollDir.current;
+    if (!dir) {
+      dragScrollRaf.current = null;
+      return;
+    }
+    applyScroll(dir * 28);
+    dragScrollRaf.current = requestAnimationFrame(tickDragScroll);
+  }
+
+  function updateDragScrollFromClientY(clientY: number) {
+    const edge = 96;
+    let dir = 0;
+    if (clientY < edge) dir = -1;
+    else if (clientY > window.innerHeight - edge) dir = 1;
+    dragScrollDir.current = dir;
+    if (dir && dragScrollRaf.current == null) {
+      dragScrollRaf.current = requestAnimationFrame(tickDragScroll);
+    }
+    if (!dir) stopDragScroll();
+  }
+
+  function onWidgetDrag(
+    _layout: Layout[],
+    _oldItem: Layout,
+    _newItem: Layout,
+    _placeholder: Layout,
+    e: MouseEvent | TouchEvent,
+    _node?: HTMLElement
+  ) {
+    let clientY = 0;
+    if ('touches' in e && e.touches?.[0]) clientY = e.touches[0].clientY;
+    else if ('clientY' in e) clientY = (e as MouseEvent).clientY;
+    updateDragScrollFromClientY(clientY);
+  }
+
+  function onWidgetDragStart() {
+    // Pointer tracking as backup (RGL event coords can be unreliable)
+    const onMove = (ev: PointerEvent) => updateDragScrollFromClientY(ev.clientY);
+    const onUp = () => {
+      stopDragScroll();
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
   return (
     <div 
       ref={containerRef} 
-      className="w-full overflow-hidden"
+      className="w-full overflow-x-hidden overflow-y-visible"
       style={{ width: '100%', maxWidth: '100%' }}
     >
       {width < 40 ? (
@@ -564,6 +634,9 @@ export function DashboardCanvas({
         resizeHandles={editable ? ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] : []}
         compactType="vertical"
         onLayoutChange={onLayoutChange}
+        onDragStart={() => onWidgetDragStart()}
+        onDrag={onWidgetDrag as any}
+        onDragStop={() => stopDragScroll()}
         draggableHandle=".drag-handle"
         style={{ width: '100%' }}
       >
