@@ -51,7 +51,18 @@ export default function StaffPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<StaffRow | null>(null);
-  const [form, setForm] = useState({
+  type StaffForm = {
+    fullName: string;
+    username: string;
+    password: string;
+    role: string;
+    phoneLocal: string;
+    email: string;
+    active: boolean;
+    tenantSlugs: string[];
+  };
+
+  const [form, setForm] = useState<StaffForm>({
     fullName: '',
     username: '',
     password: '',
@@ -174,7 +185,7 @@ export default function StaffPage() {
           phone,
           email: form.email,
           active: form.active,
-          tenantSlugs: form.tenantSlugs?.length ? form.tenantSlugs : undefined,
+          tenantSlugs: form.tenantSlugs.length ? form.tenantSlugs : undefined,
         }),
       });
       const data = await res.json();
