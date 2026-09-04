@@ -61,9 +61,10 @@ function loadTsParticles(): Promise<void> {
 
 function optionsFor(theme: Theme) {
   const base = {
-    fullScreen: { enable: false },
+    // Never attach to document body — stays inside our absolute/fixed host
+    fullScreen: { enable: false, zIndex: 0 },
     background: { color: { value: 'transparent' } },
-    fpsLimit: 60,
+    fpsLimit: 48,
     detectRetina: true,
     interactivity: {
       events: {
@@ -208,11 +209,15 @@ export function ParticlesBackground({ theme = 'login', className }: Props) {
       ref={hostRef}
       className={
         className ||
-        'pointer-events-none absolute inset-0 -z-0 overflow-hidden [&_canvas]:!h-full [&_canvas]:!w-full'
+        'pointer-events-none absolute inset-0 -z-0 overflow-hidden'
       }
+      style={{ contain: 'strict' }}
       aria-hidden
     >
-      <div id={id} className="absolute inset-0 h-full w-full" />
+      <div
+        id={id}
+        className="absolute inset-0 h-full w-full max-h-full max-w-full overflow-hidden [&_canvas]:!absolute [&_canvas]:!inset-0 [&_canvas]:!h-full [&_canvas]:!w-full [&_canvas]:!max-h-full"
+      />
     </div>
   );
 }

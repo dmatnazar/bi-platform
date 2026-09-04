@@ -74,14 +74,16 @@ export async function POST(req: NextRequest) {
 
   const { tenantSlug, path, method, dbKey, params: rawParams } = parsed.data;
 
-  // ── Tenant isolation: non-super users may only query their own company ──
+  // ── Tenant isolation: non-super users may query any of their linked companies ──
   if (!isSuperAdmin(user)) {
-    const allowed = user.companySlug;
-    if (!allowed || allowed !== tenantSlug) {
+    const allowedSlugs = new Set<string>(
+      [user.companySlug, ...(user.tenantSlugs || [])].filter(Boolean).map(String)
+    );
+    if (!allowedSlugs.size || !allowedSlugs.has(tenantSlug)) {
       return NextResponse.json(
         {
           error: 'Bu kompaniýanyň maglumatyna rugsat ýok',
-          detail: `Siziň firmanyňyz: ${allowed || '—'}, sorag: ${tenantSlug}`,
+          detail: `Siziň firmalaryňyz: ${[...allowedSlugs].join(', ') || '—'}, sorag: ${tenantSlug}`,
         },
         { status: 403 }
       );

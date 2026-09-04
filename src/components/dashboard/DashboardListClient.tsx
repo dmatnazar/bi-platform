@@ -1,6 +1,4 @@
 'use client';
-import { ParticlesBackground } from '@/components/ParticlesBackground';
-import { useAppAnimations } from '@/lib/use-app-animations';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -73,7 +71,6 @@ export function DashboardListClient({
   userTenantSlugs = [],
 }: Props) {
   const router = useRouter();
-  const appAnimOn = useAppAnimations();
   const fileRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState(initial);
   // Company drill-down: null = company list (admin/multi), set = dashboards of that company
@@ -799,10 +796,6 @@ export function DashboardListClient({
 
   return (
     <div className="relative space-y-6">
-      {appAnimOn && (
-        <ParticlesBackground theme="dashboard" className="pointer-events-none absolute inset-0 -z-10 opacity-60" />
-      )}
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           {showCompanyPicker && effectiveCompanyId ? (

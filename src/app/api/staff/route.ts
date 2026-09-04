@@ -125,10 +125,10 @@ export async function POST(req: NextRequest) {
   }
 
   const data = parsed.data;
-  const requestedSlugs = Array.from(new Set(
+  const requestedSlugs: string[] = Array.from(new Set(
     (data.tenantSlugs?.length ? data.tenantSlugs : (data.tenantSlug ? [data.tenantSlug] : []))
-      .map((s) => String(s || '').trim())
-      .filter(Boolean)
+      .map((s: string) => String(s || '').trim())
+      .filter((s): s is string => Boolean(s))
   ));
   const allowedSlugs = isSuperAdmin(user)
     ? requestedSlugs
@@ -159,9 +159,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Täze işgär üçin parol gerek' }, { status: 400 });
   }
 
-  const existingSlugs = Array.from(new Set(
-    ((existingAnywhere as any)?.tenantSlugs || ((existingAnywhere as any)?.tenantSlug ? [(existingAnywhere as any).tenantSlug] : []))
-      .filter(Boolean)
+  const existingSlugs: string[] = Array.from(new Set(
+    (
+      (Array.isArray((existingAnywhere as any)?.tenantSlugs)
+        ? (existingAnywhere as any).tenantSlugs
+        : ((existingAnywhere as any)?.tenantSlug ? [(existingAnywhere as any).tenantSlug] : [])) as unknown[]
+    )
+      .map((s: unknown) => String(s ?? '').trim())
+      .filter((s): s is string => s.length > 0)
   ));
   const entry: any = {
     id: existingAnywhere?.id || id,
@@ -178,7 +183,7 @@ export async function POST(req: NextRequest) {
   if (passwordPlain) entry.passwordPlain = passwordPlain;
   if ((existingAnywhere as any)?.passwordEnc && !passwordPlain) entry.passwordEnc = (existingAnywhere as any).passwordEnc;
 
-  const affectedSlugs = Array.from(new Set([...existingSlugs, ...tenantSlugs]));
+  const affectedSlugs: string[] = Array.from(new Set([...existingSlugs, ...tenantSlugs]));
   const staffForTenant = (slug: string) => {
     const members = allStaff.filter((s: any) => {
       const slugs = Array.isArray(s.tenantSlugs) && s.tenantSlugs.length ? s.tenantSlugs : (s.tenantSlug ? [s.tenantSlug] : []);

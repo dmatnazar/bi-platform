@@ -792,52 +792,71 @@ export default function ApisPage() {
                   </button>
                 </div>
                 {editParams.map((p, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-1.5 items-center">
-                    <input
-                      className="col-span-4 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white"
-                      placeholder="ady"
-                      value={p.name}
-                      onChange={(e) =>
-                        setEditParams((rows) =>
-                          rows.map((r, j) => (j === i ? { ...r, name: e.target.value } : r))
-                        )
-                      }
-                    />
-                    <select
-                      className="col-span-3 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
-                      value={p.type}
-                      onChange={(e) =>
-                        setEditParams((rows) =>
-                          rows.map((r, j) => (j === i ? { ...r, type: e.target.value } : r))
-                        )
-                      }
-                    >
-                      {['nvarchar','int','bigint','date','datetime','bit','float'].map((t) => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                    <select
-                      className="col-span-3 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
-                      value={p.source}
-                      onChange={(e) =>
-                        setEditParams((rows) =>
-                          rows.map((r, j) =>
-                            j === i ? { ...r, source: e.target.value as any } : r
+                  <div key={i} className="rounded-lg border border-slate-800 bg-slate-950/60 p-2 space-y-1.5">
+                    <div className="grid grid-cols-12 gap-1.5 items-center">
+                      <input
+                        className="col-span-5 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white"
+                        placeholder="ady"
+                        value={p.name}
+                        onChange={(e) =>
+                          setEditParams((rows) =>
+                            rows.map((r, j) => (j === i ? { ...r, name: e.target.value } : r))
                           )
-                        )
-                      }
-                    >
-                      <option value="query">query</option>
-                      <option value="url">url</option>
-                      <option value="body">body</option>
-                    </select>
-                    <button
-                      type="button"
-                      className="col-span-2 text-rose-400 text-xs"
-                      onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
-                    >
-                      Poz
-                    </button>
+                        }
+                      />
+                      <select
+                        className="col-span-4 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
+                        value={p.type}
+                        onChange={(e) =>
+                          setEditParams((rows) =>
+                            rows.map((r, j) => (j === i ? { ...r, type: e.target.value } : r))
+                          )
+                        }
+                      >
+                        {['nvarchar','int','bigint','date','datetime','bit','float'].map((t) => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      <select
+                        className="col-span-3 rounded-lg border border-slate-700 bg-slate-950 px-1 py-1.5 text-xs text-white"
+                        value={p.source}
+                        onChange={(e) =>
+                          setEditParams((rows) =>
+                            rows.map((r, j) =>
+                              j === i ? { ...r, source: e.target.value as any } : r
+                            )
+                          )
+                        }
+                      >
+                        <option value="query">query</option>
+                        <option value="url">url</option>
+                        <option value="body">body</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-600"
+                          checked={!!p.required}
+                          onChange={(e) => {
+                            const v = e.target.checked;
+                            setEditParams((rows) =>
+                              rows.map((r, j) => (j === i ? { ...r, required: v } : r))
+                            );
+                          }}
+                        />
+                        <span className="font-medium text-amber-300/90">req</span>
+                        <span className="text-slate-500">(required)</span>
+                      </label>
+                      <button
+                        type="button"
+                        className="text-rose-400 text-xs px-2 py-1"
+                        onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
+                      >
+                        Poz
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

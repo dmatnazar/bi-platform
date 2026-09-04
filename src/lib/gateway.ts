@@ -474,6 +474,19 @@ export async function putPublicGatewayUrlOnGateway(gatewayUrl: string) {
   return gatewayFetch('PUT', '/api/admin/client-config/gateway-url', { gatewayUrl });
 }
 
+export async function listDatabasesOnGateway(payload: {
+  tenantSlug: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  encrypt?: boolean;
+  trustServerCertificate?: boolean;
+  dbKey?: string;
+}) {
+  return gatewayFetch('POST', '/api/admin/list-databases', payload, 30_000);
+}
+
 export async function upsertConnectionOnGateway(payload: Record<string, unknown>) {
   return gatewayFetch('POST', '/api/admin/connection-upsert', payload);
 }

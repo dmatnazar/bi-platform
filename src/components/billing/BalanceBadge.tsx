@@ -118,7 +118,7 @@ function TariffCard({
         </div>
         <div className="text-right shrink-0">
           <p className="text-sm font-bold text-indigo-300">
-            {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} REQ`}
+            {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} TMT`}
           </p>
           {t.priceMonthly > 0 && <p className="text-[9px] text-slate-500">aýda</p>}
         </div>
@@ -143,13 +143,22 @@ function TariffCard({
   );
 }
 
+interface WalletEntry {
+  tenantSlug: string;
+  tenantName: string;
+  wallet: WalletInfo;
+}
+
 export function BalanceBadge({
   companySlug,
+  tenantSlugs,
   username,
   compact,
   role,
 }: {
   companySlug?: string;
+  /** Multi-company staff: all linked firm slugs */
+  tenantSlugs?: string[];
   username?: string;
   compact?: boolean;
   /** admin / super_admin — REQ hasaplanýar, free */
@@ -161,30 +170,48 @@ export function BalanceBadge({
     role === 'superadmin' ||
     role === 'manager';
   const [wallet, setWallet] = useState<WalletInfo | null>(null);
+  const [wallets, setWallets] = useState<WalletEntry[]>([]);
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [open, setOpen] = useState(false);
   const [selectedTariffId, setSelectedTariffId] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [activePanel, setActivePanel] = useState(0);
 
   const load = useCallback(async () => {
-    if (!companySlug) return;
+    if (!companySlug && !(tenantSlugs && tenantSlugs.length)) return;
     try {
       const res = await fetch('/api/billing?action=my-wallet');
       const data = await res.json();
       if (!res.ok) return;
-      if (data.wallet) {
-        setWallet(data.wallet);
-        const w = data.wallet as WalletInfo;
-        if (w.level === 'empty' /* REQ gutardy — tarif teklip */ || w.level === 'critical') {
+      const list: WalletEntry[] = Array.isArray(data.wallets)
+        ? data.wallets.map((x: any) => ({
+            tenantSlug: String(x.tenantSlug || ''),
+            tenantName: String(x.tenantName || x.tenantSlug || ''),
+            wallet: x.wallet as WalletInfo,
+          }))
+        : data.wallet
+          ? [
+              {
+                tenantSlug: String(data.tenantSlug || companySlug || ''),
+                tenantName: String(data.tenantName || companySlug || ''),
+                wallet: data.wallet as WalletInfo,
+              },
+            ]
+          : [];
+      setWallets(list);
+      if (list[0]?.wallet) {
+        setWallet(list[0].wallet);
+        const w = list[0].wallet;
+        if (w.level === 'empty' || w.level === 'critical') {
           try {
-            const key = `bal-warn-${companySlug}-${w.level}`;
+            const key = `bal-warn-${list[0].tenantSlug}-${w.level}`;
             const last = sessionStorage.getItem(key);
             const now = Date.now();
             if (!last || now - Number(last) > 10 * 60 * 1000) {
               sessionStorage.setItem(key, String(now));
               toastWarning(
-                w.level === 'empty' /* REQ gutardy — tarif teklip */ ? 'Balans gutardy' : 'Balans critiki pes',
+                w.level === 'empty' ? 'Balans gutardy' : 'Balans critiki pes',
                 `${fmtTmt(w.balanceCredits)} galdy — top-up ýa-da tarif üýtgetme gerek bolup biler`
               );
             }
@@ -197,7 +224,7 @@ export function BalanceBadge({
     } catch {
       /* offline */
     }
-  }, [companySlug]);
+  }, [companySlug, tenantSlugs]);
 
   useEffect(() => {
     void load();
@@ -222,6 +249,24 @@ export function BalanceBadge({
     const days = Math.ceil(ms / (24 * 3600 * 1000));
     return `Tarif döwri ~${days} gün galdy`;
   }, [wallet?.subscription?.periodEnd]);
+
+  /** Sum REQ + approx TMT across all linked companies */
+  const totals = useMemo(() => {
+    let req = 0;
+    let tmt = 0;
+    let anyPaid = false;
+    for (const e of wallets) {
+      const bal = Number(e.wallet?.balanceCredits || 0);
+      req += bal;
+      const pair = formatBalancePair(bal, e.wallet?.tariff);
+      if (pair.secondary && pair.secondary !== 'Free') {
+        anyPaid = true;
+        const n = parseFloat(pair.secondary.replace(/[^\d.]/g, ''));
+        if (!Number.isNaN(n)) tmt += n;
+      }
+    }
+    return { req, tmt, anyPaid, multi: wallets.length > 1 };
+  }, [wallets]);
 
   async function sendRequest() {
     if (!selectedTariffId) {
@@ -295,6 +340,29 @@ export function BalanceBadge({
         <Wallet className={`h-3.5 w-3.5 shrink-0 ${colors.text}`} />
         <div className="min-w-0">
           {(() => {
+            if (totals.multi) {
+              const reqStr = `${totals.req.toLocaleString('ru-RU')} REQ`;
+              const sec = totals.anyPaid
+                ? `${Math.round(totals.tmt * 100) / 100} TMT`
+                : wallets.every((e) => formatBalancePair(Number(e.wallet?.balanceCredits || 0), e.wallet?.tariff).secondary === 'Free')
+                  ? 'Free'
+                  : '';
+              return (
+                <>
+                  <p className={`text-xs font-semibold tabular-nums leading-tight ${colors.text}`}>
+                    {reqStr}
+                    {sec ? (
+                      <span className="font-medium opacity-80 text-[10px]"> / {sec}</span>
+                    ) : null}
+                  </p>
+                  {!compact && (
+                    <p className="text-[9px] text-slate-500 truncate max-w-[120px] leading-tight">
+                      {wallets.length} firma
+                    </p>
+                  )}
+                </>
+              );
+            }
             const pair =
               bal == null
                 ? { primary: '…', secondary: '' }
@@ -322,10 +390,16 @@ export function BalanceBadge({
         <ModalPortal open>
           <div className="fixed inset-0 z-[320] flex items-end sm:items-center justify-center p-0 sm:p-6">
             <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setOpen(false)} />
-            <div className="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 to-slate-950 p-5 space-y-4 shadow-2xl">
+            <div
+              className={`relative w-full max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-gradient-to-b from-slate-900 to-slate-950 p-5 space-y-4 shadow-2xl ${
+                totals.multi ? 'sm:max-w-4xl' : 'sm:max-w-lg'
+              }`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Balans we tarif</h3>
+                  <h3 className="text-lg font-semibold text-white">
+                    {totals.multi ? 'Balans we tarif (ähli firmalar)' : 'Balans we tarif'}
+                  </h3>
                   <p className="text-xs text-slate-500 mt-0.5">Ähli sanlar REQ bilen · aňsat düşündiriş</p>
                 </div>
                 <button type="button" className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800" onClick={() => setOpen(false)}>
@@ -333,9 +407,77 @@ export function BalanceBadge({
                 </button>
               </div>
 
-              {/* Balance */}
+              {/* Multi-company panels: side-by-side on desktop, stacked on mobile */}
+              {totals.multi ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {wallets.map((e, idx) => {
+                    const pair = formatBalancePair(Number(e.wallet.balanceCredits || 0), e.wallet.tariff);
+                    const c = balanceColor(
+                      e.wallet.balanceCredits,
+                      e.wallet.lowBalanceThreshold || 50,
+                      e.wallet.level
+                    );
+                    const end = e.wallet.subscription?.periodEnd;
+                    let left: string | null = null;
+                    if (end) {
+                      const ms = Date.parse(end) - Date.now();
+                      if (!Number.isNaN(ms)) {
+                        left =
+                          ms <= 0
+                            ? 'Döwür gutardy'
+                            : `Tarif döwri ~${Math.ceil(ms / (24 * 3600 * 1000))} gün galdy`;
+                      }
+                    }
+                    return (
+                      <div
+                        key={e.tenantSlug || idx}
+                        className={`rounded-xl border border-slate-700/80 p-4 ${c.bg} ${
+                          activePanel === idx ? 'ring-1 ring-indigo-500/40' : ''
+                        }`}
+                        onClick={() => {
+                          setActivePanel(idx);
+                          setWallet(e.wallet);
+                        }}
+                      >
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">
+                          Balans we tarif ({e.tenantName || e.tenantSlug})
+                        </p>
+                        <p className="text-[10px] text-slate-500 text-center mt-0.5">
+                          Ähli sanlar REQ bilen · aňsat düşündiriş
+                        </p>
+                        <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center mt-3">
+                          Firmanyň gaby
+                        </p>
+                        <p className={`text-2xl font-bold tabular-nums text-center mt-1 ${c.text}`}>
+                          {pair.primary}
+                        </p>
+                        {pair.secondary && (
+                          <p className="text-center text-sm text-slate-400 mt-1">≈ {pair.secondary}</p>
+                        )}
+                        {e.wallet.warning && (
+                          <p className="mt-2 text-xs text-center text-amber-300 flex items-center justify-center gap-1">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {e.wallet.warning}
+                          </p>
+                        )}
+                        {left && (
+                          <p className="mt-1.5 text-[11px] text-center text-slate-400 flex items-center justify-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {left}
+                          </p>
+                        )}
+                        {e.wallet.tariff && (
+                          <p className="mt-2 text-center text-[11px] text-slate-400 truncate">
+                            {e.wallet.tariff.name}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
               <div className={`rounded-xl border border-slate-700/80 p-4 ${colors.bg}`}>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">Firmanyň gapy</p>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">Firmanyň gaby</p>
                 <p className={`text-3xl font-bold tabular-nums text-center mt-1 ${colors.text}`}>
                   {bal == null
                     ? '—'
@@ -359,6 +501,7 @@ export function BalanceBadge({
                   </p>
                 )}
               </div>
+              )}
 
               {/* How it works - plain language */}
               <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-3.5 space-y-2">
@@ -429,7 +572,7 @@ export function BalanceBadge({
                       Indiki: {selectedTariff.name}
                     </p>
                     <p>
-                      Aýlyk: {selectedTariff.priceMonthly === 0 ? 'Mugt' : `${selectedTariff.priceMonthly} REQ`} ·
+                      Aýlyk: {selectedTariff.priceMonthly === 0 ? 'Mugt' : `${selectedTariff.priceMonthly} TMT`} ·
                       Berilýän: {selectedTariff.includedCredits.toLocaleString()} REQ · Günde{' '}
                       {selectedTariff.maxApiCallsDay} REQ
                     </p>

@@ -90,7 +90,7 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.code === 'registration_pending' || data.error?.includes?.('tassyklan')) {
           setWarning(
@@ -102,27 +102,28 @@ export default function LoginPage() {
         } else {
           setError(data.error || 'Giriş şowsuz');
         }
+        setLoading(false);
         return;
       }
+      // Keep "Garaşyň..." until navigation completes (do not clear loading on success)
       router.push('/dashboards');
       router.refresh();
     } catch {
       setError('Baglanyşyk säwligi');
-    } finally {
       setLoading(false);
     }
   }
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-10 relative overflow-hidden">
-      {/* Animated orbs + tsParticles — optional via Settings */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
+      {/* Fixed viewport background — does not grow with page scroll / canvas size */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950 z-0" aria-hidden>
         {authAnim && (
           <>
             <div className="login-orb login-orb-a" />
             <div className="login-orb login-orb-b" />
             <div className="login-orb login-orb-c" />
-            <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+            <ParticlesBackground theme="login" className="absolute inset-0 z-[1] h-full w-full overflow-hidden" />
           </>
         )}
         <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_35%,rgb(2_6_23)_90%)] sm:bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />

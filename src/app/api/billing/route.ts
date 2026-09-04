@@ -41,23 +41,54 @@ export async function GET(req: NextRequest) {
   const tenantSlug =
     req.nextUrl.searchParams.get('tenantSlug') || user.companySlug || '';
 
-  // Any authenticated user can read own company wallet + tariffs (for profile badge)
+  // Any authenticated user can read own company wallet(s) + tariffs (for profile badge)
   if (action === 'my-wallet' || action === 'wallet') {
-    const slug = action === 'my-wallet' ? user.companySlug || '' : tenantSlug;
-    if (!slug) return NextResponse.json({ error: 'companySlug ýok' }, { status: 400 });
-    if (!isSuper(user) && user.companySlug && slug !== user.companySlug) {
-      return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+    const allowedSlugs = Array.from(
+      new Set(
+        [user.companySlug, ...(user.tenantSlugs || [])].filter(Boolean).map(String)
+      )
+    );
+    const requested = (req.nextUrl.searchParams.get('tenantSlug') || '').trim();
+    const slugs =
+      action === 'wallet' && requested
+        ? [requested]
+        : allowedSlugs.length
+          ? allowedSlugs
+          : tenantSlug
+            ? [tenantSlug]
+            : [];
+    if (!slugs.length) return NextResponse.json({ error: 'companySlug ýok' }, { status: 400 });
+    if (!isSuper(user)) {
+      for (const s of slugs) {
+        if (!allowedSlugs.includes(s) && user.companySlug && s !== user.companySlug) {
+          return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+        }
+      }
     }
-    const [wRes, tRes] = await Promise.all([
-      walletOnGateway(slug),
-      listTariffsOnGateway(),
-    ]);
-    if (!wRes.ok) {
-      return NextResponse.json({ error: wRes.data?.error || 'şowsuz' }, { status: 502 });
-    }
+    const tRes = await listTariffsOnGateway();
+    const tariffs = tRes.ok ? tRes.data?.tariffs || [] : [];
+    const walletResults = await Promise.all(slugs.map((s) => walletOnGateway(s)));
+    const wallets = walletResults
+      .map((r, i) => {
+        if (!r.ok) return null;
+        const w = r.data?.wallet || r.data;
+        if (!w) return null;
+        return {
+          tenantSlug: slugs[i],
+          tenantName: r.data?.tenantName || r.data?.companyName || slugs[i],
+          wallet: w as any,
+        };
+      })
+      .filter(Boolean);
+
+    // Backward compatible: single primary wallet at top level
+    const primary = wallets[0];
     return NextResponse.json({
-      ...wRes.data,
-      tariffs: tRes.ok ? tRes.data?.tariffs || [] : [],
+      ...(primary
+        ? { wallet: primary.wallet, tenantSlug: primary.tenantSlug, tenantName: primary.tenantName }
+        : {}),
+      wallets,
+      tariffs,
     });
   }
 

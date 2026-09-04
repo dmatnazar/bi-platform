@@ -76,20 +76,30 @@ export async function POST(req: NextRequest) {
       }
 
       const role = mapRole(remote.data.role);
-      const tenantSlugs = Array.from(new Set(
-        (remote.data.tenantSlugs || [remote.data.tenantSlug]).map(String).filter(Boolean)
-      ));
-      const tenantIds = Array.from(new Set(
-        (remote.data.tenantIds || [remote.data.tenantId || remote.data.tenantSlug]).map(String).filter(Boolean)
-      ));
+      // Multi-tenant: one staff can belong to several companies (tenantSlugs / tenantIds)
+      const toStringList = (value: unknown, fallback: unknown): string[] => {
+        const raw = Array.isArray(value) ? value : (fallback != null ? [fallback] : []);
+        return Array.from(
+          new Set(
+            raw
+              .map((s: unknown) => String(s ?? '').trim())
+              .filter((s): s is string => s.length > 0)
+          )
+        );
+      };
+      const tenantSlugs = toStringList(remote.data.tenantSlugs, remote.data.tenantSlug);
+      const tenantIds = toStringList(
+        remote.data.tenantIds,
+        remote.data.tenantId || remote.data.tenantSlug
+      );
       const user: SessionUser = {
-        id: remote.data.id,
-        username: remote.data.username,
-        fullName: remote.data.fullName,
+        id: String(remote.data.id ?? ''),
+        username: String(remote.data.username ?? ''),
+        fullName: String(remote.data.fullName ?? ''),
         role,
-        companyId: remote.data.tenantId || remote.data.tenantSlug,
-        companySlug: remote.data.tenantSlug,
-        companyName: remote.data.tenantName,
+        companyId: String(remote.data.tenantId || remote.data.tenantSlug || ''),
+        companySlug: remote.data.tenantSlug ? String(remote.data.tenantSlug) : undefined,
+        companyName: remote.data.tenantName ? String(remote.data.tenantName) : undefined,
         tenantSlugs,
         tenantIds,
         isSuperAdmin: role === 'super_admin',

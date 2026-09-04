@@ -5,6 +5,13 @@ import { formatDate } from '@/lib/utils';
 import { Cloud, CloudOff, Database, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+interface TenantClientStatus {
+  slug: string;
+  name: string;
+  online: boolean;
+  live: boolean;
+}
+
 interface Status {
   gatewayOnline: boolean;
   biClientDataAvailable: boolean;
@@ -16,6 +23,8 @@ interface Status {
   counts: { tenants: number; endpoints: number; staff: number };
   /** scoped counts for non-super users */
   scoped?: { endpoints: number; staff: number; companyName?: string };
+  /** Per-company BI Client tunnel status */
+  tenantStatuses?: TenantClientStatus[];
 }
 
 function Dot({ ok, warn }: { ok?: boolean; warn?: boolean }) {
@@ -29,10 +38,34 @@ function Dot({ ok, warn }: { ok?: boolean; warn?: boolean }) {
   );
 }
 
+function formatClientLabel(status: Status | null, companyName?: string): string {
+  const list = status?.tenantStatuses || [];
+  if (list.length > 1) {
+    return list
+      .map((t) => {
+        const state = t.online ? 'online' : t.live ? 'live' : 'offline';
+        return `${t.name} ${state}`;
+      })
+      .join(', ');
+  }
+  if (list.length === 1) {
+    const t = list[0];
+    if (t.online) return `${t.name} online`;
+    if (status?.biClientDataAvailable) return status.fromCache ? `${t.name} cache` : `${t.name} live`;
+    return `${t.name} offline`;
+  }
+  if (status?.biClientDataAvailable) {
+    return status.fromCache ? 'cache' : 'live';
+  }
+  return companyName ? `${companyName} —` : '—';
+}
+
 interface Props {
   /** super_admin sees global counts; others see company-scoped or nothing detailed */
   isSuperAdmin?: boolean;
   companyName?: string;
+  /** When staff has multiple firms, prefer showing all */
+  tenantSlugs?: string[];
 }
 
 export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props) {
@@ -89,11 +122,11 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             VPS {status?.gatewayOnline ? 'online' : 'offline'}
           </span>
         </div>
-        <div className="inline-flex items-center gap-1.5" title="BI Client / catalog">
+        <div className="inline-flex items-center gap-1.5 max-w-full" title="BI Client / catalog">
           <Dot ok={!!status?.biClientDataAvailable} warn={!!status?.fromCache && status?.biClientDataAvailable} />
-          <Database className="h-3.5 w-3.5 text-sky-400" />
-          <span className={status?.biClientDataAvailable ? 'text-sky-300' : 'text-slate-500'}>
-            BI Client {status?.biClientDataAvailable ? 'live' : '—'}
+          <Database className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+          <span className={status?.biClientDataAvailable ? 'text-sky-300 truncate' : 'text-slate-500 truncate'}>
+            BI Client ({formatClientLabel(status, companyName)})
           </span>
         </div>
         <div className="inline-flex items-center gap-1.5 text-white">
@@ -149,8 +182,17 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
                 : 'text-emerald-300'
               : 'text-rose-300'
           }
+          title={formatClientLabel(status, companyName)}
         >
-          BI Client {status?.biClientDataAvailable ? (status.fromCache ? 'cache' : 'live') : 'ýok'}
+          BI Client (
+          {(status?.tenantStatuses?.length || 0) > 1
+            ? formatClientLabel(status, companyName)
+            : status?.biClientDataAvailable
+              ? status.fromCache
+                ? 'cache'
+                : 'live'
+              : 'ýok'}
+          )
         </span>
       </div>
 

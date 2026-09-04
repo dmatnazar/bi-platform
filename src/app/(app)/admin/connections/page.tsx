@@ -181,6 +181,10 @@ export default function ConnectionsPage() {
   }
 
   async function fetchDatabaseList() {
+    if (!form.tenantSlug) {
+      toastError('Zerur', 'Ilki firma saýlaň');
+      return;
+    }
     if (!form.host.trim() || !form.username.trim()) {
       toastError('Zerur', 'Host we Username gerek');
       return;
@@ -192,36 +196,63 @@ export default function ConnectionsPage() {
     setListingDbs(true);
     setDbOptions([]);
     try {
-      // Prefer gateway path via existing connection when editing
-      if (form.tenantSlug && (editing?.dbKey || form.database)) {
-        const res = await fetch('/api/admin-test-query', {
+      // 1) Ad-hoc via Electron tunnel (works BEFORE save)
+      const res = await fetch('/api/connections/list-databases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: form.tenantSlug,
+          host: form.host.trim(),
+          port: Number(form.port) || 1433,
+          username: form.username.trim(),
+          password: form.password || undefined,
+          encrypt: form.encrypt,
+          trustServerCertificate: form.trustServerCertificate,
+          dbKey: editing?.dbKey,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const names: string[] = Array.isArray(data.databases)
+          ? data.databases.map(String).filter(Boolean)
+          : [];
+        if (names.length) {
+          setDbOptions(names);
+          toastSuccess('DB sanawy', `${names.length} sany`);
+          return;
+        }
+      }
+
+      // 2) Fallback: existing saved connection + admin-test-query
+      if (editing?.dbKey) {
+        const res2 = await fetch('/api/admin-test-query', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tenantSlug: form.tenantSlug,
-            dbKey: editing?.dbKey || 'primary',
+            dbKey: editing.dbKey,
             sqlQuery:
               "SELECT name FROM sys.databases WHERE name NOT IN ('master','tempdb','model','msdb') ORDER BY name",
           }),
         });
-        const data = await res.json();
-        if (res.ok) {
-          const rows = data.rows || data.data || data.result || [];
+        const data2 = await res2.json();
+        if (res2.ok) {
+          const rows = data2.rows || data2.data || data2.result || [];
           const names = (Array.isArray(rows) ? rows : [])
             .map((r: Record<string, unknown>) => String(r.name || r.NAME || Object.values(r)[0] || ''))
             .filter(Boolean);
           if (names.length) {
             setDbOptions(names);
             toastSuccess('DB sanawy', `${names.length} sany`);
-            setListingDbs(false);
             return;
           }
         }
       }
-      // Fallback: still need server-side probe — show guidance
-      toastInfo(
+
+      toastError(
         'DB sanawy',
-        'Ilki baglanyşygy saklaň, soň «Bar bolan DB al» gaýtalaň. Ýa-da Database adyny el bilen ýazyň.'
+        data?.error ||
+          'Electron tunnel offline ýa-da maglumat nädogry. Host/parol barlaň, Electron-yň şol firmada online bolmagyny barlaň.'
       );
     } catch (e) {
       toastError('DB sanawy', String(e));

@@ -237,13 +237,13 @@ export default function RegisterPage() {
     const ok = phase === 'approved' || phase === 'delivered';
     return (
       <div className="min-h-dvh flex relative items-center justify-center px-4 overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950 z-0">
         {authAnim && (
           <>
             <div className="login-orb login-orb-a" />
             <div className="login-orb login-orb-b" />
             <div className="login-orb login-orb-c" />
-            <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+            <ParticlesBackground theme="login" className="absolute inset-0 z-[1] h-full w-full overflow-hidden" />
           </>
         )}
         <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
@@ -304,13 +304,13 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-slate-950">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950 z-0">
         {authAnim && (
           <>
             <div className="login-orb login-orb-a" />
             <div className="login-orb login-orb-b" />
             <div className="login-orb login-orb-c" />
-            <ParticlesBackground theme="login" className="absolute inset-0 z-[1]" />
+            <ParticlesBackground theme="login" className="absolute inset-0 z-[1] h-full w-full overflow-hidden" />
           </>
         )}
         <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_25%,rgb(2_6_23)_88%)]" />
