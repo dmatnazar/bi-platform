@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { formatDateTime } from '@/lib/utils';
 import {
   Wallet,
   RefreshCw,
@@ -383,11 +384,11 @@ export default function BillingPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-base sm:text-2xl font-bold text-white flex items-center gap-1.5 sm:gap-2 truncate leading-tight">
             <Wallet className="h-6 w-6 text-emerald-400" />
             Tarif & Balans
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             Firmalaryň gaplary, tarifler we REQ hereketleri · VPS primary
           </p>
         </div>
@@ -651,7 +652,7 @@ export default function BillingPage() {
           {ledger.slice(0, 10).map((e) => (
             <div key={e.id} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-3 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-slate-500">{e.createdAt?.replace('T', ' ').slice(0, 19)}</span>
+                <span className="text-[11px] text-slate-500">{formatDateTime(e.createdAt)}</span>
                 <span className={`text-xs font-semibold tabular-nums ${e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {e.amount >= 0 ? '+' : ''}{e.amount}
                 </span>
@@ -691,7 +692,7 @@ export default function BillingPage() {
                   return (
                     <tr key={e.id} className="hover:bg-slate-800/40 transition-colors">
                       <td className="px-3 py-2 text-slate-400 whitespace-nowrap text-xs">
-                        {e.createdAt?.replace('T', ' ').slice(0, 19) || '—'}
+                        {formatDateTime(e.createdAt)}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-300 whitespace-nowrap">
                         {e.tenantSlug}

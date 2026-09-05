@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { ApiPickerModal } from '@/components/ApiPickerModal';
-import { Link2, X, Sparkles } from 'lucide-react';
+import { Link2, Sparkles } from 'lucide-react';
 
 interface EndpointOpt {
   id: string;
@@ -448,13 +448,6 @@ export function WidgetConfigPanel({
 
   return (
     <div className="p-4 space-y-3">
-      <div className="flex items-center justify-between sticky top-0 bg-slate-900 z-10 pb-1">
-        <h4 className="text-sm font-semibold text-white">Widget sazlama</h4>
-        <button type="button" onClick={onClose} className="text-slate-500 hover:text-white">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
       <Input
         label="Ady (esasy)"
         value={widget.title}
@@ -1177,6 +1170,34 @@ export function WidgetConfigPanel({
                     />
                   </div>
                 </div>
+                {(widget.type === 'line' || widget.type === 'area' || widget.type === 'bar') && (
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">
+                      Value (san) reňki — çyzykdan aýratyn
+                    </label>
+                    <input
+                      type="color"
+                      value={
+                        (widget.config as any)?.valueLabelColor ||
+                        widget.config?.labelColor ||
+                        '#e2e8f0'
+                      }
+                      onChange={(e) =>
+                        onChange({
+                          ...widget,
+                          config: {
+                            ...widget.config,
+                            valueLabelColor: e.target.value,
+                          } as any,
+                        })
+                      }
+                      className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Çyzyk/meýdança reňki — «Esasy reňk / Goşmaça reňkler». Bu diňe sanlaryň reňki.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">
                     Font size ({widget.config?.labelFontSize || 11}px)
@@ -2287,8 +2308,18 @@ export function WidgetConfigPanel({
         </div>
       )}
 
-      <Button size="sm" variant="secondary" className="w-full" onClick={onClose}>
-        Ýap
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="w-full"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        Ýap / Yatda sakla
       </Button>
     </div>
   );

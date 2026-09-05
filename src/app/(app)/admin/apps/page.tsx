@@ -188,7 +188,7 @@ export default function AdminAppsPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+          <h1 className="text-base sm:text-2xl font-bold text-white tracking-tight truncate leading-tight">
             Programmalar
           </h1>
           <p className="text-sm text-slate-400 mt-1">

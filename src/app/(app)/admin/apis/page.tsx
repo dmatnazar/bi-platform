@@ -1211,10 +1211,10 @@ export default function ApisPage() {
               Firmalara dolan
             </button>
           )}
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">
             {selectedTenantSlug ? `${selectedTenantName} — API-lar` : 'API-lar · Firmalar'}
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             {selectedTenantSlug
               ? 'Doly URL · basyp aç · copy'
               : 'Ilki firma saýlaň — soň bagly API-lar'}

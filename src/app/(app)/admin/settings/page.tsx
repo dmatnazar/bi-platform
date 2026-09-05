@@ -332,7 +332,7 @@ export default function SettingsPage() {
   return (
     <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-white">Sazlamalar</h1>
+        <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Sazlamalar</h1>
         <p className="text-xs sm:text-sm text-slate-400 mt-1">
           VPS Gateway baglanyşygy we sync · BI Platform v{version}
         </p>

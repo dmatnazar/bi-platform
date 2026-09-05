@@ -1,10 +1,13 @@
 'use client';
 
-// Task 5: Mobile-responsive widget rendering
-// Task 11: Layout container fixes for proper mobile display
+// Optimized LiveWidget:
+// - TTL client cache for /api/gateway/query
+// - IntersectionObserver lazy fetch (viewport)
+// - Global filter: only API-bound keys affect queryKey
+// - memo: layout x/y/w/h changes do not re-fetch
 
-import { useEffect, useMemo, useState } from 'react';
-import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
+import { useEffect, useMemo, useRef, useState, memo } from 'react';
+import type { DashboardWidget, GlobalFilterValues, ParamBinding } from '@/lib/types';
 import {
   resolveWidgetParams,
   getGlobalSearchQuery,
@@ -12,7 +15,6 @@ import {
 } from '@/lib/types';
 import { ChartWidget } from '@/components/charts/ChartWidget';
 import { cn } from '@/lib/utils';
-import { Settings2 } from 'lucide-react';
 import { getEndpointCatalog, resolveLiveEndpoint, type CatalogEndpoint } from '@/lib/endpoint-catalog-client';
 
 interface Props {
@@ -29,24 +31,52 @@ const SEARCH_KEY_RE = /search|gözleg|gozleg|keyword|^q$|query/i;
 const BEGIN_KEY_RE = /begin|start|from|dateFrom|^sene/i;
 const END_KEY_RE = /end|gutar|to$|dateTo|until/i;
 
-/** Extract YYYY-MM-DD from date / datetime-local / ISO strings */
+/** Client query cache: queryKey → { rows, at } */
+const QUERY_CACHE = new Map<string, { rows: Record<string, unknown>[]; at: number }>();
+const CACHE_TTL_MS = 45_000;
+const MAX_CACHE_ENTRIES = 80;
+
+function cacheGet(key: string): Record<string, unknown>[] | null {
+  const hit = QUERY_CACHE.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at > CACHE_TTL_MS) {
+    QUERY_CACHE.delete(key);
+    return null;
+  }
+  return hit.rows;
+}
+
+function cacheSet(key: string, rows: Record<string, unknown>[]) {
+  QUERY_CACHE.set(key, { rows, at: Date.now() });
+  if (QUERY_CACHE.size > MAX_CACHE_ENTRIES) {
+    // drop oldest
+    let oldestKey: string | null = null;
+    let oldestAt = Infinity;
+    for (const [k, v] of QUERY_CACHE) {
+      if (v.at < oldestAt) {
+        oldestAt = v.at;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) QUERY_CACHE.delete(oldestKey);
+  }
+}
+
+/** Invalidate one key or entire cache (manual full refresh) */
+export function invalidateWidgetQueryCache(key?: string) {
+  if (key) QUERY_CACHE.delete(key);
+  else QUERY_CACHE.clear();
+}
+
 function extractDatePart(v: string): string | null {
   const m = v.match(/(\d{4}-\d{2}-\d{2})/);
   return m ? m[1] : null;
 }
 
-/**
- * API-bound filters only (exclude pure text search — handled client-side).
- * Date/datetime params always expand to full-day bounds:
- *   begin* → YYYY-MM-DD 00:00:00
- *   end*   → YYYY-MM-DD 23:59:59
- * so picking "today" never sends the wall-clock time (e.g. 15:22:01).
- */
 function apiFilterValues(values: GlobalFilterValues): GlobalFilterValues {
   const out: GlobalFilterValues = {};
   for (const [k, v] of Object.entries(values)) {
     if (SEARCH_KEY_RE.test(k)) continue;
-    // Hemmesini saýla / boş → NULL (SQL: @id IS NULL OR col=@id)
     if (v === '__ALL__' || v === '' || v === null || v === undefined) {
       out[k] = null;
       continue;
@@ -55,7 +85,6 @@ function apiFilterValues(values: GlobalFilterValues): GlobalFilterValues {
       const datePart = extractDatePart(v);
       if (datePart && (BEGIN_KEY_RE.test(k) || END_KEY_RE.test(k) || /^\d{4}-\d{2}-\d{2}/.test(v))) {
         if (END_KEY_RE.test(k)) {
-          // Literal local end-of-day — no Date()/toISOString (UTC shift)
           out[k] = datePart + ' 23:59:59';
           continue;
         }
@@ -63,9 +92,8 @@ function apiFilterValues(values: GlobalFilterValues): GlobalFilterValues {
           out[k] = datePart + ' 00:00:00';
           continue;
         }
-        // Generic date-looking value without begin/end in key: keep date-only day start
         if (/^\d{4}-\d{2}-\d{2}$/.test(v.trim())) {
-          out[k] = `${datePart} 00:00:00`;
+          out[k] = datePart + ' 00:00:00';
           continue;
         }
       }
@@ -75,41 +103,96 @@ function apiFilterValues(values: GlobalFilterValues): GlobalFilterValues {
   return out;
 }
 
+/**
+ * Only global-filter keys that this widget actually binds to (paramBindings source=global).
+ * Unrelated filter changes must not change queryKey / trigger fetch.
+ */
+function boundGlobalFilters(
+  all: GlobalFilterValues,
+  bindings?: ParamBinding[]
+): GlobalFilterValues {
+  if (!bindings?.length) {
+    // No bindings declared → keep previous behavior (all API filters) for legacy widgets
+    return all;
+  }
+  const globalKeys = new Set(
+    bindings
+      .filter((b) => b.source === 'global' && b.globalKey)
+      .map((b) => String(b.globalKey))
+  );
+  if (globalKeys.size === 0) {
+    // Widget ignores global filters entirely
+    return {};
+  }
+  const out: GlobalFilterValues = {};
+  for (const k of globalKeys) {
+    if (k in all) out[k] = all[k];
+  }
+  return out;
+}
+
 function LoadingOverlay({ active }: { active: boolean }) {
   const [src, setSrc] = useState('/loading.gif');
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => {
+      setSrc((prev) => {
+        if (prev.endsWith('.gif')) return '/loading.webp';
+        if (prev.endsWith('.webp')) return '/loading.svg';
+        return '/loading.gif';
+      });
+    }, 4000);
+    return () => clearInterval(t);
+  }, [active]);
   if (!active) return null;
   return (
-    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-slate-950/55 backdrop-blur-[2px] rounded-xl">
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/40 backdrop-blur-[1px] rounded-xl">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={src}
-        alt="Ýüklenýär"
-        className="h-14 w-14 object-contain"
-        onError={() => {
-          setSrc((prev) => {
-            if (prev.endsWith('.gif')) return '/loading.webp';
-            if (prev.endsWith('.webp')) return '/loading.svg';
-            return prev;
-          });
-        }}
-      />
-      <span className="text-[11px] text-slate-400">Ýüklenýär...</span>
+      <img src={src} alt="" className="h-10 w-10 opacity-80" />
     </div>
   );
 }
 
-export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, refreshToken, className }: Props) {
+function LiveWidgetInner({
+  widget,
+  editable,
+  onConfigure,
+  globalFilters = {},
+  refreshToken,
+  className,
+}: Props) {
   const [rows, setRows] = useState<Record<string, unknown>[] | undefined>(undefined);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [inView, setInView] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const ds = widget.dataSource;
 
-  // Fix: an API rename regenerates its pathTemplate on the gateway, but the
-  // widget's own dataSource.path is a stale snapshot taken when it was
-  // configured. Resolve the *current* path/method/tenant/dbKey by the
-  // endpoint's stable id (from a shared, lightly-cached catalog) so a
-  // renamed API keeps feeding already-placed widgets without requiring the
-  // widget to be re-opened and re-saved.
+  // Lazy: only fetch when widget is near viewport
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            setInView(true);
+            // once visible, keep loaded (don't unload when scrolled away)
+            io.disconnect();
+            break;
+          }
+        }
+      },
+      { root: null, rootMargin: '200px 0px', threshold: 0.01 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const [catalog, setCatalog] = useState<CatalogEndpoint[]>([]);
   useEffect(() => {
     let alive = true;
@@ -117,9 +200,7 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
       .then((list) => {
         if (alive) setCatalog(list);
       })
-      .catch(() => {
-        /* fall back to the widget's own stored dataSource below */
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -128,17 +209,84 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
   const resolved = useMemo(() => resolveLiveEndpoint(catalog, ds), [catalog, ds]);
 
   const searchQuery = useMemo(() => getGlobalSearchQuery(globalFilters), [globalFilters]);
-  const apiFilters = useMemo(() => apiFilterValues(globalFilters), [globalFilters]);
+  const allApiFilters = useMemo(() => apiFilterValues(globalFilters), [globalFilters]);
+  const apiFilters = useMemo(
+    () => boundGlobalFilters(allApiFilters, ds?.paramBindings),
+    [allApiFilters, ds?.paramBindings]
+  );
   const apiFiltersKey = useMemo(() => JSON.stringify(apiFilters), [apiFilters]);
 
+  const paramsKey = useMemo(
+    () => JSON.stringify(ds?.params || {}) + '|' + JSON.stringify(ds?.paramBindings || {}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(ds?.params), JSON.stringify(ds?.paramBindings)]
+  );
+
+  // refreshToken intentionally in key so manual refresh bypasses TTL cache
+  const queryKey = useMemo(
+    () =>
+      [
+        resolved?.tenantSlug || '',
+        resolved?.path || '',
+        resolved?.method || 'GET',
+        resolved?.dbKey || 'primary',
+        paramsKey,
+        apiFiltersKey,
+      ].join('::'),
+    [
+      resolved?.tenantSlug,
+      resolved?.path,
+      resolved?.method,
+      resolved?.dbKey,
+      paramsKey,
+      apiFiltersKey,
+    ]
+  );
+
+  const lastFetchedKey = useRef<string>('');
+  const inflightKey = useRef<string>('');
+  const lastRefreshHandled = useRef<number>(0);
+  const hasRowsRef = useRef(false);
   useEffect(() => {
+    hasRowsRef.current = rows !== undefined;
+  }, [rows]);
+
+  useEffect(() => {
+    if (!inView) return;
     if (!resolved?.tenantSlug || !resolved?.path) {
       setRows(undefined);
+      lastFetchedKey.current = '';
       return;
     }
+
+    // Manual refresh: only when token actually increases (not every re-render)
+    const token = typeof refreshToken === 'number' ? refreshToken : 0;
+    const force = token > 0 && token !== lastRefreshHandled.current;
+    // Same query already in component state
+    if (!force && lastFetchedKey.current === queryKey && hasRowsRef.current) {
+      return;
+    }
+
+    // TTL cache hit (skip network) — still respect force refresh
+    if (!force) {
+      const cached = cacheGet(queryKey);
+      if (cached) {
+        setRows(cached);
+        lastFetchedKey.current = queryKey;
+        setLoading(false);
+        setError('');
+        return;
+      }
+    } else {
+      QUERY_CACHE.delete(queryKey);
+      lastRefreshHandled.current = token;
+    }
+
     let cancelled = false;
-    async function load() {
-      setLoading(true);
+    async function load(showOverlay: boolean) {
+      if (inflightKey.current === queryKey && !force) return;
+      inflightKey.current = queryKey;
+      if (showOverlay) setLoading(true);
       setError('');
       try {
         const params = resolveWidgetParams(ds, apiFilters);
@@ -156,56 +304,64 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
         const data = await res.json();
         if (!cancelled) {
           if (!res.ok) setError(data.error || 'API säwlik');
-          else setRows(Array.isArray(data.rows) ? data.rows : []);
+          else {
+            const next = Array.isArray(data.rows) ? data.rows : [];
+            setRows(next);
+            cacheSet(queryKey, next);
+            lastFetchedKey.current = queryKey;
+          }
         }
       } catch (e) {
         if (!cancelled) setError(String(e));
       } finally {
+        if (inflightKey.current === queryKey) inflightKey.current = '';
         if (!cancelled) setLoading(false);
       }
     }
-    load();
+
+    void load(!hasRowsRef.current || force);
+
     const sec = ds?.refreshSec || 0;
-    const id = sec > 0 ? setInterval(load, sec * 1000) : null;
+    const id =
+      sec > 0
+        ? setInterval(() => {
+            lastFetchedKey.current = '';
+            QUERY_CACHE.delete(queryKey);
+            void load(false);
+          }, sec * 1000)
+        : null;
+
     return () => {
       cancelled = true;
       if (id) clearInterval(id);
     };
-  }, [
-    resolved?.tenantSlug,
-    resolved?.path,
-    resolved?.method,
-    resolved?.dbKey,
-    ds?.refreshSec,
-    JSON.stringify(ds?.params),
-    JSON.stringify(ds?.paramBindings),
-    apiFiltersKey,
-    refreshToken,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inView, queryKey, resolved?.tenantSlug, resolved?.path, ds?.refreshSec, refreshToken]);
 
-  const displayRows = useMemo(
-    () => {
-      let r = filterRowsByGlobalSearch(rows, searchQuery);
-      const hide = ds?.hiddenColumns || [];
-      if (hide.length && r?.length) {
-        r = r.map((row) => {
-          const o = { ...row };
-          for (const h of hide) delete o[h];
-          return o;
-        });
-      }
-      return r;
-    },
-    [rows, searchQuery]
-  );
+  const displayRows = useMemo(() => {
+    let r = filterRowsByGlobalSearch(rows, searchQuery);
+    const hide = ds?.hiddenColumns || [];
+    if (hide.length && r?.length) {
+      r = r.map((row) => {
+        const o = { ...row };
+        for (const h of hide) delete o[h];
+        return o;
+      });
+    }
+    return r;
+  }, [rows, searchQuery, ds?.hiddenColumns]);
 
   return (
-    <div className="relative h-full min-h-0 flex flex-col">
-
+    <div ref={rootRef} className="relative h-full min-h-0 flex flex-col">
       <LoadingOverlay active={loading} />
       {error && (
         <div className="absolute inset-x-2 bottom-2 z-30 text-[10px] text-rose-400 bg-rose-500/10 rounded px-2 py-1 truncate">
           {error}
+        </div>
+      )}
+      {!inView && rows === undefined && (
+        <div className="absolute inset-0 flex items-center justify-center text-[11px] text-slate-600">
+          …
         </div>
       )}
       <div
@@ -226,3 +382,22 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
     </div>
   );
 }
+
+function liveWidgetPropsEqual(a: Props, b: Props): boolean {
+  if (a.widget.id !== b.widget.id) return false;
+  if (a.editable !== b.editable) return false;
+  if (a.refreshToken !== b.refreshToken) return false;
+  if (a.className !== b.className) return false;
+  const aw = a.widget;
+  const bw = b.widget;
+  if (aw.type !== bw.type) return false;
+  if (aw.title !== bw.title) return false;
+  if (aw.staticValue !== bw.staticValue) return false;
+  if (JSON.stringify(aw.dataSource) !== JSON.stringify(bw.dataSource)) return false;
+  if (JSON.stringify(aw.config) !== JSON.stringify(bw.config)) return false;
+  if (JSON.stringify(a.globalFilters || {}) !== JSON.stringify(b.globalFilters || {})) return false;
+  return true;
+}
+
+export const LiveWidget = memo(LiveWidgetInner, liveWidgetPropsEqual);
+export default LiveWidget;

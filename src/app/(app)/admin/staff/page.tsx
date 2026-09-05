@@ -332,19 +332,19 @@ export default function StaffPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Işgärler</h1>
-          <p className="text-slate-400 text-sm mt-1">VPS arkaly Electron bilen sync</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Işgärler</h1>
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">VPS arkaly Electron bilen sync</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 sm:gap-2 shrink-0">
           <Button variant="secondary" size="sm" onClick={manualSync} loading={syncing || loading}>
             <CloudUpload className="h-4 w-4" />
-            Sync
+            <span className="hidden xs:inline sm:inline">Sync</span>
           </Button>
           <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4" />
-            Täze işgär
+            <span className="text-xs sm:text-sm">Täze işgär</span>
           </Button>
         </div>
       </div>

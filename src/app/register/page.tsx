@@ -321,8 +321,8 @@ export default function RegisterPage() {
           <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-3">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">Hasaba alyş</h1>
-          <p className="text-slate-400 text-sm mt-1">Kompaniýaňyzy saýlaň we maglumatlary dolduryň</p>
+          <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">Hasaba alyş</h1>
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">Kompaniýaňyzy saýlaň we maglumatlary dolduryň</p>
         </div>
 
         <form

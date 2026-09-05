@@ -184,7 +184,7 @@ export default function ResetPasswordPage() {
           <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">Täze parol</h1>
+          <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">Täze parol</h1>
           <p className="text-sm text-slate-400">Möhlet gutarmazdan öň parolyňyzy üýtgediň</p>
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">

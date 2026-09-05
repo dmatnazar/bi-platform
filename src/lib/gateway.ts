@@ -590,10 +590,11 @@ export async function adjustBalanceOnGateway(payload: {
   return gatewayFetch('POST', '/api/admin/billing/adjust', payload);
 }
 
-export async function ledgerOnGateway(params?: { tenantSlug?: string; limit?: number }) {
+export async function ledgerOnGateway(params?: { tenantSlug?: string; limit?: number; offset?: number }) {
   const q = new URLSearchParams();
   if (params?.tenantSlug) q.set('tenantSlug', params.tenantSlug);
-  if (params?.limit) q.set('limit', String(params.limit));
+  if (params?.limit != null) q.set('limit', String(params.limit));
+  if (params?.offset != null) q.set('offset', String(params.offset));
   const qs = q.toString();
   return gatewayFetch('GET', `/api/admin/billing/ledger${qs ? `?${qs}` : ''}`);
 }

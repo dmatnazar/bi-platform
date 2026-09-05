@@ -74,33 +74,38 @@ export function DashboardListClient({
   const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState(initial);
-  // Company drill-down: null = company list (admin/multi), set = dashboards of that company
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(() => {
-    try {
-      const q = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('companyId') : null;
-      if (q) return q;
-      const s = typeof window !== 'undefined' ? sessionStorage.getItem('bi-dash-selected-company') : null;
-      return s || null;
-    } catch {
-      return null;
-    }
-  });
+  // Company drill-down: null = company list (admin/multi), set = dashboards of that company.
+  // IMPORTANT: initial state must be identical on server + first client render (no window/sessionStorage),
+  // otherwise React hydration mismatches (button vs h1).
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [companyReady, setCompanyReady] = useState(false);
 
-  // Sync from ?companyId= when landing from dashboard back button
+  // After mount: restore selection from URL first, then sessionStorage (client-only).
   useEffect(() => {
     const q = searchParams?.get('companyId');
-    if (q) {
-      setSelectedCompanyId(q);
+    let id: string | null = q && q.trim() ? q.trim() : null;
+    if (!id) {
       try {
-        sessionStorage.setItem('bi-dash-selected-company', q);
+        id = sessionStorage.getItem('bi-dash-selected-company');
+      } catch {
+        id = null;
+      }
+    }
+    if (id) {
+      setSelectedCompanyId(id);
+      try {
+        sessionStorage.setItem('bi-dash-selected-company', id);
       } catch {
         /* */
       }
+    } else {
+      setSelectedCompanyId(null);
     }
+    setCompanyReady(true);
   }, [searchParams]);
 
-  // Soft restore: if user navigates back to /dashboards list after viewing one, keep list;
-  // deep-links already open /dashboards/[id]. Remember last id for "soňky" badge only.
+  // Soft restore: last opened dashboard id for "soňky" badge only (client-only).
+  const [lastId, setLastId] = useState<string | null>(null);
   useEffect(() => {
     try {
       const last = sessionStorage.getItem('bi-last-dashboard-id');
@@ -109,7 +114,6 @@ export function DashboardListClient({
       /* */
     }
   }, []);
-  const [lastId, setLastId] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [menuId, setMenuId] = useState<string | null>(null);
   const [navPending, setNavPending] = useState<string | null>(null);
@@ -885,8 +889,8 @@ export function DashboardListClient({
 
   return (
     <div className="relative space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
+      <div className="flex flex-col gap-2.5 sm:gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1">
           {showCompanyPicker && effectiveCompanyId ? (
             <button
               type="button"
@@ -900,20 +904,20 @@ export function DashboardListClient({
                 }
                 router.replace('/dashboards');
               }}
-              className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 mb-1"
+              className="inline-flex items-center gap-1 text-[11px] sm:text-sm text-indigo-400 hover:text-indigo-300 mb-0.5"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Firmalara dolan
+              <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Firmalara dolan</span>
             </button>
           ) : null}
-          <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
+          <h1 className="text-base sm:text-2xl font-bold text-white tracking-tight truncate leading-tight">
             {showCompanyPicker && !effectiveCompanyId
               ? 'Firmalar'
               : selectedCompanyName
                 ? `${selectedCompanyName} — Dashboardlar`
                 : 'Dashboardlar'}
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             {showCompanyPicker && !effectiveCompanyId
               ? 'Firma saýlaň — onuň dashboardlary açylar'
               : 'Hasabatlar we analitika'}

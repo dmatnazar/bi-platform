@@ -646,7 +646,7 @@ export function DashboardCanvas({
         </div>
       ) : (
       <GridLayout
-        key={`gl-${effectiveCols}-${Math.round(width)}`}
+        key={`gl-cols-${effectiveCols}`}
         className="layout w-full"
         layout={effectiveLayout}
         cols={effectiveCols}
@@ -661,7 +661,10 @@ export function DashboardCanvas({
         onLayoutChange={onLayoutChange}
         onDragStart={() => onWidgetDragStart()}
         onDrag={onWidgetDrag as any}
-        onDragStop={() => stopDragScroll()}
+        onDragStop={() => {
+          isDraggingRef.current = false;
+          stopDragScroll();
+        }}
         onResizeStart={() => {
           isDraggingRef.current = true;
         }}
@@ -674,9 +677,11 @@ export function DashboardCanvas({
         {dashboard.widgets.map((widget) => (
           <div
             key={widget.id}
+            data-widget-id={widget.id}
             className={cn(
               'rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden flex flex-col shadow-sm',
-              editable && 'hover:border-slate-700'
+              editable && 'hover:border-slate-700',
+              // highlight when this widget's settings float is open (set from outside via attr)
             )}
           >
             <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-2 border-b border-slate-800/80 shrink-0">
@@ -936,10 +941,11 @@ export function DashboardCanvas({
       {expandedWidget &&
         typeof document !== 'undefined' &&
         createPortal(
-          <div className="fixed inset-0 z-[2147481500] flex items-stretch sm:items-center justify-center p-0 sm:p-4">
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
-            <div className="relative w-full h-[100dvh] sm:h-[min(92dvh,900px)] sm:max-w-6xl rounded-none sm:rounded-2xl border-0 sm:border border-slate-700 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
-              <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2.5 sm:py-3 border-b border-slate-800 shrink-0">
+          <div className="fixed inset-0 z-[2147481500] flex items-stretch justify-center p-0">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
+            {/* Edge-to-edge fullscreen — no side gaps / no max-width cap */}
+            <div className="relative w-full h-[100dvh] max-w-none rounded-none border-0 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
+              <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-b border-slate-800 shrink-0">
                 <h3 className="text-sm sm:text-base font-semibold text-white flex-1 truncate min-w-0">
                   {expandedWidget.title}
                 </h3>
@@ -992,14 +998,14 @@ export function DashboardCanvas({
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <div className="flex-1 min-h-0 p-2 sm:p-4 overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 p-1 sm:p-2 overflow-hidden flex flex-col">
                 <div className="flex-1 min-h-0 h-full w-full">
                   <LiveWidget
                     widget={expandedWidget}
                     editable={false}
                     globalFilters={globalFilters}
                     refreshToken={refreshTokens[expandedWidget.id]}
-                    className="h-full min-h-[50dvh]"
+                    className="h-full min-h-0 w-full"
                   />
                 </div>
               </div>

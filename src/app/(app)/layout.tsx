@@ -22,8 +22,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="relative z-10 flex min-h-0 min-h-dvh w-full">
       <Sidebar user={user} />
       <main className="flex-1 min-w-0 pt-14 lg:pt-0">
-        <div className="border-b border-slate-800/80 bg-slate-950/80 px-4 sm:px-6 lg:px-8 sticky top-0 z-20 backdrop-blur">
-          <div className="max-w-[1600px] mx-auto">
+        <div className="border-b border-slate-800/80 bg-slate-950/80 px-2 sm:px-6 lg:px-8 sticky top-0 z-20 backdrop-blur">
+          <div className="max-w-[1600px] mx-auto w-full">
             <ConnectionStatusBar
               isSuperAdmin={superAdmin}
               companyName={user.companyName || user.companySlug}

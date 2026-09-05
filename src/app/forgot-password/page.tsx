@@ -43,7 +43,7 @@ export default function ForgotPasswordPage() {
           <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-xl font-bold text-white">Paroly ýatdan çykardyňyzmy?</h1>
+          <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">Paroly ýatdan çykardyňyzmy?</h1>
           <p className="text-sm text-slate-400">
             Login ýa-da e-poçtaňyzy ýazyň. Gmail arkaly 15 minutlyk täzeleme baglanyşygy iberiler.
           </p>

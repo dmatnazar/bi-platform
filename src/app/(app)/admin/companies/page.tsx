@@ -428,8 +428,8 @@ export default function CompaniesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Kompaniyalar</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Kompaniyalar</h1>
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             {isSuper ? 'Super admin Â· ahli firmalar (aktiw + passiw) Â· VPS' : 'Sizin kompaniyaniz'}
           </p>
         </div>

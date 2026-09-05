@@ -6,6 +6,7 @@
 // Task 8: Unsaved changes warning (Save / Cancel save / Close) when leaving edit mode
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import type {
   Dashboard,
@@ -21,7 +22,7 @@ import { DashboardFilterBar, GlobalFiltersEditor } from './DashboardFilterBar';
 import { Button } from '@/components/ui/Button';
 import { generateId } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
-import { ArrowLeft, Save, Pencil, Eye, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Save, Pencil, Eye, ChevronDown, ChevronRight, RefreshCw, GripHorizontal, X } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface Props {
@@ -69,6 +70,17 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   const [name, setName] = useState(initial.name);
   const [dirty, setDirty] = useState(false);
   const [configId, setConfigId] = useState<string | null>(null);
+  // Floating widget-settings modal (draggable; remembers last place across widgets)
+  // null until first place — avoids flash at left (16,96) before jumping right
+  const [configPos, setConfigPos] = useState<{ x: number; y: number } | null>(null);
+  const configPosUserSet = useRef(false);
+  const configDragRef = useRef<{
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const configPanelRef = useRef<HTMLDivElement | null>(null);
   // Fix: widget settings panel UX — see asideRef/isDesktop/mobilePanelVh below.
   const asideRef = useRef<HTMLElement | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
@@ -92,17 +104,117 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
     return () => mq.removeEventListener?.('change', apply);
   }, []);
 
-  // Fix: opening a widget's settings (via its gear icon) used to leave the
-  // user staring at the canvas on mobile — the panel renders below the whole
-  // grid, so on a long dashboard it could be many screens down. Bring it
-  // into view as soon as it opens.
+  // Place floating panel in the VIEWPORT (never page bottom).
+  // Mobile: aside sits under the canvas → its getBoundingClientRect is often below the fold
+  // which used to pin the panel to the bottom of the screen or hide it.
   useEffect(() => {
-    if (!configId || isDesktop) return;
-    const t = setTimeout(() => {
-      asideRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 50);
-    return () => clearTimeout(t);
-  }, [configId, isDesktop]);
+    if (!configId) return;
+    if (configPosUserSet.current && configPos) {
+      // If remembered pos is off-screen (e.g. after rotate), re-clamp
+      const margin = 8;
+      const pw = 360;
+      const x = Math.max(margin, Math.min(configPos.x, window.innerWidth - Math.min(pw, window.innerWidth - 16) - margin));
+      const y = Math.max(margin, Math.min(configPos.y, window.innerHeight - 100));
+      if (x !== configPos.x || y !== configPos.y) setConfigPos({ x, y });
+      return;
+    }
+
+    const place = () => {
+      const panelW = Math.min(360, window.innerWidth - 16);
+      const margin = 12;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const desktop = vw >= 1024;
+
+      let x: number;
+      let y: number;
+
+      if (desktop) {
+        // Prefer under Global filters on the right aside — only if aside is on-screen
+        x = Math.max(margin, vw - panelW - margin);
+        y = 88;
+        const aside = asideRef.current;
+        if (aside) {
+          const ar = aside.getBoundingClientRect();
+          const visible = ar.top < vh - 60 && ar.bottom > 40;
+          if (visible) {
+            x = Math.max(margin, Math.min(ar.left, vw - panelW - margin));
+            const filtersEl = aside.querySelector('[data-global-filters-block]') as HTMLElement | null;
+            if (filtersEl) {
+              const fr = filtersEl.getBoundingClientRect();
+              if (fr.bottom > 40 && fr.bottom < vh - 80) {
+                y = fr.bottom + 8;
+              } else {
+                y = Math.max(margin, Math.min(ar.top + 8, vh - 120));
+              }
+            }
+          }
+        }
+      } else {
+        // Mobile: center horizontally, near top of viewport (not page bottom)
+        x = Math.max(margin, (vw - panelW) / 2);
+        y = 56;
+      }
+
+      y = Math.max(margin, Math.min(y, vh - 120));
+      x = Math.max(margin, Math.min(x, vw - panelW - margin));
+      setConfigPos({ x, y });
+      configPosUserSet.current = true;
+    };
+
+    place();
+  }, [configId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function closeConfigPanel() {
+    setConfigId(null);
+  }
+
+  function onConfigDragStart(e: React.PointerEvent) {
+    if (e.button != null && e.button !== 0) return;
+    const tgt = e.target as HTMLElement | null;
+    if (tgt?.closest?.('[data-config-no-drag]')) return;
+    if (!configPos) return;
+    // Drag panel without locking body overflow (that hid the page scrollbar
+    // and made the dashboard jump wider). Only block default on the gesture.
+    e.preventDefault();
+    e.stopPropagation();
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    configDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: configPos.x,
+      origY: configPos.y,
+    };
+    // Prevent page scroll only while finger is on the drag handle — do NOT
+    // set body overflow:hidden (scrollbar must stay).
+    const onTouchMove = (ev: TouchEvent) => {
+      if (configDragRef.current) ev.preventDefault();
+    };
+    function onMove(ev: PointerEvent) {
+      const d = configDragRef.current;
+      if (!d) return;
+      if (ev.cancelable) ev.preventDefault();
+      const panelW = configPanelRef.current?.offsetWidth || 360;
+      const margin = 8;
+      let nx = d.origX + (ev.clientX - d.startX);
+      let ny = d.origY + (ev.clientY - d.startY);
+      nx = Math.max(margin, Math.min(nx, window.innerWidth - panelW - margin));
+      ny = Math.max(margin, Math.min(ny, window.innerHeight - 80 - margin));
+      configPosUserSet.current = true;
+      setConfigPos({ x: nx, y: ny });
+    }
+    function onUp() {
+      configDragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      document.removeEventListener('touchmove', onTouchMove);
+    }
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+  }
 
   // Fix: on mobile the panel had a fixed viewport-relative height with no
   // way to adjust it. Let the user grab a handle at the top and drag it
@@ -246,6 +358,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
         setDashboard(data.dashboard);
         setDirty(false);
         setEditMode(false);
+        setConfigId(null); // close widget settings when dashboard is saved
         router.refresh();
         return true;
       }
@@ -542,8 +655,13 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
               editable={editMode}
               onChange={updateWidgets}
               onConfigureWidget={(id) => {
+                // Mobile: always re-anchor near top of viewport (aside is below canvas)
+                if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+                  configPosUserSet.current = false;
+                  setConfigPos(null);
+                }
                 setConfigId(id);
-                setPanelOpen({ palette: false, filters: false, config: true });
+                setPanelOpen((p) => ({ ...p, config: true }));
               }}
               globalFilters={effectiveFilterValues}
             />
@@ -612,8 +730,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
               <span className="h-1.5 w-12 rounded-full bg-slate-700" />
             </div>
 
-            {/* Collapsible: Widget goş — gizle when config open so settings fills panel */}
-            {!configId && (
+            {/* Collapsible: Widget goş */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shrink-0">
               <button
                 type="button"
@@ -633,11 +750,9 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 </div>
               )}
             </div>
-            )}
 
             {/* Collapsible: Global filters */}
-            {!configId && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shrink-0">
+            <div data-global-filters-block className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shrink-0">
               <button
                 type="button"
                 className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 hover:bg-slate-800/40"
@@ -659,45 +774,74 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 </div>
               )}
             </div>
-            )}
-
-            {/* Collapsible: Widget config — full remaining height of sticky panel */}
-            {configId && dashboard.widgets.find((w) => w.id === configId) && (
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/50 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-                <button
-                  type="button"
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 shrink-0"
-                  onClick={() => setPanelOpen((p) => ({ ...p, config: !p.config }))}
-                >
-                  {panelOpen.config ? (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  )}
-                  Widget sazlamasy
-                </button>
-                {panelOpen.config && (
-                  <div
-                    data-widget-config-scroll
-                    className="flex-1 min-h-0 h-full overflow-y-auto overscroll-contain px-2 pb-6"
-                  >
-                    <WidgetConfigPanel
-                      widget={dashboard.widgets.find((w) => w.id === configId)!}
-                      onChange={(w) => {
-                        updateWidgets(dashboard.widgets.map((x) => (x.id === w.id ? w : x)));
-                      }}
-                      onClose={() => setConfigId(null)}
-                      globalFilters={filterDefs}
-                      onSuggestGlobalFilters={updateGlobalFilters}
-                      preferredTenantSlug={companySlug}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
           </aside>
         )}
         </div>
+      )}
+
+      {/* Floating widget settings — portal to body so fixed = viewport (not page bottom) */}
+      {configId &&
+        configPos &&
+        typeof document !== 'undefined' &&
+        dashboard.widgets.find((w) => w.id === configId) &&
+        createPortal(
+        <div
+          ref={configPanelRef}
+          role="dialog"
+          aria-label="Widget sazlamasy"
+          className="fixed z-[2147483000] flex flex-col w-[min(22rem,calc(100vw-1rem))] max-h-[min(85dvh,720px)] rounded-2xl border border-indigo-500/40 bg-slate-950 shadow-2xl shadow-black/50 ring-1 ring-white/5 overscroll-none"
+          style={{
+            left: configPos.x,
+            top: configPos.y,
+          }}
+        >
+          <div
+            className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-800 cursor-grab active:cursor-grabbing select-none touch-none shrink-0 rounded-t-2xl bg-slate-900/90"
+            style={{ touchAction: 'none' }}
+            onPointerDown={onConfigDragStart}
+            title="Süýşürmek üçin tutuň"
+          >
+            <GripHorizontal className="h-4 w-4 text-slate-500 shrink-0 pointer-events-none" />
+            <div className="min-w-0 flex-1 pointer-events-none">
+              <p className="text-sm font-semibold text-white truncate">
+                {dashboard.widgets.find((w) => w.id === configId)?.title || 'Widget sazlamasy'}
+              </p>
+              <p className="text-[10px] text-slate-500">Süýşürmek üçin tutuň</p>
+            </div>
+            <button
+              type="button"
+              data-config-no-drag
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 relative z-10"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                closeConfigPanel();
+              }}
+              title="Ýap"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div
+            data-widget-config-scroll
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-2 pb-4 pt-1"
+          >
+            <WidgetConfigPanel
+              widget={dashboard.widgets.find((w) => w.id === configId)!}
+              onChange={(w) => {
+                updateWidgets(dashboard.widgets.map((x) => (x.id === w.id ? w : x)));
+              }}
+              onClose={closeConfigPanel}
+              globalFilters={filterDefs}
+              onSuggestGlobalFilters={updateGlobalFilters}
+              preferredTenantSlug={companySlug}
+            />
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

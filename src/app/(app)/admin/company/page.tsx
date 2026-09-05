@@ -111,11 +111,11 @@ export default function CompanyPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+        <h1 className="text-base sm:text-2xl font-bold text-white flex items-center gap-1.5 sm:gap-2 truncate leading-tight">
           <Building2 className="h-6 w-6 text-indigo-400" />
           Kompaniýa
         </h1>
-        <p className="text-slate-400 text-sm mt-1">Kompaniýa profili — ähli maglumatlar</p>
+        <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">Kompaniýa profili — ähli maglumatlar</p>
       </div>
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">

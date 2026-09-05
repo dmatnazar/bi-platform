@@ -183,6 +183,8 @@ export interface DashboardWidget {
   staticValue?: string | number;
   config?: {
     color?: string;
+    /** Color for numeric value labels on line/area/bar (independent of stroke) */
+    valueLabelColor?: string;
     showLegend?: boolean;
     stacked?: boolean;
     unit?: string;

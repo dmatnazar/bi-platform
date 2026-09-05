@@ -48,7 +48,7 @@ export default function NewDashboardPage() {
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-xl font-bold text-white">Täze dashboard</h1>
+        <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">Täze dashboard</h1>
       </div>
 
       <form

@@ -9,7 +9,7 @@ export default async function SupportPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Goldaw / Chat</h1>
+        <h1 className="text-base sm:text-2xl font-bold text-white tracking-tight truncate leading-tight">Goldaw / Chat</h1>
         <p className="text-sm text-slate-400 mt-1">
           Diňe adminlere ýazyp bilersiňiz — teklip, säwlik, sorag we maslahat.
         </p>

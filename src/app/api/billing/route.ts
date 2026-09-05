@@ -99,9 +99,14 @@ export async function GET(req: NextRequest) {
 
   if (action === 'ledger') {
     if (!isSuper(user)) return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+    // IMPORTANT: do NOT default to user.companySlug for super-admin global ledger.
+    // Otherwise "Soňky hereketler" only shows one firm and looks like entries are "not written".
+    const explicitSlug = (req.nextUrl.searchParams.get('tenantSlug') || '').trim() || undefined;
+    const limitRaw = Number(req.nextUrl.searchParams.get('limit') || 100);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 5000) : 100;
     const res = await ledgerOnGateway({
-      tenantSlug: tenantSlug || undefined,
-      limit: Number(req.nextUrl.searchParams.get('limit') || 50),
+      tenantSlug: explicitSlug,
+      limit,
     });
     if (!res.ok) return NextResponse.json({ error: res.data?.error || 'şowsuz' }, { status: 502 });
     return NextResponse.json(res.data);

@@ -339,11 +339,11 @@ export default function DevicesPage() {
     <div className="space-y-6 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-base sm:text-2xl font-bold text-white flex items-center gap-1.5 sm:gap-2 truncate leading-tight">
             <Server className="h-6 w-6 text-indigo-400" />
             Enjamlar
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             Electron agent-leri tassyklamak, firma baglamak we duruzmak üçin ulanylýar.
             {pendingCount > 0 && (
               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">

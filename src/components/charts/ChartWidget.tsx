@@ -1194,8 +1194,8 @@ function TableWidgetBody({
                         {drillFilteredRows.map((r, idx) => (
                           <tr key={idx} className="border-b border-slate-800/60 text-slate-200">
                             {drillColKeys.map((k) => (
-                              <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate">
-                                {String(r[k] ?? '')}
+                              <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate" title={String(r[k] ?? '')}>
+                                {formatCellValue(r[k])}
                               </td>
                             ))}
                           </tr>
@@ -1230,7 +1230,7 @@ function TableWidgetBody({
                                     (primary.length === 1 || j === 0) && 'font-medium text-white'
                                   )}
                                 >
-                                  {String(r[c] ?? '—')}
+                                  {formatCellValue(r[c])}
                                 </span>
                               </div>
                             ))}
@@ -1241,7 +1241,7 @@ function TableWidgetBody({
                               {secondary.map((c) => (
                                 <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
                                   <span className="text-slate-500">{c}: </span>
-                                  <span className="text-slate-300">{String(r[c] ?? '—')}</span>
+                                  <span className="text-slate-300">{formatCellValue(r[c])}</span>
                                 </div>
                               ))}
                             </div>
@@ -1346,6 +1346,88 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       const showLabels = !!widget.config?.showDataLabels;
       const horizontal = !!widget.config?.horizontal && widget.type === 'bar';
 
+      /** Clamp value labels inside the plot — shift in from top/side edges */
+      const barValueLabelLayout = (params: any) => {
+        const lw = Math.min(params?.labelRect?.width ?? 48, 100);
+        const lh = params?.labelRect?.height ?? 28;
+        const bar = params?.rect || { x: 0, y: 0, width: 20, height: 20 };
+        const pad = 6;
+        if (horizontal) {
+          return {
+            x: bar.x + bar.width + 6,
+            y: bar.y + bar.height / 2,
+            align: 'left' as const,
+            verticalAlign: 'middle' as const,
+            width: Math.min(lw, 88),
+            overflow: 'truncate' as const,
+            hideOverlap: true,
+          };
+        }
+        // Center above bar
+        let x = bar.x + bar.width / 2;
+        let y = bar.y - 2;
+        // Near top: shift down into the chart (label grows from the edge inward)
+        if (y - lh < pad) {
+          y = pad + lh;
+        }
+        // Near left/right of the host: shift label toward bar center / inward
+        // so text is not clipped by the widget border
+        const half = lw / 2;
+        if (x - half < pad) {
+          x = pad + half;
+        }
+        // Right edge: if bar sits far right, labelRect may overflow — nudge left
+        // (bar.x is in pixel space of the series; use bar right as hint)
+        const barRight = bar.x + bar.width;
+        if (x + half > barRight + 80) {
+          x = Math.max(pad + half, barRight - half);
+        }
+        return {
+          x,
+          y,
+          align: 'center' as const,
+          verticalAlign: 'bottom' as const,
+          width: Math.min(Math.max(lw, 36), 100),
+          overflow: 'truncate' as const,
+          hideOverlap: true,
+          moveOverlap: 'shiftY' as const,
+        };
+      };
+
+      const makeBarLabel = (seriesColor: string, seriesNameFallback: string) => ({
+        show: !!showLabels,
+        position: (horizontal ? 'right' : 'top') as 'right' | 'top',
+        color:
+          (widget.config as any)?.valueLabelColor ||
+          widget.config?.labelColor ||
+          seriesColor,
+        fontSize: Math.max(11, (widget.config?.labelFontSize || 12) - (valueKeys.length > 2 ? 1 : 0)),
+        distance: horizontal ? 6 : 4,
+        overflow: 'truncate' as const,
+        width: horizontal ? 80 : 72,
+        ellipsis: '…',
+        hideOverlap: true,
+        formatter: (p: any) => {
+          const v = p.value;
+          if (v == null || v === '') return '';
+          const num = typeof v === 'number' ? v : Number(v);
+          let text = String(v);
+          if (Number.isFinite(num)) {
+            const abs = Math.abs(num);
+            if (abs >= 1e6) text = (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+            else if (abs >= 1e3) text = (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+            else text = String(Math.round(num * 100) / 100);
+          }
+          const nm = String(p.seriesName || seriesNameFallback || '');
+          // Show field name + value (user request); keep short so edge clamp works
+          if (nm) {
+            const short = nm.length > 11 ? nm.slice(0, 10) + '…' : nm;
+            return short + '\n' + text;
+          }
+          return text;
+        },
+      });
+
       let cats: string[] = [];
       let series: any[] = [];
 
@@ -1384,32 +1466,9 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             color: palette[i % palette.length],
             borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
           },
-          lineStyle: { width: 2.5 },
-          label: {
-                // Always show one label per value-field series when multi-selected
-                show: !!showLabels,
-                // Overlap handling via hideOverlap; dense points still labeled until zoom
-                position: horizontal ? 'right' : 'top',
-                color: palette[i % palette.length],
-                fontSize: Math.max(9, (widget.config?.labelFontSize || 10) - (valueKeys.length > 2 ? 1 : 0)),
-                distance: horizontal ? 8 : 6,
-                // keep label above/ beside THIS series bar (not stacked on sibling)
-                offset: [0, 0],
-                overflow: 'none',
-                formatter: (p: any) => {
-                  const v = p.value;
-                  if (v == null || v === '') return '';
-                  if (valueKeys.length > 1) {
-                    // short series tag so 2+ labels are distinguishable
-                    const short =
-                      String(p.seriesName || '').length > 12
-                        ? String(p.seriesName).slice(0, 11) + '…'
-                        : p.seriesName;
-                    return short + '\n' + v;
-                  }
-                  return String(v);
-                },
-              },
+          lineStyle: { width: 2.5, color: palette[i % palette.length] },
+          label: makeBarLabel(palette[i % palette.length], ser),
+          labelLayout: barValueLabelLayout,
         }));
       } else {
         // Multi value fields → one series each (separate bars + own label)
@@ -1439,30 +1498,9 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               color,
               borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
             },
-            lineStyle: { width: 2.5 },
-            // One label per series, always when multi value fields
-            label: {
-              show: !!showLabels,
-              position: horizontal ? 'right' : 'top',
-              color,
-              fontSize: Math.max(9, (widget.config?.labelFontSize || 10) - (valueKeys.length > 2 ? 1 : 0)),
-              distance: 6,
-              overflow: 'truncate',
-              hideOverlap: true,
-              formatter: (p: any) => {
-                const v = p.value;
-                if (v == null || v === '') return '';
-                const num = typeof v === 'number' ? v : Number(v);
-                const text = Number.isFinite(num) ? formatAxisNumber(num) : String(v);
-                if (valueKeys.length > 1) {
-                  const nm = String(p.seriesName || vk);
-                  const short = nm.length > 14 ? nm.slice(0, 13) + '…' : nm;
-                  return short + '\n' + text;
-                }
-                return text;
-              },
-            },
-            labelLayout: { hideOverlap: true },
+            lineStyle: { width: 2.5, color },
+            label: makeBarLabel(color, vk),
+            labelLayout: barValueLabelLayout,
           };
         });
       }
@@ -1572,21 +1610,23 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       // Multi value fields → each series keeps its own color + legend entry
       // (already separate series from valueKeys map)
 
+      const legendOn =
+        series.length > 1 || showLegend;
+      // Legend on top; extra room when value labels (field name + number) sit above bars
+      const labelTopExtra = showLabels && !horizontal ? 36 : showLabels && horizontal ? 8 : 0;
+      const legendTopPad = (legendOn ? 32 : multiY ? 44 : 16) + labelTopExtra;
+      const dataZoomBottomPad = 40;
+
       return {
         backgroundColor: 'transparent',
         color: palette,
+        // Clip graphics that still try to paint outside grid
+        animation: true,
         grid: {
           left: horizontal ? 8 : leftPad,
           right: rightPad,
-          top: horizontal
-            ? (showLegend || series.length > 1 ? 36 : 16)
-            : showLegend && series.length > 1
-              ? 28
-              : multiY
-                ? 44
-                : 28,
-          // Room for dataZoom slider; legend is top when horizontal
-          bottom: horizontal ? 44 : showLegend && series.length > 1 ? 72 : 40,
+          top: legendTopPad,
+          bottom: dataZoomBottomPad,
           containLabel: true,
         },
         dataZoom: [
@@ -1605,12 +1645,10 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         ],
         tooltip: { trigger: 'axis' },
         legend:
-          series.length > 1 || showLegend
+          legendOn
             ? {
-                // Horizontal bars: legend ABOVE chart so it never sits under dataZoom slider
-                ...(horizontal
-                  ? { top: 4, left: 'center' }
-                  : { bottom: series.length > 1 ? 36 : 8 }),
+                top: 4,
+                left: 'center',
                 type: 'scroll',
                 orient: 'horizontal',
                 textStyle: { color: labelColor, fontSize: baseLabelFs },

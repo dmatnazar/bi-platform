@@ -145,9 +145,9 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       : `her ${status.catalogSyncIntervalSec}s`;
 
   const clientModalUi = clientModal ? (
-    <div className="fixed inset-0 z-[2147483000] flex items-center justify-center px-3 sm:px-4">
+    <div className="fixed inset-0 z-[2147483000] flex items-end sm:items-end justify-center px-3 sm:px-4 pb-20 sm:pb-24 pt-16">
       <div className="absolute inset-0 bg-black/40" onClick={() => setClientModal(false)} />
-      <div className="relative w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden max-h-[min(65dvh,400px)] flex flex-col">
+      <div className="relative w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden max-h-[min(55dvh,380px)] flex flex-col mb-2">
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800 shrink-0">
           <p className="text-sm font-semibold text-white">BI Client — firmalar</p>
           <button
@@ -183,7 +183,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   // Viewer / company user: still show live sync strip (not only VPS)
   if (!isSuperAdmin) {
     return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-slate-300 px-1 py-1.5">
+      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-slate-300 px-11 sm:px-2 py-1.5 text-center">
         <div className="inline-flex items-center gap-1.5" title="VPS Gateway">
           <Dot ok={!!status?.gatewayOnline} />
           {status?.gatewayOnline ? (
@@ -220,7 +220,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-slate-400 px-1 py-1.5">
+    <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 text-[10px] sm:text-[11px] text-slate-400 px-11 sm:px-2 py-1.5 text-center">
       <div className="inline-flex items-center gap-1.5" title="VPS Gateway /health">
         <Dot ok={!!status?.gatewayOnline} />
         {status?.gatewayOnline ? (
@@ -285,8 +285,8 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       </div>
 
       {status && (
-        <span className="text-white hidden sm:inline">
-          {status.counts.tenants} firma · {status.counts.endpoints} API · {status.counts.staff} işgär
+        <span className="text-white text-[10px] sm:text-[11px]">
+          {status.counts.tenants}firma · {status.counts.endpoints}API · {status.counts.staff}işgär
         </span>
       )}
 

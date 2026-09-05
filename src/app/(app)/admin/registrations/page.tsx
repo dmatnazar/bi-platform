@@ -62,8 +62,8 @@ export default function RegistrationsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Hasaba alyş islegleri</h1>
-        <p className="text-slate-400 text-sm mt-1">Täze işgärleri tassyklamak ýa-da ret etmek</p>
+        <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Hasaba alyş islegleri</h1>
+        <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">Täze işgärleri tassyklamak ýa-da ret etmek</p>
       </div>
 
       {loading ? (

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { formatDateTime } from '@/lib/utils';
 import {
   ArrowLeft,
   ArrowDownRight,
@@ -158,12 +159,25 @@ export default function BillingLedgerPage() {
   const [tenantFilter, setTenantFilter] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const PAGE_SIZE_KEY = 'bi-billing-ledger-page-size';
+  const [pageSize, setPageSize] = useState<number>(() => {
+    if (typeof window === 'undefined') return 25;
+    const n = Number(localStorage.getItem(PAGE_SIZE_KEY) || 25);
+    return [10, 25, 50, 100, 200].includes(n) ? n : 25;
+  });
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/billing?action=ledger&limit=500');
+      // Fetch a large window; UI page-size controls how many rows render
+      const res = await fetch('/api/billing?action=ledger&limit=2000');
       const data = await res.json();
+      if (data?.error) {
+        toastError(data.error);
+        setRows([]);
+        return;
+      }
       const list = data.entries || data.ledger || data.rows || data.items || [];
       setRows(Array.isArray(list) ? list.map(normalizeLedgerEntry) : []);
     } catch (e) {
@@ -208,6 +222,25 @@ export default function BillingLedgerPage() {
       return blob.includes(qq);
     });
   }, [rows, q, typeFilter, tenantFilter]);
+
+  // Reset to page 1 when filters / page size change
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(() => {
+    const p = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize) || 1));
+    const start = (p - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
+  function changePageSize(n: number) {
+    setPageSize(n);
+    setPage(1);
+    try {
+      localStorage.setItem(PAGE_SIZE_KEY, String(n));
+    } catch {
+      /* */
+    }
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -288,8 +321,8 @@ export default function BillingLedgerPage() {
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-white">Ähli hereketler</h1>
-            <p className="text-xs text-slate-500">{filtered.length} / {rows.length} log</p>
+            <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">Ähli hereketler</h1>
+            <p className="text-xs text-slate-500">{filtered.length} / {rows.length} log · sahypa {safePage}/{totalPages}</p>
           </div>
         </div>
         {/* Fix: select-all / deselect toggle between Täzele and Poz — kept
@@ -385,7 +418,7 @@ export default function BillingLedgerPage() {
         <>
           {/* Mobile cards */}
           <div className="sm:hidden space-y-2">
-            {filtered.map((e) => (
+            {pageRows.map((e) => (
               <div key={e.id} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-3 space-y-2">
                 <div className="flex items-start gap-2">
                   <input
@@ -397,7 +430,7 @@ export default function BillingLedgerPage() {
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex justify-between gap-2">
                       <span className="text-[11px] text-slate-500">
-                        {e.createdAt?.replace('T', ' ').slice(0, 19)}
+                        {formatDateTime(e.createdAt)}
                       </span>
                       <span
                         className={`text-xs font-semibold tabular-nums ${
@@ -456,7 +489,7 @@ export default function BillingLedgerPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {filtered.map((e) => (
+                  {pageRows.map((e) => (
                     <tr key={e.id} className="hover:bg-slate-800/40">
                       <td className="px-3 py-2">
                         <input
@@ -466,7 +499,7 @@ export default function BillingLedgerPage() {
                         />
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">
-                        {e.createdAt?.replace('T', ' ').slice(0, 19)}
+                        {formatDateTime(e.createdAt)}
                       </td>
                       <td className="px-3 py-2 font-mono text-xs text-slate-300">{e.tenantSlug}</td>
                       <td className="px-3 py-2">
@@ -529,6 +562,66 @@ export default function BillingLedgerPage() {
           </div>
         </>
       )}
+
+      {/* Page size + pagination */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-800">
+        <div className="flex items-center gap-2 text-xs text-slate-400">
+          <span>Hat sany:</span>
+          <select
+            className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-200 text-xs"
+            value={pageSize}
+            onChange={(e) => changePageSize(Number(e.target.value))}
+          >
+            {[10, 25, 50, 100, 200].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+          <span className="text-slate-500">
+            {filtered.length
+              ? `${(safePage - 1) * pageSize + 1}–${Math.min(safePage * pageSize, filtered.length)} / ${filtered.length}`
+              : '0'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setPage(1)}
+            className="px-2 py-1 rounded-lg border border-slate-700 text-xs text-slate-300 disabled:opacity-40 hover:bg-slate-800"
+          >
+            «
+          </button>
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="px-2.5 py-1 rounded-lg border border-slate-700 text-xs text-slate-300 disabled:opacity-40 hover:bg-slate-800"
+          >
+            Öňki
+          </button>
+          <span className="px-2 text-xs text-slate-400 tabular-nums">
+            {safePage} / {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="px-2.5 py-1 rounded-lg border border-slate-700 text-xs text-slate-300 disabled:opacity-40 hover:bg-slate-800"
+          >
+            Indiki
+          </button>
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setPage(totalPages)}
+            className="px-2 py-1 rounded-lg border border-slate-700 text-xs text-slate-300 disabled:opacity-40 hover:bg-slate-800"
+          >
+            »
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

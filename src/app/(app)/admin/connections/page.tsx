@@ -329,7 +329,7 @@ export default function ConnectionsPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-base sm:text-2xl font-bold text-white flex items-center gap-1.5 sm:gap-2 truncate leading-tight">
             <Database className="h-6 w-6 text-indigo-400" />
             DB baglanyşyklar
           </h1>

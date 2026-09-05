@@ -135,7 +135,7 @@ export default function ProfilePage() {
       <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl p-6 sm:p-8 space-y-6">
         <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:items-start sm:justify-between sm:text-left">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-white">Profil</h1>
+            <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Profil</h1>
             <p className="text-sm text-slate-400">Hasap sazlamalary</p>
           </div>
           {user?.companySlug && (
