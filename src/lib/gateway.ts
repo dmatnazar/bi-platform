@@ -327,9 +327,35 @@ export async function syncStaffToGateway(
     phone?: string;
     email?: string;
     active: boolean;
-  }>
+    passwordEnc?: string;
+    passwordPlain?: string;
+    authoritative?: boolean;
+  }>,
+  opts?: { authoritative?: boolean }
 ) {
-  return gatewayFetch('POST', '/api/admin/sync-staff', { tenantSlug, staff });
+  return gatewayFetch('POST', '/api/admin/sync-staff', {
+    tenantSlug,
+    staff,
+    // BI admin always sends the full desired firm list — do not let device-style merge block removals.
+    authoritative: opts?.authoritative === true,
+  });
+}
+
+/** Single-staff create/update with exact tenantSlugs (preferred for multi-firm assign). */
+export async function upsertStaffOnGateway(payload: {
+  id?: string;
+  tenantSlug: string;
+  tenantSlugs?: string[];
+  fullName: string;
+  username: string;
+  passwordHash?: string;
+  passwordPlain?: string;
+  role: string;
+  phone?: string;
+  email?: string;
+  active?: boolean;
+}) {
+  return gatewayFetch('POST', '/api/admin/staff-upsert/admin', payload);
 }
 
 export async function updateTenantOnGateway(payload: {

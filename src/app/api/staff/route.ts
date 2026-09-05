@@ -4,6 +4,7 @@ import {
   fetchCatalog,
   checkGatewayHealth,
   syncStaffToGateway,
+  upsertStaffOnGateway,
   deleteStaffOnGateway,
   hashPasswordBcrypt,
   staffLookup,
@@ -197,8 +198,35 @@ export async function POST(req: NextRequest) {
     return members;
   };
 
+  // 1) Authoritative single-staff upsert so multi-firm list is exact (add + remove).
+  const upsertRes = await upsertStaffOnGateway({
+    id: entry.id,
+    tenantSlug: entry.tenantSlug,
+    tenantSlugs: entry.tenantSlugs,
+    fullName: entry.fullName,
+    username: entry.username,
+    passwordHash: entry.passwordHash,
+    passwordPlain: entry.passwordPlain,
+    role: entry.role,
+    phone: entry.phone,
+    email: entry.email,
+    active: entry.active,
+  });
+  if (!upsertRes.ok) {
+    return NextResponse.json(
+      { error: 'VPS-e işgär ýazylmady (upsert)', detail: upsertRes.data },
+      { status: 502 }
+    );
+  }
+
+  // 2) Per-tenant sync so each firm's staff roster stays consistent (Electron pulls).
+  //    Mark authoritative so sync-staff does not re-expand a firm we intentionally removed.
   for (const slug of affectedSlugs) {
-    const members = staffForTenant(slug);
+    const members = staffForTenant(slug).map((m: any) => ({
+      ...m,
+      authoritative: m.id === entry.id || m.username?.toLowerCase() === entry.username.toLowerCase(),
+    }));
+    // Per-row authoritative is set only on the edited staff; others keep merge-safe behavior.
     const res = await syncStaffToGateway(slug, members as any);
     if (!res.ok) {
       return NextResponse.json({ error: `VPS-e "${slug}" firmasyna işgär sync bolmady`, detail: res.data }, { status: 502 });
