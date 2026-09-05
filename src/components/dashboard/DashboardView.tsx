@@ -69,6 +69,10 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   const [name, setName] = useState(initial.name);
   const [dirty, setDirty] = useState(false);
   const [configId, setConfigId] = useState<string | null>(null);
+  // Fix: widget settings panel UX — see asideRef/isDesktop/mobilePanelVh below.
+  const asideRef = useRef<HTMLElement | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [mobilePanelVh, setMobilePanelVh] = useState(70);
   const [refreshAllToken, setRefreshAllToken] = useState(0);
   const [refreshingAll, setRefreshingAll] = useState(false);
 
@@ -77,6 +81,49 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
 
   // Task 11: Hydration fix - track if component has mounted on client
   const [isHydrated, setIsHydrated] = useState(false);
+
+  // Fix: widget settings panel — know when we're below the `lg` breakpoint
+  // (panel stacks under the canvas instead of sitting sticky beside it).
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener?.('change', apply);
+    return () => mq.removeEventListener?.('change', apply);
+  }, []);
+
+  // Fix: opening a widget's settings (via its gear icon) used to leave the
+  // user staring at the canvas on mobile — the panel renders below the whole
+  // grid, so on a long dashboard it could be many screens down. Bring it
+  // into view as soon as it opens.
+  useEffect(() => {
+    if (!configId || isDesktop) return;
+    const t = setTimeout(() => {
+      asideRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+    return () => clearTimeout(t);
+  }, [configId, isDesktop]);
+
+  // Fix: on mobile the panel had a fixed viewport-relative height with no
+  // way to adjust it. Let the user grab a handle at the top and drag it
+  // taller/shorter, like a bottom sheet, clamped to a comfortable range.
+  function onPanelResizeStart(e: React.PointerEvent) {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startVh = mobilePanelVh;
+    const vh1 = Math.max(1, window.innerHeight / 100);
+    function onMove(ev: PointerEvent) {
+      const draggedUpPx = startY - ev.clientY; // dragging up → taller panel
+      const next = Math.max(40, Math.min(92, startVh + draggedUpPx / vh1));
+      setMobilePanelVh(next);
+    }
+    function onUp() {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
 
   const filterDefs = dashboard.globalFilters || [];
   const [filterValues, setFilterValues] = useState<GlobalFilterValues>(() =>
@@ -504,16 +551,19 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
         {editMode && (
           <aside
             ref={(node) => {
+              asideRef.current = node;
               if (!node) return;
               const el = node as HTMLElement & { __wheelBound?: boolean };
               if (el.__wheelBound) return;
               el.__wheelBound = true;
-              // Always keep wheel inside panel (page must not scroll while hovering settings)
+              // Keep wheel scrolling inside the panel's own scrollable
+              // content when there is any — but only then. Previously this
+              // always called preventDefault(), so hovering the panel while
+              // its content was short (nothing to scroll) silently ate every
+              // wheel tick and blocked the page from scrolling at all.
               el.addEventListener(
                 'wheel',
                 (e: WheelEvent) => {
-                  e.preventDefault();
-                  e.stopPropagation();
                   // Prefer the deepest scrollable child under the pointer
                   let target: HTMLElement | null = e.target as HTMLElement;
                   let scrollEl: HTMLElement | null = null;
@@ -530,19 +580,37 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                     target = target.parentElement;
                   }
                   if (!scrollEl) {
-                    // Fall back to any scrollable descendant (config body)
-                    scrollEl =
-                      (el.querySelector('[data-widget-config-scroll]') as HTMLElement) ||
-                      el;
+                    const fallback = el.querySelector('[data-widget-config-scroll]') as HTMLElement | null;
+                    if (fallback && fallback.scrollHeight > fallback.clientHeight + 1) {
+                      scrollEl = fallback;
+                    }
                   }
+                  // Nothing scrollable under the panel → let the wheel event
+                  // through so the page itself can scroll instead of getting stuck.
+                  if (!scrollEl) return;
+                  e.preventDefault();
+                  e.stopPropagation();
                   scrollEl.scrollTop += e.deltaY;
                 },
                 { passive: false, capture: true }
               );
             }}
-            className="lg:w-[22rem] xl:w-96 w-full shrink-0 flex flex-col gap-2 lg:sticky lg:top-[4.75rem] lg:self-start h-[calc(100dvh-5.25rem)] max-h-[calc(100dvh-5.25rem)] overflow-hidden pr-0.5 lg:z-10"
-            style={{ WebkitOverflowScrolling: 'touch' }}
+            className="lg:w-[22rem] xl:w-96 w-full shrink-0 flex flex-col gap-2 lg:sticky lg:top-[4.75rem] lg:self-start lg:h-[calc(100dvh-5.25rem)] lg:max-h-[calc(100dvh-5.25rem)] overflow-hidden pr-0.5 lg:z-10"
+            style={{
+              WebkitOverflowScrolling: 'touch',
+              ...(isDesktop ? {} : { height: `${mobilePanelVh}dvh`, maxHeight: '92dvh' }),
+            }}
           >
+            {/* Fix: draggable handle so the settings panel can be resized
+                taller (down to the end of a long dashboard) or shorter,
+                instead of being stuck at one fixed height on mobile. */}
+            <div
+              className="lg:hidden flex items-center justify-center py-1.5 -mt-1 cursor-row-resize touch-none select-none shrink-0"
+              onPointerDown={onPanelResizeStart}
+              title="Ini üýtgetmek üçin ýokary/aşak süýrüň"
+            >
+              <span className="h-1.5 w-12 rounded-full bg-slate-700" />
+            </div>
 
             {/* Collapsible: Widget goş — gizle when config open so settings fills panel */}
             {!configId && (

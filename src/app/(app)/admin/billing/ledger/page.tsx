@@ -6,9 +6,11 @@ import {
   ArrowLeft,
   ArrowDownRight,
   ArrowUpRight,
+  CheckSquare,
   Loader2,
   RefreshCw,
   Search,
+  Square,
   Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -290,16 +292,47 @@ export default function BillingLedgerPage() {
             <p className="text-xs text-slate-500">{filtered.length} / {rows.length} log</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => void load()} loading={loading}>
+        {/* Fix: select-all / deselect toggle between Täzele and Poz — kept
+            compact (icon + short mobile label) with flex-nowrap so all
+            three buttons always stay on one line, even on narrow phones. */}
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void load()}
+            loading={loading}
+            className="shrink-0"
+          >
             <RefreshCw className="h-4 w-4" />
             Täzele
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!filtered.length}
+            onClick={toggleAll}
+            className="shrink-0"
+          >
+            {filtered.length > 0 && selected.size === filtered.length ? (
+              <>
+                <Square className="h-4 w-4" />
+                <span className="hidden sm:inline">Saýlananlary aýyr</span>
+                <span className="sm:hidden">Aýyr</span>
+              </>
+            ) : (
+              <>
+                <CheckSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Hemmesini saýla</span>
+                <span className="sm:hidden">Saýla</span>
+              </>
+            )}
           </Button>
           <Button
             variant="danger"
             size="sm"
             disabled={!selected.size || busy}
             onClick={() => void deleteSelected()}
+            className="shrink-0"
           >
             <Trash2 className="h-4 w-4" />
             Poz ({selected.size})

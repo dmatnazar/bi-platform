@@ -1502,6 +1502,9 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           width: horizontal ? 120 : undefined,
           overflow: horizontal ? 'truncate' : 'truncate',
           ellipsis: '…',
+          // Fix: truncated category labels had no way to read the full text.
+          // Emit a click event so onChartClick can pop up the untruncated label.
+          triggerEvent: true,
         },
         axisLine: { lineStyle: { color: '#334155' } },
         axisTick: { alignWithLabel: true },
@@ -1827,6 +1830,9 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               edgeDistance: 6,
               bleedMargin: 2,
               distanceToLabelLine: 4,
+              // Fix: let a pie label click show the full name in a popup —
+              // useful when a long name got wrapped/cut inside the chart itself.
+              triggerEvent: true,
             },
             labelLayout: {
               // Keep labels inside widget bounds; hide if still overlapping heavily
@@ -2133,6 +2139,35 @@ function ChartCanvas({
   const [boxMin, setBoxMin] = useState(200);
   const dd = widget.dataSource?.drillDown;
 
+  // Fix: pie/line/area/bar labels can be truncated (long names) with no way
+  // to read them. Clicking a (possibly truncated) axis or pie label shows the
+  // full text in a small popup near the click, for 3 seconds — re-clicking
+  // (the same or another label) resets the timer instead of stacking popups.
+  const [labelPopup, setLabelPopup] = useState<{ text: string; x: number; y: number } | null>(
+    null
+  );
+  const labelPopupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showLabelPopup(text: string, evt: any) {
+    if (!text) return;
+    const zrEvt = evt?.event || evt;
+    const box = wrapRef.current?.getBoundingClientRect();
+    let x = typeof zrEvt?.offsetX === 'number' ? zrEvt.offsetX : (box ? box.width / 2 : 0);
+    let y = typeof zrEvt?.offsetY === 'number' ? zrEvt.offsetY : (box ? box.height / 2 : 0);
+    if (box) {
+      x = Math.max(8, Math.min(box.width - 8, x));
+      y = Math.max(8, Math.min(box.height - 8, y));
+    }
+    if (labelPopupTimer.current) clearTimeout(labelPopupTimer.current);
+    setLabelPopup({ text, x, y });
+    labelPopupTimer.current = setTimeout(() => setLabelPopup(null), 3000);
+  }
+  useEffect(
+    () => () => {
+      if (labelPopupTimer.current) clearTimeout(labelPopupTimer.current);
+    },
+    []
+  );
+
   // Task 15: auto text scale with widget box size (and after zoom/resize)
   useEffect(() => {
     const el = wrapRef.current;
@@ -2418,6 +2453,29 @@ function ChartCanvas({
   }
 
   function onChartClick(params: any) {
+    // Fix: axis label click (line/area/bar category axis) → show full text.
+    // These never had a click behavior before, regardless of drill-down.
+    if (
+      (params?.componentType === 'xAxis' || params?.componentType === 'yAxis') &&
+      params?.value != null &&
+      String(params.value).length > 0
+    ) {
+      showLabelPopup(String(params.value), params.event);
+      return;
+    }
+    // Fix: pie/donut label click → show full name (+ value), but only when
+    // drill-down isn't wired up for this widget (drill-down already has its
+    // own, more useful, click behavior below).
+    if (
+      params?.componentType === 'series' &&
+      (chartKind === 'pie' || chartKind === 'donut') &&
+      !dd?.enabled &&
+      params?.name
+    ) {
+      const text = params.value != null ? `${params.name}: ${params.value}` : String(params.name);
+      showLabelPopup(text, params.event);
+      return;
+    }
     if (chartKind !== 'pie' && chartKind !== 'donut') return;
     if (!params?.data?.name) return;
     if (!dd?.enabled) return;
@@ -2523,6 +2581,21 @@ function ChartCanvas({
         opts={{ renderer: 'canvas' }}
         notMerge
       />
+
+      {/* Fix: full-text popup for a clicked (possibly truncated) label —
+          bigger, wraps to a 2nd line if needed, auto-hides after 3s. */}
+      {labelPopup && (
+        <div
+          className="absolute z-30 pointer-events-none max-w-[75%] sm:max-w-[220px] rounded-lg border border-slate-600 bg-slate-900/95 px-2.5 py-1.5 text-[13px] leading-snug text-white shadow-xl break-words line-clamp-2"
+          style={{
+            left: labelPopup.x,
+            top: Math.max(0, labelPopup.y - 34),
+            transform: 'translate(-50%, -100%)',
+          }}
+        >
+          {labelPopup.text}
+        </div>
+      )}
 
       {/* Task 10: nested pie hierarchy modal with breadcrumb */}
       {drillOpen &&

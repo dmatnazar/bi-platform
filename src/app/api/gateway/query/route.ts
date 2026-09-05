@@ -173,6 +173,11 @@ export async function POST(req: NextRequest) {
           staffId: String(user.id || user.username || ''),
           staffRole: role,
           endpointName: path,
+          // Previously omitted — this left wallet_ledger.created_by/device_name blank
+          // for every dashboard-triggered "api_call" entry (the bulk of the ledger),
+          // so the "Ulanyjy" / "Device" columns always showed "—".
+          username: String(user.fullName || user.username || ''),
+          deviceName: 'Web BI',
         });
         if (typeof cr.data?.balance === 'number') reqBalance = cr.data.balance;
         if (cr.status === 402 || cr.data?.code === 'NO_CREDITS') {

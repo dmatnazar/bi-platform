@@ -35,7 +35,20 @@ export function SupportFab() {
   const dragging = useRef(false);
   const moved = useRef(false);
   const start = useRef({ px: 0, py: 0, ox: 0, oy: 0 });
-  const size = 56;
+  // Fix: fixed 56px FAB felt oversized on phones — shrink a bit on mobile.
+  // Lazy-init from matchMedia so it's correct on the very first render
+  // (no post-mount size jump), and keep it in sync on rotation/resize.
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 640px)').matches : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)');
+    const apply = () => setIsMobile(mq.matches);
+    apply();
+    mq.addEventListener?.('change', apply);
+    return () => mq.removeEventListener?.('change', apply);
+  }, []);
+  const size = isMobile ? 46 : 56;
 
   useEffect(() => {
     const saved = loadPos();
@@ -58,7 +71,15 @@ export function SupportFab() {
     }
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
+
+  // Re-clamp (and thus re-render at the new size) whenever the mobile/desktop
+  // breakpoint flips, so the button visibly shrinks/grows immediately.
+  useEffect(() => {
+    setPos((p) => (p ? clamp(p.x, p.y) : p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile]);
 
   function clamp(x: number, y: number) {
     if (typeof window === 'undefined') return { x, y };
@@ -107,7 +128,8 @@ export function SupportFab() {
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved.current = true;
     const next = clamp(start.current.ox + dx, start.current.oy + dy);
     setPos(next);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
     if (!dragging.current) return;
@@ -123,7 +145,8 @@ export function SupportFab() {
       e.preventDefault();
       e.stopPropagation();
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size]);
 
   if (pathname?.startsWith('/support') || pathname?.startsWith('/admin/support')) {
     return null;
@@ -152,12 +175,13 @@ export function SupportFab() {
             moved.current = false;
           }
         }}
-        className="flex h-14 w-14 cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl bg-indigo-600/45 text-white/90 shadow-lg shadow-indigo-900/20 hover:bg-indigo-600/70 hover:text-white backdrop-blur-sm border border-indigo-400/20 transition-colors relative"
+        style={{ width: size, height: size }}
+        className="flex cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl bg-indigo-600/45 text-white/90 shadow-lg shadow-indigo-900/20 hover:bg-indigo-600/70 hover:text-white backdrop-blur-sm border border-indigo-400/20 transition-colors relative"
         title="Goldaw — süýşürip bolýar"
       >
-        <MessageCircle className="h-6 w-6 pointer-events-none" />
+        <MessageCircle className={isMobile ? 'h-5 w-5 pointer-events-none' : 'h-6 w-6 pointer-events-none'} />
         {count > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 min-w-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold flex items-center justify-center border-2 border-slate-950 pointer-events-none">
+          <span className="absolute -top-1 -right-1 h-4 min-w-4 sm:h-5 sm:min-w-5 px-1 rounded-full bg-rose-500 text-[9px] sm:text-[10px] font-bold flex items-center justify-center border-2 border-slate-950 pointer-events-none">
             {count > 9 ? '9+' : count}
           </span>
         )}

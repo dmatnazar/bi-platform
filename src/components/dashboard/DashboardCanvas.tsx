@@ -120,6 +120,14 @@ export function DashboardCanvas({
   const containerElRef = useRef<HTMLDivElement | null>(null);
   const dragScrollRaf = useRef<number | null>(null);
   const dragScrollDir = useRef<number>(0);
+  // Fix: dragging a widget (especially a newly-added one further down the
+  // grid) used to get interrupted mid-gesture. Cause: the ResizeObserver
+  // below re-measures container width on any size change — including the
+  // sub-pixel jitter caused by react-grid-layout's own drag placeholder — and
+  // `setWidth` feeds the GridLayout `key`, so a 1px jitter during a drag
+  // remounted the whole grid and silently cancelled the drag ("refresh").
+  // Freeze all width re-measurement while a drag is in progress.
+  const isDraggingRef = useRef(false);
   const containerRef = useCallback((node: HTMLDivElement | null) => {
     containerElRef.current = node;
     // measure immediately when node mounts (before paint settles)
@@ -160,6 +168,9 @@ export function DashboardCanvas({
     };
 
     const apply = () => {
+      // Fix: never remeasure/resize the grid mid-drag — see isDraggingRef
+      // comment above. Re-measurement resumes as soon as the drag ends.
+      if (isDraggingRef.current) return;
       const next = readWidth();
       if (next > 0) {
         setWidth((prev) => (Math.abs(prev - next) > 0.5 ? next : prev));
@@ -544,6 +555,7 @@ export function DashboardCanvas({
 
   function stopDragScroll() {
     dragScrollDir.current = 0;
+    isDraggingRef.current = false;
     if (dragScrollRaf.current != null) {
       cancelAnimationFrame(dragScrollRaf.current);
       dragScrollRaf.current = null;
@@ -557,6 +569,18 @@ export function DashboardCanvas({
       se.scrollTop += delta;
     }
     window.scrollBy(0, delta);
+    // Defensive: if the canvas is ever hosted inside its own scrollable
+    // ancestor (overflow-y-auto), scroll that too — window.scrollBy alone
+    // wouldn't move anything in that layout.
+    let node: HTMLElement | null = containerElRef.current;
+    while (node && node !== document.body) {
+      const oy = getComputedStyle(node).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight + 1) {
+        node.scrollTop += delta;
+        break;
+      }
+      node = node.parentElement;
+    }
   }
 
   function tickDragScroll() {
@@ -596,6 +620,7 @@ export function DashboardCanvas({
   }
 
   function onWidgetDragStart() {
+    isDraggingRef.current = true;
     // Pointer tracking as backup (RGL event coords can be unreliable)
     const onMove = (ev: PointerEvent) => updateDragScrollFromClientY(ev.clientY);
     const onUp = () => {
@@ -637,6 +662,12 @@ export function DashboardCanvas({
         onDragStart={() => onWidgetDragStart()}
         onDrag={onWidgetDrag as any}
         onDragStop={() => stopDragScroll()}
+        onResizeStart={() => {
+          isDraggingRef.current = true;
+        }}
+        onResizeStop={() => {
+          isDraggingRef.current = false;
+        }}
         draggableHandle=".drag-handle"
         style={{ width: '100%' }}
       >

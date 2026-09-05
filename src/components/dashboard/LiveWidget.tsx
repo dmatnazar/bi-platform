@@ -13,6 +13,7 @@ import {
 import { ChartWidget } from '@/components/charts/ChartWidget';
 import { cn } from '@/lib/utils';
 import { Settings2 } from 'lucide-react';
+import { getEndpointCatalog, resolveLiveEndpoint, type CatalogEndpoint } from '@/lib/endpoint-catalog-client';
 
 interface Props {
   widget: DashboardWidget;
@@ -103,12 +104,35 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
   const [loading, setLoading] = useState(false);
   const ds = widget.dataSource;
 
+  // Fix: an API rename regenerates its pathTemplate on the gateway, but the
+  // widget's own dataSource.path is a stale snapshot taken when it was
+  // configured. Resolve the *current* path/method/tenant/dbKey by the
+  // endpoint's stable id (from a shared, lightly-cached catalog) so a
+  // renamed API keeps feeding already-placed widgets without requiring the
+  // widget to be re-opened and re-saved.
+  const [catalog, setCatalog] = useState<CatalogEndpoint[]>([]);
+  useEffect(() => {
+    let alive = true;
+    getEndpointCatalog()
+      .then((list) => {
+        if (alive) setCatalog(list);
+      })
+      .catch(() => {
+        /* fall back to the widget's own stored dataSource below */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const resolved = useMemo(() => resolveLiveEndpoint(catalog, ds), [catalog, ds]);
+
   const searchQuery = useMemo(() => getGlobalSearchQuery(globalFilters), [globalFilters]);
   const apiFilters = useMemo(() => apiFilterValues(globalFilters), [globalFilters]);
   const apiFiltersKey = useMemo(() => JSON.stringify(apiFilters), [apiFilters]);
 
   useEffect(() => {
-    if (!ds?.tenantSlug || !ds?.path) {
+    if (!resolved?.tenantSlug || !resolved?.path) {
       setRows(undefined);
       return;
     }
@@ -122,10 +146,10 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            tenantSlug: ds!.tenantSlug,
-            path: ds!.path,
-            method: ds!.method || 'GET',
-            dbKey: ds!.dbKey || 'primary',
+            tenantSlug: resolved!.tenantSlug,
+            path: resolved!.path,
+            method: resolved!.method || 'GET',
+            dbKey: resolved!.dbKey || 'primary',
             params,
           }),
         });
@@ -141,17 +165,17 @@ export function LiveWidget({ widget, editable, onConfigure, globalFilters = {}, 
       }
     }
     load();
-    const sec = ds.refreshSec || 0;
+    const sec = ds?.refreshSec || 0;
     const id = sec > 0 ? setInterval(load, sec * 1000) : null;
     return () => {
       cancelled = true;
       if (id) clearInterval(id);
     };
   }, [
-    ds?.tenantSlug,
-    ds?.path,
-    ds?.method,
-    ds?.dbKey,
+    resolved?.tenantSlug,
+    resolved?.path,
+    resolved?.method,
+    resolved?.dbKey,
     ds?.refreshSec,
     JSON.stringify(ds?.params),
     JSON.stringify(ds?.paramBindings),
