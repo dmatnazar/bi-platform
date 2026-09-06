@@ -32,9 +32,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local data
-/data/*.json
+# local data (never wipe on deploy — do not track runtime uploads)
+/data/
 !/data/.gitkeep
+/data/news-media/
 bi-platform.zip
 bi-platform.rar
 public.zip

@@ -791,7 +791,6 @@ export default function BillingPage() {
                     </tbody>
                   </table>
                 </div>
-                </div>
               </div>
             </div>
           </div>
