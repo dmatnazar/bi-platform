@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X, Building2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
@@ -11,7 +11,13 @@ import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { buildFullApiUrl } from '@/lib/api-url';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { SqlCodeEditor, preloadSqlEditor } from '@/components/sql/SqlCodeEditor';
+import { SqlCodeEditor, preloadSqlEditor, type SqlCodeEditorHandle } from '@/components/sql/SqlCodeEditor';
+import {
+  fetchTableNames,
+  fetchTableColumns,
+  parseSqlTableAliases,
+  buildHintTables,
+} from '@/lib/sqlSchemaCache';
 
 interface Endpoint {
   id: string;
@@ -122,6 +128,10 @@ export default function ApisPage() {
   const [showResultModal, setShowResultModal] = useState(false);
   /** Values used when running test SQL (per declared param) */
   const [testParamValues, setTestParamValues] = useState<Record<string, string>>({});
+  const sqlEditorRef = useRef<SqlCodeEditorHandle | null>(null);
+  const [sqlHintTables, setSqlHintTables] = useState<Record<string, string[]>>({});
+  const sqlColsByTableRef = useRef<Record<string, string[]>>({});
+  const sqlTablesListRef = useRef<string[]>([]);
 
 
   function pathFromName(name: string) {
@@ -163,6 +173,61 @@ export default function ApisPage() {
     // also :name style
     const pathStyle = [...(sql || '').matchAll(/(?:^|[^:\w]):([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
     return [...new Set([...found, ...pathStyle])];
+  }
+
+
+  function refreshSqlHints(sqlText?: string) {
+    const sql = sqlText ?? editSql;
+    const aliases = parseSqlTableAliases(sql || '');
+    setSqlHintTables(
+      buildHintTables(sqlTablesListRef.current, aliases, sqlColsByTableRef.current)
+    );
+  }
+
+  /** Silent: load table list when editor opens / tenant+db changes */
+  async function warmSqlSchema(tenantSlug: string, dbKey: string) {
+    if (!tenantSlug) return;
+    try {
+      const tables = await fetchTableNames(tenantSlug, dbKey || 'primary');
+      if (!tables.length) return;
+      sqlTablesListRef.current = tables;
+      // Seed empty column arrays so table names appear in autocomplete
+      for (const tname of tables) {
+        const k = tname.toLowerCase();
+        if (!sqlColsByTableRef.current[k]) sqlColsByTableRef.current[k] = [];
+      }
+      refreshSqlHints();
+    } catch {
+      /* silent */
+    }
+  }
+
+  async function ensureTableColumns(tableOrAlias: string) {
+    const tenant = editTenantSlug || editEp?.tenantSlug || '';
+    const dbKey = editDbKey || editEp?.dbKey || 'primary';
+    if (!tenant || !tableOrAlias) return;
+    const aliases = parseSqlTableAliases(editSql || '');
+    const real =
+      aliases[tableOrAlias] ||
+      aliases[tableOrAlias.toLowerCase()] ||
+      tableOrAlias;
+    const key = real.toLowerCase();
+    if (sqlColsByTableRef.current[key]?.length) {
+      refreshSqlHints();
+      return;
+    }
+    try {
+      const cols = await fetchTableColumns(tenant, dbKey, real);
+      if (!cols.length) return;
+      sqlColsByTableRef.current[key] = cols;
+      // short name
+      if (real.includes('.')) {
+        sqlColsByTableRef.current[real.split('.').pop()!.toLowerCase()] = cols;
+      }
+      refreshSqlHints();
+    } catch {
+      /* silent */
+    }
   }
 
   function autoCompleteParams() {
@@ -527,19 +592,24 @@ export default function ApisPage() {
   }
 
   async function executeSql() {
-    if (!editEp || !editSql.trim()) {
+    const selectedOrFull = (sqlEditorRef.current?.getSelectedOrFull() || editSql || '').trim();
+    if (!editEp || !selectedOrFull) {
       toastError('SQL boş', 'Query ýazyň');
       return;
     }
+    const sqlToRun = selectedOrFull;
+    const usedSelection =
+      Boolean(sqlEditorRef.current?.getSelection()?.trim()) &&
+      sqlEditorRef.current!.getSelection()!.trim() !== (editSql || '').trim();
     {
       const { assertReadOnlySql } = await import('@/lib/sqlSafety');
-      const safe = assertReadOnlySql(editSql);
+      const safe = assertReadOnlySql(sqlToRun);
       if (!safe.ok) {
         toastError('SQL rugsat edilmedi', safe.reason);
         return;
       }
     }
-    const sqlNames = extractSqlParamNames(editSql);
+    const sqlNames = extractSqlParamNames(sqlToRun);
     const params: Record<string, unknown> = {};
     for (const n of sqlNames) {
       const raw = testParamValues[n];
@@ -567,7 +637,7 @@ export default function ApisPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantSlug: editEp.tenantSlug || editTenantSlug,
-          sqlQuery: editSql,
+          sqlQuery: sqlToRun,
           dbKey: editDbKey || editEp.dbKey || 'primary',
           params,
         }),
@@ -586,7 +656,11 @@ export default function ApisPage() {
         elapsedMs: data.elapsedMs,
       });
       setShowResultModal(true);
-      toastSuccess('Execute OK', `${data.rowCount ?? data.rows?.length ?? 0} setir`);
+      toastSuccess(
+        'Execute OK',
+        `${data.rowCount ?? data.rows?.length ?? 0} setir` +
+          (usedSelection ? ' · diňe saýlanan bölek' : '')
+      );
     } catch (e: any) {
       setExecResult({ ok: false, error: String(e) });
       toastError('Execute şowsuz', String(e));
@@ -1244,9 +1318,31 @@ export default function ApisPage() {
               </div>
               <div className="relative flex-1 rounded-xl border border-slate-700 overflow-hidden bg-slate-950 min-h-[50vh]">
                 <SqlCodeEditor
+                  ref={sqlEditorRef}
                   value={editSql}
-                  onChange={(v) => setEditSql(v)}
+                  onChange={(v) => {
+                    setEditSql(v);
+                    // silent alias → hint refresh
+                    try {
+                      const aliases = parseSqlTableAliases(v || '');
+                      setSqlHintTables(
+                        buildHintTables(
+                          sqlTablesListRef.current,
+                          aliases,
+                          sqlColsByTableRef.current
+                        )
+                      );
+                      // Prefetch columns for tables mentioned in SQL
+                      for (const real of new Set(Object.values(aliases))) {
+                        void ensureTableColumns(real);
+                      }
+                    } catch {
+                      /* */
+                    }
+                  }}
                   height="100%"
+                  hintTables={sqlHintTables}
+                  onNeedTableColumns={(name) => void ensureTableColumns(name)}
                 />
               </div>
             </div>

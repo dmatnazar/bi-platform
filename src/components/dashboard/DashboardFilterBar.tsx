@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatCellValue } from '@/lib/utils';
+import { ApiPickerModal } from '@/components/ApiPickerModal';
 
 interface Props {
   filters: GlobalFilterDef[];
@@ -227,7 +228,7 @@ function MultiselectFilter({
                         checked={isAll || selected.includes(o.value)}
                         onChange={() => toggle(o.value)}
                       />
-                      <span className="truncate">{o.label}</span>
+                      <span className="truncate">{formatCellValue(o.label)}</span>
                     </label>
                   ))}
                 </>
@@ -566,6 +567,7 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
   const [loadingCols, setLoadingCols] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [apiPickerOpen, setApiPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!customOpen) return;
@@ -914,36 +916,36 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
 
       {/* Custom filter modal */}
       {customOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-6">
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => resetModal()}
           />
-          <div className="relative w-full max-w-lg max-h-[min(90vh,720px)] flex flex-col rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
-            <div className="shrink-0 px-5 pt-5 pb-3 border-b border-slate-800">
-              <div className="flex items-start gap-3">
-                <div className="h-10 w-10 rounded-xl bg-violet-500/20 flex items-center justify-center shrink-0">
-                  <Network className="h-5 w-5 text-violet-300" />
+          <div className="relative w-full sm:max-w-lg max-h-[min(92dvh,720px)] flex flex-col rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+            <div className="shrink-0 px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-slate-800">
+              <div className="flex items-start gap-2.5 sm:gap-3">
+                <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-violet-500/20 flex items-center justify-center shrink-0">
+                  <Network className="h-4 w-4 sm:h-5 sm:w-5 text-violet-300" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-base font-semibold text-white">
+                  <h3 className="text-sm sm:text-base font-semibold text-white leading-tight">
                     {editingKey ? 'Filter üýtget' : 'Custom filter (API)'}
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
-                    Filter ady UI-da görünýär · API columnlar · key beýleki API-lara iberilýär
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug">
+                    Ady UI-da · API column · key beýleki API-lara iberilýär
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => resetModal()}
-                  className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800"
+                  className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 shrink-0"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-3 sm:py-4 space-y-3.5 sm:space-y-4">
               {error && (
                 <div className="text-xs text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-xl px-3 py-2">
                   {error}
@@ -962,19 +964,34 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
 
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium text-slate-400">1. API saýla</label>
-                <select
-                  className="w-full h-10 rounded-xl bg-slate-950 border border-slate-700 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-violet-500/40"
-                  value={epId}
-                  onChange={(e) => void loadColumns(e.target.value)}
+                <button
+                  type="button"
+                  onClick={() => setApiPickerOpen(true)}
+                  className="w-full h-11 rounded-xl border border-slate-700 bg-slate-950 px-3 text-left text-sm text-white hover:border-violet-500/50 transition-colors flex items-center justify-between gap-2"
                 >
-                  <option value="">— API —</option>
-                  {endpoints.map((ep) => (
-                    <option key={ep.id} value={ep.id}>
-                      {ep.method} {ep.name} ({ep.tenantSlug}
-                      {ep.pathTemplate})
-                    </option>
-                  ))}
-                </select>
+                  <span className="truncate min-w-0">
+                    {selectedEp
+                      ? `${selectedEp.method} ${selectedEp.name} (${selectedEp.tenantSlug})`
+                      : '— API saýlaň —'}
+                  </span>
+                  <span className="text-[10px] text-violet-300 shrink-0">Saýla</span>
+                </button>
+                {selectedEp?.pathTemplate && (
+                  <p className="text-[10px] font-mono text-slate-500 break-all">
+                    {selectedEp.method} {selectedEp.pathTemplate}
+                  </p>
+                )}
+                <ApiPickerModal
+                  open={apiPickerOpen}
+                  onClose={() => setApiPickerOpen(false)}
+                  endpoints={endpoints}
+                  value={epId}
+                  title="Global filter üçin API saýlaň"
+                  onSelect={(ep) => {
+                    setApiPickerOpen(false);
+                    void loadColumns(ep.id);
+                  }}
+                />
               </div>
 
               {loadingCols && (
@@ -1085,19 +1102,19 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
               )}
             </div>
 
-            <div className="shrink-0 border-t border-slate-800 px-5 py-3 flex gap-2 bg-slate-900">
+            <div className="shrink-0 border-t border-slate-800 px-4 sm:px-5 py-3 flex gap-2 bg-slate-900 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 disabled={!valueCol || !labelCol || !paramKey.trim() || saving}
                 onClick={saveCustom}
-                className="flex-1 h-10 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-sm font-medium text-white"
+                className="flex-1 h-11 sm:h-10 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-sm font-medium text-white"
               >
                 Ýatda sakla
               </button>
               <button
                 type="button"
                 onClick={() => resetModal()}
-                className="h-10 px-4 rounded-xl border border-slate-700 text-sm text-slate-300 hover:bg-slate-800"
+                className="h-11 sm:h-10 px-4 rounded-xl border border-slate-700 text-sm text-slate-300 hover:bg-slate-800"
               >
                 Ýatyr
               </button>

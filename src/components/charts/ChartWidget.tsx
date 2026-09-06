@@ -144,10 +144,16 @@ function TableWidgetBody({
   const [search, setSearch] = useState('');
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const [showColFilters, setShowColFilters] = useState(false);
-  /** Mobile: filter via modal (column → distinct multi-select) */
+  /** Mobile: filter via modal — one or more columns, each with distinct multi-select */
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
-  const [mobileFilterCol, setMobileFilterCol] = useState('');
-  const [mobileFilterSelected, setMobileFilterSelected] = useState<string[]>([]);
+  const [mobileFilterSlots, setMobileFilterSlots] = useState<{ col: string; selected: string[] }[]>([
+    { col: '', selected: [] },
+  ]);
+  /** Drill hierarchy uses the same mobile filter UX */
+  const [drillMobileFilterOpen, setDrillMobileFilterOpen] = useState(false);
+  const [drillMobileFilterSlots, setDrillMobileFilterSlots] = useState<
+    { col: string; selected: string[] }[]
+  >([{ col: '', selected: [] }]);
   const [sorts, setSorts] = useState<SortSpec[]>(widget.dataSource?.orderBy || []);
   const enableSearch = widget.dataSource?.enableSearch !== false;
   const dragCol = useRef<string | null>(null);
@@ -656,10 +662,23 @@ function TableWidgetBody({
           <button
             type="button"
             onClick={() => {
-              // Mobile: modal with column + distinct values
+              // Mobile: modal with column(s) + distinct values
               if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
-                setMobileFilterCol(visibleCols[0] || colOrder[0] || '');
-                setMobileFilterSelected([]);
+                const cols = visibleCols.length ? visibleCols : colOrder;
+                const slots = Object.entries(colFilters)
+                  .filter(([, v]) => v && String(v).trim())
+                  .map(([col, v]) => ({
+                    col,
+                    selected: String(v)
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  }));
+                setMobileFilterSlots(
+                  slots.length
+                    ? slots
+                    : [{ col: cols[0] || '', selected: [] }]
+                );
                 setMobileFilterOpen(true);
                 return;
               }
@@ -692,91 +711,132 @@ function TableWidgetBody({
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <div className="p-3 space-y-3 overflow-y-auto flex-1 min-h-0">
-                  <div>
-                    <label className="text-[11px] text-slate-400 mb-1 block">Sütün saýla</label>
-                    <select
-                      className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950 text-sm text-white px-3"
-                      value={mobileFilterCol}
-                      onChange={(e) => {
-                        setMobileFilterCol(e.target.value);
-                        setMobileFilterSelected([]);
-                      }}
-                    >
-                      {visibleCols.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-slate-400 mb-1.5">Baha (birnäçesini saýlap bilersiňiz)</p>
-                    <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800">
-                      {(() => {
-                        const col = mobileFilterCol;
-                        if (!col) return <p className="text-xs text-slate-500 p-3">Sütün ýok</p>;
-                        const uniq = [...new Set(rows.map((r) => (r[col] == null ? '' : String(r[col]))).filter((x) => x !== ''))].sort();
-                        if (!uniq.length) return <p className="text-xs text-slate-500 p-3">Baha ýok</p>;
-                        return uniq.slice(0, 500).map((val) => {
-                          const on = mobileFilterSelected.includes(val);
-                          return (
-                            <label key={val} className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 cursor-pointer hover:bg-slate-800/50">
-                              <input
-                                type="checkbox"
-                                checked={on}
-                                onChange={() => {
-                                  setMobileFilterSelected((prev) =>
-                                    on ? prev.filter((x) => x !== val) : [...prev, val]
-                                  );
-                                }}
-                                className="rounded border-slate-600"
-                              />
-                              <span className="truncate">{val}</span>
-                            </label>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
+                <div className="p-3 space-y-4 overflow-y-auto flex-1 min-h-0">
+                  {mobileFilterSlots.map((slot, si) => {
+                    const usedCols = new Set(mobileFilterSlots.map((s) => s.col).filter(Boolean));
+                    const avail = (visibleCols.length ? visibleCols : colOrder).filter(
+                      (c) => c === slot.col || !usedCols.has(c)
+                    );
+                    const col = slot.col;
+                    const uniq = col
+                      ? [
+                          ...new Set(
+                            rows
+                              .map((r) => (r[col] == null ? '' : String(r[col])))
+                              .filter((x) => x !== '')
+                          ),
+                        ].sort()
+                      : [];
+                    return (
+                      <div key={si} className="rounded-xl border border-slate-800 bg-slate-950/50 p-2.5 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="text-[11px] text-slate-400 shrink-0">Sütün</label>
+                          <select
+                            className="flex-1 min-w-0 h-9 rounded-lg border border-slate-700 bg-slate-950 text-sm text-white px-2"
+                            value={slot.col}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setMobileFilterSlots((prev) =>
+                                prev.map((s, i) => (i === si ? { col: v, selected: [] } : s))
+                              );
+                            }}
+                          >
+                            <option value="">— saýlaň —</option>
+                            {avail.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                          {mobileFilterSlots.length > 1 && (
+                            <button
+                              type="button"
+                              className="p-1.5 text-rose-400 hover:text-rose-300"
+                              title="Aýyr"
+                              onClick={() =>
+                                setMobileFilterSlots((prev) => prev.filter((_, i) => i !== si))
+                              }
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 divide-y divide-slate-800">
+                          {!col ? (
+                            <p className="text-xs text-slate-500 p-3">Sütün saýlaň</p>
+                          ) : !uniq.length ? (
+                            <p className="text-xs text-slate-500 p-3">Baha ýok</p>
+                          ) : (
+                            uniq.slice(0, 500).map((val) => {
+                              const on = slot.selected.includes(val);
+                              return (
+                                <label
+                                  key={val}
+                                  className="flex items-center gap-2 px-3 py-2 text-xs text-slate-200 cursor-pointer hover:bg-slate-800/60"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={on}
+                                    onChange={() => {
+                                      setMobileFilterSlots((prev) =>
+                                        prev.map((s, i) => {
+                                          if (i !== si) return s;
+                                          const next = on
+                                            ? s.selected.filter((x) => x !== val)
+                                            : [...s.selected, val];
+                                          return { ...s, selected: next };
+                                        })
+                                      );
+                                    }}
+                                  />
+                                  <span className="truncate">{formatCellValue(val)}</span>
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    className="w-full h-9 rounded-xl border border-dashed border-slate-600 text-xs text-indigo-300 hover:bg-slate-800/50 inline-flex items-center justify-center gap-1"
+                    onClick={() => {
+                      const used = new Set(mobileFilterSlots.map((s) => s.col).filter(Boolean));
+                      const nextCol =
+                        (visibleCols.length ? visibleCols : colOrder).find((c) => !used.has(c)) || '';
+                      setMobileFilterSlots((prev) => [...prev, { col: nextCol, selected: [] }]);
+                    }}
+                  >
+                    + Ýene sütün
+                  </button>
                 </div>
                 <div className="shrink-0 flex gap-2 px-3 py-3 border-t border-slate-800">
                   <button
                     type="button"
-                    className="flex-1 rounded-xl border border-slate-700 py-2.5 text-xs text-slate-300"
+                    className="flex-1 h-10 rounded-xl border border-slate-700 text-sm text-slate-300"
                     onClick={() => {
-                      if (mobileFilterCol) {
-                        setColFilters((prev) => {
-                          const n = { ...prev };
-                          delete n[mobileFilterCol];
-                          return n;
-                        });
-                      }
-                      setMobileFilterSelected([]);
-                      setMobileFilterOpen(false);
+                      setMobileFilterSlots([{ col: '', selected: [] }]);
+                      setColFilters({});
                     }}
                   >
                     Arassala
                   </button>
                   <button
                     type="button"
-                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-medium text-white"
+                    className="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white"
                     onClick={() => {
-                      if (!mobileFilterCol) return;
-                      if (!mobileFilterSelected.length) {
-                        setColFilters((prev) => {
-                          const n = { ...prev };
-                          delete n[mobileFilterCol];
-                          return n;
-                        });
-                      } else {
-                        setColFilters((prev) => ({
-                          ...prev,
-                          [mobileFilterCol]: mobileFilterSelected.join(','),
-                        }));
+                      const next: Record<string, string> = {};
+                      for (const s of mobileFilterSlots) {
+                        if (!s.col || !s.selected.length) continue;
+                        next[s.col] = s.selected.join(',');
                       }
+                      setColFilters(next);
                       setMobileFilterOpen(false);
                     }}
                   >
-                    Ulan ({mobileFilterSelected.length})
+                    Ulan (
+                    {mobileFilterSlots.reduce((n, s) => n + s.selected.length, 0)})
                   </button>
                 </div>
               </div>
@@ -788,18 +848,18 @@ function TableWidgetBody({
             <button
               type="button"
               onClick={() => setShowColPicker((v) => !v)}
+              title="Sütünleri görkez / gizle"
               className={cn(
-                'h-8 px-2 rounded-lg border text-xs inline-flex items-center gap-1',
+                'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1',
                 showColPicker || hiddenCols.size
                   ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                   : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
               )}
-              title="Sütünleri görkez / gizle"
             >
               <Columns3 className="h-3.5 w-3.5" />
-              Sütünler
+              <span className="hidden sm:inline">Sütünler</span>
               {hiddenCols.size > 0 && (
-                <span className="text-[10px] opacity-80">({visibleCols.length}/{colOrder.length})</span>
+                <span className="hidden sm:inline text-[10px] opacity-80">({visibleCols.length}/{colOrder.length})</span>
               )}
             </button>
             {showColPicker && (
@@ -883,9 +943,11 @@ function TableWidgetBody({
             <button
               type="button"
               onClick={clearFilters}
-              className="h-8 px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0"
+              className="h-8 w-8 sm:w-auto sm:px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0 inline-flex items-center justify-center gap-1"
+              title="Arassala"
             >
-              Arassala
+              <RotateCcw className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Arassala</span>
             </button>
           )}
           <div className="relative shrink-0">
@@ -1141,17 +1203,43 @@ function TableWidgetBody({
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => setShowDrillColFilters((v) => !v)}
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+                        const cols = drillColKeys.length ? drillColKeys : drillAllColKeys;
+                        const slots = Object.entries(drillColFilters)
+                          .filter(([, v]) => v && String(v).trim())
+                          .map(([col, v]) => ({
+                            col,
+                            selected: String(v)
+                              .split(',')
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          }));
+                        setDrillMobileFilterSlots(
+                          slots.length ? slots : [{ col: cols[0] || '', selected: [] }]
+                        );
+                        setDrillMobileFilterOpen(true);
+                        return;
+                      }
+                      setShowDrillColFilters((v) => !v);
+                    }}
                     className={cn(
-                      'h-8 px-2 rounded-lg border text-xs inline-flex items-center gap-1 shrink-0',
-                      showDrillColFilters || activeDrillColFilterCount
+                      'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1 shrink-0 relative',
+                      showDrillColFilters || activeDrillColFilterCount || drillMobileFilterOpen
                         ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                         : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
                     )}
                     title="Sütün filterleri"
                   >
                     <Filter className="h-3.5 w-3.5" />
-                    {activeDrillColFilterCount > 0 ? activeDrillColFilterCount : 'Filter'}
+                    <span className="hidden sm:inline">
+                      {activeDrillColFilterCount > 0 ? activeDrillColFilterCount : 'Filter'}
+                    </span>
+                    {activeDrillColFilterCount > 0 && (
+                      <span className="sm:hidden absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 rounded-full bg-rose-500 text-[9px] font-bold text-white flex items-center justify-center">
+                        {activeDrillColFilterCount}
+                      </span>
+                    )}
                   </button>
                 </div>
                 <div className="relative shrink-0">
@@ -1159,7 +1247,7 @@ function TableWidgetBody({
                     type="button"
                     onClick={() => setShowDrillColPicker((v) => !v)}
                     className={cn(
-                      'h-8 px-2 rounded-lg border text-xs inline-flex items-center gap-1',
+                      'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1',
                       showDrillColPicker || drillHiddenCols.size
                         ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                         : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
@@ -1167,9 +1255,11 @@ function TableWidgetBody({
                     title="Sütünleri görkez / gizle"
                   >
                     <Columns3 className="h-3.5 w-3.5" />
-                    Sütünler
+                    <span className="hidden sm:inline">Sütünler</span>
                     {drillHiddenCols.size > 0 && (
-                      <span className="text-[10px] opacity-80">({drillColKeys.length}/{drillAllColKeys.length})</span>
+                      <span className="hidden sm:inline text-[10px] opacity-80">
+                        ({drillColKeys.length}/{drillAllColKeys.length})
+                      </span>
                     )}
                   </button>
                   {showDrillColPicker && (
@@ -1253,12 +1343,152 @@ function TableWidgetBody({
                   <button
                     type="button"
                     onClick={clearDrillFilters}
-                    className="h-8 px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0"
+                    className="h-8 w-8 sm:w-auto sm:px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0 inline-flex items-center justify-center gap-1"
+                    title="Arassala"
                   >
-                    Arassala
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Arassala</span>
                   </button>
                 )}
               </div>
+            )}
+            {/* Drill mobile filter portal */}
+            {drillMobileFilterOpen && typeof document !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-[2147482200] flex items-end sm:items-center justify-center p-0 sm:p-4">
+                <div className="absolute inset-0 bg-black/70" onClick={() => setDrillMobileFilterOpen(false)} />
+                <div className="relative w-full sm:max-w-md max-h-[85dvh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+                  <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                    <p className="text-sm font-semibold text-white">Heirarhiýa filter</p>
+                    <button type="button" className="p-1.5 text-slate-400" onClick={() => setDrillMobileFilterOpen(false)}>
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="p-3 space-y-4 overflow-y-auto flex-1 min-h-0">
+                    {drillMobileFilterSlots.map((slot, si) => {
+                      const usedCols = new Set(drillMobileFilterSlots.map((s) => s.col).filter(Boolean));
+                      const baseCols = drillColKeys.length ? drillColKeys : drillAllColKeys;
+                      const avail = baseCols.filter((c) => c === slot.col || !usedCols.has(c));
+                      const col = slot.col;
+                      const uniq = col
+                        ? [
+                            ...new Set(
+                              drillRows
+                                .map((r) => (r[col] == null ? '' : String(r[col])))
+                                .filter((x) => x !== '')
+                            ),
+                          ].sort()
+                        : [];
+                      return (
+                        <div key={si} className="rounded-xl border border-slate-800 bg-slate-950/50 p-2.5 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <label className="text-[11px] text-slate-400 shrink-0">Sütün</label>
+                            <select
+                              className="flex-1 min-w-0 h-9 rounded-lg border border-slate-700 bg-slate-950 text-sm text-white px-2"
+                              value={slot.col}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setDrillMobileFilterSlots((prev) =>
+                                  prev.map((s, i) => (i === si ? { col: v, selected: [] } : s))
+                                );
+                              }}
+                            >
+                              <option value="">— saýlaň —</option>
+                              {avail.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                            {drillMobileFilterSlots.length > 1 && (
+                              <button
+                                type="button"
+                                className="p-1.5 text-rose-400"
+                                onClick={() =>
+                                  setDrillMobileFilterSlots((prev) => prev.filter((_, i) => i !== si))
+                                }
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                          <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-800 divide-y divide-slate-800">
+                            {!col ? (
+                              <p className="text-xs text-slate-500 p-3">Sütün saýlaň</p>
+                            ) : !uniq.length ? (
+                              <p className="text-xs text-slate-500 p-3">Baha ýok</p>
+                            ) : (
+                              uniq.slice(0, 500).map((val) => {
+                                const on = slot.selected.includes(val);
+                                return (
+                                  <label
+                                    key={val}
+                                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-200 cursor-pointer hover:bg-slate-800/60"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={on}
+                                      onChange={() => {
+                                        setDrillMobileFilterSlots((prev) =>
+                                          prev.map((s, i) => {
+                                            if (i !== si) return s;
+                                            const next = on
+                                              ? s.selected.filter((x) => x !== val)
+                                              : [...s.selected, val];
+                                            return { ...s, selected: next };
+                                          })
+                                        );
+                                      }}
+                                    />
+                                    <span className="truncate">{formatCellValue(val)}</span>
+                                  </label>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      className="w-full h-9 rounded-xl border border-dashed border-slate-600 text-xs text-indigo-300 hover:bg-slate-800/50"
+                      onClick={() => {
+                        const used = new Set(drillMobileFilterSlots.map((s) => s.col).filter(Boolean));
+                        const baseCols = drillColKeys.length ? drillColKeys : drillAllColKeys;
+                        const nextCol = baseCols.find((c) => !used.has(c)) || '';
+                        setDrillMobileFilterSlots((prev) => [...prev, { col: nextCol, selected: [] }]);
+                      }}
+                    >
+                      + Ýene sütün
+                    </button>
+                  </div>
+                  <div className="shrink-0 flex gap-2 px-3 py-3 border-t border-slate-800">
+                    <button
+                      type="button"
+                      className="flex-1 h-10 rounded-xl border border-slate-700 text-sm text-slate-300"
+                      onClick={() => {
+                        setDrillMobileFilterSlots([{ col: '', selected: [] }]);
+                        setDrillColFilters({});
+                      }}
+                    >
+                      Arassala
+                    </button>
+                    <button
+                      type="button"
+                      className="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-sm font-medium text-white"
+                      onClick={() => {
+                        const next: Record<string, string> = {};
+                        for (const s of drillMobileFilterSlots) {
+                          if (!s.col || !s.selected.length) continue;
+                          next[s.col] = s.selected.join(',');
+                        }
+                        setDrillColFilters(next);
+                        setDrillMobileFilterOpen(false);
+                      }}
+                    >
+                      Ulan ({drillMobileFilterSlots.reduce((n, s) => n + s.selected.length, 0)})
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body
             )}
             <div className="flex-1 min-h-0 overflow-auto p-3 flex flex-col">
               {drillLoading && (
