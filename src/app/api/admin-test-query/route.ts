@@ -4,6 +4,7 @@ import { checkGatewayHealth } from '@/lib/gateway';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { assertReadOnlySql } from '@/lib/sqlSafety';
 
 function readStoredSettings(): { gatewayUrl?: string; gatewayAdminSecret?: string } {
   try {
@@ -49,6 +50,11 @@ export async function POST(req: NextRequest) {
   const sqlQuery = String(body.sqlQuery || '').trim();
   if (!tenantSlug || !sqlQuery) {
     return NextResponse.json({ error: 'tenantSlug we sqlQuery gerek' }, { status: 400 });
+  }
+
+  const safe = assertReadOnlySql(sqlQuery);
+  if (!safe.ok) {
+    return NextResponse.json({ error: safe.reason }, { status: 403 });
   }
 
   const payload = {

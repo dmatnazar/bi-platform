@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { SupportContactsAdmin } from '@/components/support/SupportContactsAdmin';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
@@ -387,6 +388,8 @@ export default function AdminAppsPage() {
           </div>
         </div>
       )}
+
+      <SupportContactsAdmin />
     </div>
   );
 }

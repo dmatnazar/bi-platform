@@ -120,6 +120,8 @@ export default function ApisPage() {
     error?: string;
   } | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
+  /** Values used when running test SQL (per declared param) */
+  const [testParamValues, setTestParamValues] = useState<Record<string, string>>({});
 
 
   function pathFromName(name: string) {
@@ -165,9 +167,20 @@ export default function ApisPage() {
 
   function autoCompleteParams() {
     const next = mergeParamsFromSql(editSql, editParams);
-    const added = next.length - editParams.length;
+    const addedNames = next
+      .filter((n) => !editParams.some((p) => p.name.trim().toLowerCase() === n.name.trim().toLowerCase()))
+      .map((n) => n.name);
     setEditParams(next);
-    toastSuccess('Auto params', added > 0 ? `${added} parametr goşuldy` : 'Täze ýok / eýýäm doly');
+    if (addedNames.length > 0) {
+      toastInfo(
+        'Parametrler awto goşuldy',
+        `${addedNames.length} sany: ${addedNames.join(', ')}. ` +
+          'Default: source=query, type=string, required=ýok. ' +
+          'Her biriniň type / required / query|body|url sazlamasyny barlaň — soň test üçin aşakdaky "Test bahalar" meýdançalaryny dolduryň.'
+      );
+    } else {
+      toastSuccess('Auto params', 'Täze ýok — SQL-däki ähli @param eýýäm sanawda');
+    }
   }
 
   function mergeParamsFromSql(sql: string, current: ParamRow[]): ParamRow[] {
@@ -237,7 +250,7 @@ export default function ApisPage() {
       pathTemplate: '/report',
       dbKey: firstDb,
       sqlQuery: 'SELECT 1 AS ok',
-      authRequired: true,
+      authRequired: false,
       cacheTtlSec: 0,
     });
     setEditName('');
@@ -246,9 +259,10 @@ export default function ApisPage() {
     setEditSql('SELECT 1 AS ok');
     setEditDbKey(firstDb);
     setEditCache(0);
-    setEditAuth(true);
+    setEditAuth(false);
     setEditTenantSlug(slug);
     setEditParams([]);
+    setTestParamValues({});
     setExecResult(null);
   }
 
@@ -344,6 +358,31 @@ export default function ApisPage() {
         `«${conflict.name}» bilen birmeňzeş: ${editMethod} ${editPath}\nPath ýa-da method üýtgetiň.`
       );
       return;
+    }
+    // Mutating SQL blocked
+    {
+      const { assertReadOnlySql } = await import('@/lib/sqlSafety');
+      const safe = assertReadOnlySql(editSql || '');
+      if (!safe.ok) {
+        toastError('SQL rugsat edilmedi', safe.reason);
+        return;
+      }
+    }
+    // Params in SQL must be declared before save
+    {
+      const sqlNames = extractSqlParamNames(editSql);
+      const declared = new Set(
+        editParams.map((x) => x.name.trim().toLowerCase()).filter(Boolean)
+      );
+      const missing = sqlNames.filter((n) => !declared.has(n.toLowerCase()));
+      if (missing.length) {
+        toastError(
+          'Parametrler doly däl',
+          `SQL-de bar, sanawda ýok: ${missing.map((m) => '@' + m).join(', ')}. ` +
+            `"Auto params" basyň ýa-da el bilen goşuň — soň type / required / query|body|url barlaň.`
+        );
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -492,6 +531,34 @@ export default function ApisPage() {
       toastError('SQL boş', 'Query ýazyň');
       return;
     }
+    {
+      const { assertReadOnlySql } = await import('@/lib/sqlSafety');
+      const safe = assertReadOnlySql(editSql);
+      if (!safe.ok) {
+        toastError('SQL rugsat edilmedi', safe.reason);
+        return;
+      }
+    }
+    const sqlNames = extractSqlParamNames(editSql);
+    const params: Record<string, unknown> = {};
+    for (const n of sqlNames) {
+      const raw = testParamValues[n];
+      if (raw === undefined || raw === '') {
+        // still send null so backend can show missing if needed
+        params[n] = null;
+      } else {
+        const meta = editParams.find((p) => p.name.trim().toLowerCase() === n.toLowerCase());
+        const tp = (meta?.type || 'string').toLowerCase();
+        if (tp === 'number' || tp === 'int') {
+          const num = Number(raw);
+          params[n] = Number.isFinite(num) ? num : raw;
+        } else if (tp === 'boolean') {
+          params[n] = /^(1|true|yes|hawa)$/i.test(raw);
+        } else {
+          params[n] = raw;
+        }
+      }
+    }
     setExecuting(true);
     setExecResult(null);
     try {
@@ -499,9 +566,10 @@ export default function ApisPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tenantSlug: editEp.tenantSlug,
+          tenantSlug: editEp.tenantSlug || editTenantSlug,
           sqlQuery: editSql,
-          dbKey: editEp.dbKey || 'primary',
+          dbKey: editDbKey || editEp.dbKey || 'primary',
+          params,
         }),
       });
       const data = await res.json();
@@ -1037,64 +1105,105 @@ export default function ApisPage() {
                     </button>
                   </div>
                 </div>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <p className="text-[10px] text-slate-500 mb-2 leading-snug">
+                  <span className="text-slate-400 font-medium">query</span> = URL ?key=value (GET).{' '}
+                  <span className="text-slate-400 font-medium">body</span> = JSON göwde (POST/PUT).{' '}
+                  <span className="text-slate-400 font-medium">url</span> = path /api/:id. SQL-de{' '}
+                  <span className="font-mono text-slate-400">@name</span> bilen gabat gelmeli.
+                </p>
+                <div className="space-y-2 max-h-56 overflow-y-auto">
                   {editParams.map((pr, i) => (
-                    <div key={i} className="flex flex-wrap gap-2 items-center text-xs">
-                      <input
-                        className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-white"
-                        placeholder="name"
-                        value={pr.name}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, name: v } : r)));
-                        }}
-                      />
-                      <select
-                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-white"
-                        value={pr.source}
-                        onChange={(e) => {
-                          const v = e.target.value as ParamRow['source'];
-                          setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, source: v } : r)));
-                        }}
-                      >
-                        <option value="url">url</option>
-                        <option value="query">query</option>
-                        <option value="body">body</option>
-                      </select>
-                      <select
-                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-white"
-                        value={pr.type}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, type: v } : r)));
-                        }}
-                      >
-                        {['string', 'number', 'int', 'boolean', 'date', 'datetime', 'time', 'uuid', 'text', 'json'].map((tp) => (
-                          <option key={tp} value={tp}>
-                            {tp}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="flex items-center gap-1 text-slate-400">
+                    <div key={i} className="rounded-lg border border-slate-800 bg-slate-950/50 p-2 space-y-1.5">
+                      <div className="flex flex-wrap gap-2 items-center text-xs">
                         <input
-                          type="checkbox"
-                          checked={pr.required}
+                          className="w-24 rounded border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-white"
+                          placeholder="name"
+                          value={pr.name}
                           onChange={(e) => {
-                            const v = e.target.checked;
-                            setEditParams((rows) =>
-                              rows.map((r, j) => (j === i ? { ...r, required: v } : r))
-                            );
+                            const v = e.target.value;
+                            setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, name: v } : r)));
                           }}
                         />
-                        req
-                      </label>
-                      <button
-                        type="button"
-                        className="text-rose-400"
-                        onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
-                      >
-                        ×
-                      </button>
+                        <select
+                          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-white"
+                          value={pr.source}
+                          onChange={(e) => {
+                            const v = e.target.value as ParamRow['source'];
+                            setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, source: v } : r)));
+                          }}
+                          title="Parametr nireden okalsyn"
+                        >
+                          <option value="query">query (?key=)</option>
+                          <option value="body">body (JSON)</option>
+                          <option value="url">url (/:id)</option>
+                        </select>
+                        <select
+                          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-white"
+                          value={pr.type}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setEditParams((rows) => rows.map((r, j) => (j === i ? { ...r, type: v } : r)));
+                          }}
+                        >
+                          {['string', 'number', 'int', 'boolean', 'date', 'datetime', 'time', 'uuid', 'text', 'json'].map((tp) => (
+                            <option key={tp} value={tp}>
+                              {tp}
+                            </option>
+                          ))}
+                        </select>
+                        <label className="flex items-center gap-1 text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={pr.required}
+                            onChange={(e) => {
+                              const v = e.target.checked;
+                              setEditParams((rows) =>
+                                rows.map((r, j) => (j === i ? { ...r, required: v } : r))
+                              );
+                            }}
+                          />
+                          req
+                        </label>
+                        <button
+                          type="button"
+                          className="text-rose-400"
+                          onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                      {pr.name.trim() ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500 shrink-0">Test:</span>
+                          <input
+                            className="flex-1 min-w-0 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-mono text-emerald-200"
+                            placeholder={
+                              pr.type === 'date' || pr.type === 'datetime'
+                                ? '2026-09-06'
+                                : pr.type === 'boolean'
+                                  ? 'true / false'
+                                  : pr.type === 'number' || pr.type === 'int'
+                                    ? '0'
+                                    : `@${pr.name} bahasy`
+                            }
+                            type={
+                              pr.type === 'number' || pr.type === 'int'
+                                ? 'number'
+                                : pr.type === 'date'
+                                  ? 'date'
+                                  : pr.type === 'datetime'
+                                    ? 'datetime-local'
+                                    : 'text'
+                            }
+                            value={testParamValues[pr.name] ?? ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              const key = pr.name;
+                              setTestParamValues((prev) => ({ ...prev, [key]: v }));
+                            }}
+                          />
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1107,6 +1216,14 @@ export default function ApisPage() {
                 <label className="text-xs text-slate-400 mr-auto">SQL query</label>
                 <button type="button" onClick={() => void sqlPaste()} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
                   <ClipboardPaste className="h-3 w-3" /> Paste
+                </button>
+                <button
+                  type="button"
+                  onClick={autoCompleteParams}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-900/40"
+                  title="SQL-däki @param-lary sanawa goş"
+                >
+                  <Sparkles className="h-3 w-3" /> Auto params
                 </button>
                 <button type="button" onClick={sqlCopy} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
                   <Copy className="h-3 w-3" /> Copy
@@ -1128,10 +1245,7 @@ export default function ApisPage() {
               <div className="relative flex-1 rounded-xl border border-slate-700 overflow-hidden bg-slate-950 min-h-[50vh]">
                 <SqlCodeEditor
                   value={editSql}
-                  onChange={(v) => {
-                    setEditSql(v);
-                    setEditParams((prev) => mergeParamsFromSql(v, prev));
-                  }}
+                  onChange={(v) => setEditSql(v)}
                   height="100%"
                 />
               </div>

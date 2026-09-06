@@ -9,5 +9,7 @@ export async function GET() {
     authAnimations: s.authAnimations !== false,
     appAnimations: s.appAnimations !== false,
     modalAnimations: s.modalAnimations !== false,
+    /** Login «Hasaba al» link — default on */
+    registrationEnabled: s.registrationEnabled !== false,
   });
 }

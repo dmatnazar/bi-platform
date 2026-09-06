@@ -2,6 +2,7 @@
 
 import { useEffect, useState, FormEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { BarChart3, CheckCircle2, Eye, EyeOff, AlertTriangle, Loader2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
@@ -26,7 +27,9 @@ type SubmitPhase =
   | 'error';
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [authAnim, setAuthAnim] = useState(true);
+  const [regAllowed, setRegAllowed] = useState(true);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -38,6 +41,10 @@ export default function RegisterPage() {
         if (!cancelled && typeof data.authAnimations === 'boolean') {
           setAuthAnim(data.authAnimations);
           localStorage.setItem('bi-auth-animations', data.authAnimations ? '1' : '0');
+        }
+        if (!cancelled && data.registrationEnabled === false) {
+          setRegAllowed(false);
+          router.replace('/login');
         }
       } catch { /* */ }
     })();
@@ -119,6 +126,13 @@ export default function RegisterPage() {
     setCompanyErr('');
     if (!newName.trim() || !newSlug.trim()) {
       setCompanyErr('Firma ady we slug gerek');
+      return;
+    }
+    const slugTaken = companies.find(
+      (c) => c.slug.toLowerCase() === newSlug.trim().toLowerCase()
+    );
+    if (slugTaken) {
+      setCompanyErr(`«${newSlug.trim()}» slug eýýäm «${slugTaken.name}» firmasynda bar. Başga slug ýazyň.`);
       return;
     }
     setCreatingCompany(true);

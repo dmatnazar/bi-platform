@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession, isSuperAdmin, canManageCompany, canManageStaff } from '@/lib/auth';
 import { checkGatewayHealth, gatewayFetch, fetchCatalog } from '@/lib/gateway';
+import { unreadCount } from '@/lib/news-store';
 
 export async function GET() {
   const user = await getSession();
@@ -10,7 +11,14 @@ export async function GET() {
     devicesPending: 0,
     staffPending: 0,
     billingEmpty: 0,
+    newsUnread: 0,
   };
+
+  try {
+    out.newsUnread = unreadCount(user.username);
+  } catch {
+    /* */
+  }
 
   try {
     if (!(await checkGatewayHealth())) {

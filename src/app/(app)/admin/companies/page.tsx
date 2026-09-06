@@ -206,9 +206,25 @@ export default function CompaniesPage() {
       toastError('Ady gerek', 'Kompaniya adyny yazyn');
       return;
     }
+    const slugCheck = (form.slug || editing?.slug || '').trim().toLowerCase();
+    if (!slugCheck) {
+      toastError('Slug gerek', 'Firma slug boş bolmaly däl');
+      return;
+    }
+    const conflict = list.find(
+      (c) => c.slug?.toLowerCase() === slugCheck && (editing ? c.id !== editing.id : true)
+    );
+    if (conflict) {
+      toastError(
+        'Slug eýýäm bar',
+        `«${slugCheck}» slug «${conflict.name}» firmasynda ulanylýar. Başga slug saýlaň.`
+      );
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
+        id: editing?.id || undefined,
         slug: form.slug || editing?.slug,
         name: form.name.trim(),
         isActive: form.isActive !== false,

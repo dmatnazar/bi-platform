@@ -161,11 +161,33 @@ export async function POST(req: NextRequest) {
 
   let company: Company | null = null;
   let isNew = false;
+  /** When editing an existing firm, client sends id so slug can stay the same */
+  const editId = typeof body.id === 'string' ? String(body.id).trim() : '';
 
   try {
     const catalog = await fetchCatalog(true);
     const tenant = catalog.tenants.find((t) => t.slug === targetSlug);
     if (tenant) {
+      // Same slug already used by another firm → block (unless this is that firm)
+      if (editId && tenant.id && editId !== tenant.id) {
+        return NextResponse.json(
+          {
+            error: 'slug_taken',
+            message: `«${targetSlug}» slug eýýäm «${tenant.name}» firmasynda ulanylýar. Başga slug saýlaň.`,
+          },
+          { status: 409 }
+        );
+      }
+      if (!editId) {
+        // Create path: slug must be free
+        return NextResponse.json(
+          {
+            error: 'slug_taken',
+            message: `«${targetSlug}» slug eýýäm «${tenant.name}» firmasynda bar. Başga slug ýazyň.`,
+          },
+          { status: 409 }
+        );
+      }
       company = {
         id: tenant.id,
         slug: tenant.slug,
@@ -174,20 +196,45 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString(),
         updatedAt: tenant.updatedAt || new Date().toISOString(),
       };
+    } else if (editId) {
+      // Slug changed to a free one — find by id for update
+      const byId = catalog.tenants.find((t) => t.id === editId);
+      if (byId) {
+        company = {
+          id: byId.id,
+          slug: targetSlug,
+          name: byId.name,
+          isActive: byId.isActive !== false,
+          createdAt: new Date().toISOString(),
+          updatedAt: byId.updatedAt || new Date().toISOString(),
+        };
+      }
     }
   } catch {
     /* offline */
   }
 
   if (!company) {
-    company = (await getCompanyBySlug(targetSlug)) ?? null;
+    const local = (await getCompanyBySlug(targetSlug)) ?? null;
+    if (local) {
+      if (!editId || (local.id && editId !== local.id)) {
+        return NextResponse.json(
+          {
+            error: 'slug_taken',
+            message: `«${targetSlug}» slug eýýäm ulanylýar. Başga slug saýlaň.`,
+          },
+          { status: 409 }
+        );
+      }
+      company = local;
+    }
   }
 
   if (!company) {
     isNew = true;
     const nowIso = new Date().toISOString();
     company = {
-      id: `tenant_${targetSlug}_${Date.now()}`,
+      id: editId || `tenant_${targetSlug}_${Date.now()}`,
       slug: targetSlug,
       name: parsed.data.name.trim(),
       isActive: parsed.data.isActive !== false,

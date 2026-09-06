@@ -8,6 +8,7 @@ import {
   invalidateCatalogCache,
 } from '@/lib/gateway';
 import { z } from 'zod';
+import { assertReadOnlySql } from '@/lib/sqlSafety';
 
 const schema = z.object({
   id: z.string().optional(),
@@ -37,6 +38,13 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'nädogry', details: parsed.error.flatten() }, { status: 400 });
+  }
+
+  if (parsed.data.sqlQuery) {
+    const safe = assertReadOnlySql(parsed.data.sqlQuery);
+    if (!safe.ok) {
+      return NextResponse.json({ error: safe.reason }, { status: 403 });
+    }
   }
 
   // Create when no id (or explicit create flag)

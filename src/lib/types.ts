@@ -463,6 +463,8 @@ export interface DbSchema {
     appAnimations?: boolean;
     /** Modal open/close transition animations (widget config, confirm dialogs, etc.) */
     modalAnimations?: boolean;
+    /** Show «Hasaba al» on login page (default true) */
+    registrationEnabled?: boolean;
     /** Gmail / SMTP for forgot-password */
     mail?: {
       enabled?: boolean;

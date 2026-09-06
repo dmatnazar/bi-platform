@@ -40,7 +40,7 @@ export default function SettingsPage() {
   const [syncSec, setSyncSec] = useState('0');
   const [online, setOnline] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | 'anim' | null>(null);
+  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | 'anim' | 'reg' | null>(null);
   const [version, setVersion] = useState('1.0.0');
 
   const [upProtocol, setUpProtocol] = useState<'http' | 'https'>('https');
@@ -70,6 +70,7 @@ export default function SettingsPage() {
   const [authAnimations, setAuthAnimations] = useState(true);
   const [appAnimations, setAppAnimations] = useState(true);
   const [modalAnimations, setModalAnimations] = useState(true);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
   const loadGateway = useCallback(async () => {
     const res = await fetch('/api/settings');
@@ -83,6 +84,7 @@ export default function SettingsPage() {
       setAuthAnimations(data.settings?.authAnimations !== false);
       setAppAnimations(data.settings?.appAnimations !== false);
       setModalAnimations(data.settings?.modalAnimations !== false);
+      setRegistrationEnabled(data.settings?.registrationEnabled !== false);
     }
   }, []);
 
@@ -473,6 +475,46 @@ export default function SettingsPage() {
             Animasiýa sakla
           </Button>
         </section>
+
+        {/* Login registration toggle */}
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4">
+          <h2 className="text-sm font-semibold text-white">Login · Hasaba al</h2>
+          <p className="text-xs text-slate-500">
+            Öçürileninde login sahypasynda «Hasaba al» baglanyşygy görünmeýär. Täze işgär diňe admin tarapyndan goşulýar.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={registrationEnabled}
+              onChange={(e) => setRegistrationEnabled(e.target.checked)}
+            />
+            Login-de «Hasaba al» görkez
+          </label>
+          <Button
+            size="sm"
+            loading={saving === 'reg'}
+            onClick={async () => {
+              setSaving('reg');
+              try {
+                const res = await fetch('/api/settings', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ registrationEnabled }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'Şowsuz');
+                toastSuccess('Hasaba al sazlamasy saklandy');
+              } catch (e) {
+                toastError('Hasaba al', e instanceof Error ? e.message : String(e));
+              } finally {
+                setSaving(null);
+              }
+            }}
+          >
+            Ýatda sakla
+          </Button>
+        </section>
+
 
         {/* Update feed */}
         <section className="rounded-2xl border border-indigo-500/30 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">

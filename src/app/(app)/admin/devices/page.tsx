@@ -12,6 +12,8 @@ import {
   HardDrive,
   Globe,
   Settings,
+  Plus,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
@@ -81,6 +83,12 @@ export default function DevicesPage() {
   const [acting, setActing] = useState<string | null>(null);
   const [approveId, setApproveId] = useState<string | null>(null);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
+  const [createFirmOpen, setCreateFirmOpen] = useState(false);
+  const [createFirmSaving, setCreateFirmSaving] = useState(false);
+  const [createFirmName, setCreateFirmName] = useState('');
+  const [createFirmSlug, setCreateFirmSlug] = useState('');
+  const [createFirmPhone, setCreateFirmPhone] = useState('');
+  const [createFirmEmail, setCreateFirmEmail] = useState('');
 
   const [settingsDevice, setSettingsDevice] = useState<Device | null>(null);
   const [settingsForm, setSettingsForm] = useState({
@@ -261,6 +269,99 @@ export default function DevicesPage() {
     setSelectedSlugs((prev) =>
       prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
     );
+  }
+
+
+  function openCreateFirm() {
+    setCreateFirmName('');
+    setCreateFirmSlug('');
+    setCreateFirmPhone('');
+    setCreateFirmEmail('');
+    setCreateFirmOpen(true);
+  }
+
+  function onCreateFirmNameChange(name: string) {
+    setCreateFirmName(name);
+    setCreateFirmSlug(
+      name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+    );
+  }
+
+  async function saveCreateFirm() {
+    if (!createFirmName.trim()) {
+      toastError('Ady gerek', 'Firma adyny ýazyň');
+      return;
+    }
+    const slug =
+      createFirmSlug.trim() ||
+      createFirmName
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+    if (!slug) {
+      toastError('Slug gerek', 'Slug boş bolup bilmez');
+      return;
+    }
+    const exists = tenants.find((t) => t.slug.toLowerCase() === slug.toLowerCase());
+    if (exists) {
+      toastError(
+        'Slug eýýäm bar',
+        `«${slug}» slug «${exists.name}» firmasynda ulanylýar. Başga slug saýlaň.`
+      );
+      return;
+    }
+    setCreateFirmSaving(true);
+    try {
+      const res = await fetch('/api/company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: createFirmName.trim(),
+          slug: slug || undefined,
+          isActive: true,
+          phone: createFirmPhone.trim() || undefined,
+          email: createFirmEmail.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toastError('Firma goşulmady', data.error || data.message || 'şowsuz');
+        return;
+      }
+      const newSlug = String(data.tenant?.slug || data.company?.slug || data.slug || slug);
+      const newName = String(data.tenant?.name || data.company?.name || createFirmName.trim());
+      toastSuccess('Firma goşuldy', newName);
+      // Refresh tenant list and select the new firm
+      try {
+        const cat = await fetch('/api/catalog?refresh=1').then((r) => r.json());
+        const list = Array.isArray(cat.tenants) ? cat.tenants : [];
+        setTenants(list.map((x: any) => ({ slug: x.slug, name: x.name || x.slug })));
+        if (newSlug && !list.some((x: any) => x.slug === newSlug)) {
+          setTenants((prev) => {
+            if (prev.some((p) => p.slug === newSlug)) return prev;
+            return [...prev, { slug: newSlug, name: newName }];
+          });
+        }
+      } catch {
+        setTenants((prev) => {
+          if (prev.some((p) => p.slug === newSlug)) return prev;
+          return [...prev, { slug: newSlug, name: newName }];
+        });
+      }
+      if (newSlug) {
+        setSelectedSlugs((prev) => (prev.includes(newSlug) ? prev : [...prev, newSlug]));
+      }
+      setCreateFirmOpen(false);
+    } catch (e) {
+      toastError('Firma goşulmady', String(e));
+    } finally {
+      setCreateFirmSaving(false);
+    }
   }
 
   async function submitApprove() {
@@ -523,30 +624,47 @@ export default function DevicesPage() {
       {approveId && (
         <ModalPortal open={Boolean(approveId)}>
         <div className="fixed inset-0 z-[300] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-6">
-          <div className={`bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-6 max-w-md w-full space-y-4 shadow-2xl${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
+          <div className={`bg-slate-900 border border-slate-700 rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[90dvh] overflow-y-auto${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
             <h2 className="text-lg font-bold text-white">Firma bagla we tassykla</h2>
             <p className="text-xs text-slate-400">
               Saýlanan firmalar üçin Electron tunnel we sync açylýar. BI hasabatlary şol firmalar bilen işleýär.
             </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Firmalar</p>
+              <button
+                type="button"
+                onClick={openCreateFirm}
+                className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Täze firma
+              </button>
+            </div>
             {tenants.length === 0 ? (
-              <p className="text-sm text-amber-400">
-                Katalogda firma ýok. Ilki «Ähli firmalar» ýa-da Electron üsti bilen firma dörediň.
-              </p>
+              <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+                <p className="text-sm text-amber-300">
+                  Katalogda firma ýok. Täze firma goşuň ýa-da Electron üsti bilen dörediň.
+                </p>
+                <Button size="sm" variant="secondary" onClick={openCreateFirm} className="w-full">
+                  <Plus className="h-3.5 w-3.5" />
+                  Täze firma goş
+                </Button>
+              </div>
             ) : (
               <div className="max-h-56 overflow-y-auto space-y-1.5">
-                {tenants.map((t) => (
+                {tenants.map((tn) => (
                   <label
-                    key={t.slug}
+                    key={tn.slug}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-700 hover:bg-slate-800/60 cursor-pointer"
                   >
                     <input
                       type="checkbox"
-                      checked={selectedSlugs.includes(t.slug)}
-                      onChange={() => toggleSlug(t.slug)}
+                      checked={selectedSlugs.includes(tn.slug)}
+                      onChange={() => toggleSlug(tn.slug)}
                       className="rounded"
                     />
-                    <span className="text-sm text-white">{t.name}</span>
-                    <span className="text-[11px] font-mono text-slate-500 ml-auto">{t.slug}</span>
+                    <span className="text-sm text-white">{tn.name}</span>
+                    <span className="text-[11px] font-mono text-slate-500 ml-auto">{tn.slug}</span>
                   </label>
                 ))}
               </div>
@@ -570,6 +688,77 @@ export default function DevicesPage() {
             </div>
           </div>
         </div>
+        </ModalPortal>
+      )}
+
+      {/* Quick create firm while approving device */}
+      {createFirmOpen && (
+        <ModalPortal open={createFirmOpen}>
+          <div className="fixed inset-0 z-[320] flex items-end sm:items-center justify-center p-0 sm:p-6">
+            <div className="absolute inset-0 bg-black/70" onClick={() => setCreateFirmOpen(false)} />
+            <div className={`relative w-full sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4 shadow-2xl${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-indigo-400" />
+                  Täze firma
+                </h3>
+                <button type="button" className="p-1.5 text-slate-400 hover:text-white" onClick={() => setCreateFirmOpen(false)}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <p className="text-xs text-slate-400">
+                Firma goşulandan soň şu enjamy baglamak üçin awto saýlanar.
+              </p>
+              <div>
+                <label className="text-xs text-slate-400">Firma ady *</label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+                  value={createFirmName}
+                  onChange={(e) => onCreateFirmNameChange(e.target.value)}
+                  placeholder="Mysal: Hasabym"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400">Slug</label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white font-mono"
+                  value={createFirmSlug}
+                  onChange={(e) => setCreateFirmSlug(e.target.value)}
+                  placeholder="hasabym"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400">Telefon</label>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+                    value={createFirmPhone}
+                    onChange={(e) => setCreateFirmPhone(e.target.value)}
+                    placeholder="+993..."
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400">Email</label>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+                    value={createFirmEmail}
+                    onChange={(e) => setCreateFirmEmail(e.target.value)}
+                    placeholder="info@..."
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end pt-1">
+                <Button size="sm" variant="secondary" onClick={() => setCreateFirmOpen(false)}>
+                  Ýatyr
+                </Button>
+                <Button size="sm" loading={createFirmSaving} onClick={() => void saveCreateFirm()}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Goş we saýla
+                </Button>
+              </div>
+            </div>
+          </div>
         </ModalPortal>
       )}
 

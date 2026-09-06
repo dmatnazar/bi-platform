@@ -19,6 +19,8 @@ import {
   Wallet,
   AppWindow,
   Loader2,
+  Newspaper,
+  Headphones,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -34,6 +36,7 @@ type NavBadges = {
   devicesPending?: number;
   staffPending?: number;
   billingEmpty?: number;
+  newsUnread?: number;
 };
 
 export function Sidebar({ user }: Props) {
@@ -79,6 +82,7 @@ export function Sidebar({ user }: Props) {
         devicesPending: Number(data.devicesPending) || 0,
         staffPending: Number(data.staffPending) || 0,
         billingEmpty: Number(data.billingEmpty) || 0,
+        newsUnread: Number(data.newsUnread) || 0,
       });
     } catch {
       /* */
@@ -98,6 +102,15 @@ export function Sidebar({ user }: Props) {
     badge?: number;
   }[] = [
     { href: '/dashboards', label: 'Dashboardlar', icon: LayoutDashboard },
+    {
+      href: '/news',
+      label: 'Habarlar',
+      icon: Newspaper,
+      badge: badges.newsUnread,
+    },
+    ...(isViewerOnly(user.role)
+      ? [{ href: '/tech-support', label: 'Tehniki goldaw', icon: Headphones }]
+      : []),
     ...(!isViewerOnly(user.role)
       ? [
           ...(canManageStaff(user.role)

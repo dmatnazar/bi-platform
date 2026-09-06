@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { formatDate } from '@/lib/utils';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatDate, formatDateTime } from '@/lib/utils';
 import { Cloud, CloudOff, Database, RefreshCw, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -102,6 +102,21 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(false);
   const [clientModal, setClientModal] = useState(false);
+  /** Modal top (px) — just under the status indicator strip */
+  const [modalTop, setModalTop] = useState(72);
+  const barRef = useRef<HTMLDivElement | null>(null);
+
+  function openClientModal() {
+    const el = barRef.current;
+    if (el) {
+      const bottom = el.getBoundingClientRect().bottom;
+      // Anchor just under indicators (not page top, not screen bottom)
+      setModalTop(Math.max(48, Math.min(bottom + 8, window.innerHeight - 120)));
+    } else {
+      setModalTop(72);
+    }
+    setClientModal(true);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,12 +130,6 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       setLoading(false);
     }
   }, []);
-
-  useEffect(() => {
-    if (!clientModal) return;
-    const t = setTimeout(() => setClientModal(false), 5000);
-    return () => clearTimeout(t);
-  }, [clientModal]);
 
   useEffect(() => {
     load();
@@ -144,38 +153,140 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       ? 'el bilen'
       : `her ${status.catalogSyncIntervalSec}s`;
 
+  const lastSyncIso = status?.cachedAt || status?.catalogSyncedAt || null;
+  const lastSyncFull = lastSyncIso ? formatDateTime(lastSyncIso) : '—';
+  const checkedFull = status?.checkedAt ? formatDateTime(status.checkedAt) : '—';
+  const dataSource = !status
+    ? '—'
+    : status.fromCache
+      ? 'Cache (ýerli saklanan)'
+      : status.biClientDataAvailable
+        ? 'Live (VPS / tunnel)'
+        : 'Maglumat ýok';
+
   const clientModalUi = clientModal ? (
-    <div className="fixed inset-0 z-[2147483000] flex items-end sm:items-end justify-center px-3 sm:px-4 pb-20 sm:pb-24 pt-16">
-      <div className="absolute inset-0 bg-black/40" onClick={() => setClientModal(false)} />
-      <div className="relative w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden max-h-[min(55dvh,380px)] flex flex-col mb-2">
-        <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-800 shrink-0">
-          <p className="text-sm font-semibold text-white">BI Client — firmalar</p>
+    <div
+      className="fixed inset-0 z-[2147483000]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Birikme statusy"
+    >
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onClick={() => setClientModal(false)} />
+      {/* Anchored under the indicator bar, centered horizontally */}
+      <div
+        className="absolute left-1/2 -translate-x-1/2 w-[min(28rem,calc(100vw-1.5rem))] max-h-[min(70dvh,480px)] rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden flex flex-col"
+        style={{ top: modalTop }}
+      >
+        <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 shrink-0 bg-slate-950/80">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-white truncate">Birikme statusy</p>
+            <p className="text-[10px] text-slate-500 truncate">VPS · BI Client · Sync</p>
+          </div>
           <button
             type="button"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 shrink-0"
             onClick={() => setClientModal(false)}
             aria-label="Ýap"
+            title="Ýap"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
-        <ul className="flex-1 min-h-0 overflow-y-auto divide-y divide-slate-800">
-          {(status?.tenantStatuses || []).length === 0 ? (
-            <li className="px-3 py-4 text-xs text-slate-500 text-center">Firma statusy ýok</li>
-          ) : (
-            (status?.tenantStatuses || []).map((t) => {
-              const state = t.online ? 'online' : t.live ? 'live' : 'offline';
-              const color =
-                state === 'online' || state === 'live' ? 'text-emerald-300' : 'text-amber-300';
-              return (
-                <li key={t.slug} className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm">
-                  <span className="text-slate-200 truncate">{t.name}</span>
-                  <span className={`text-[11px] font-medium ${color}`}>{state}</span>
-                </li>
-              );
-            })
-          )}
-        </ul>
+
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Summary cards */}
+          <div className="px-4 py-3 space-y-2 border-b border-slate-800/80">
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2">
+                <p className="text-slate-500 text-[10px]">VPS Gateway</p>
+                <p className={status?.gatewayOnline ? 'text-emerald-300 font-medium' : 'text-rose-300 font-medium'}>
+                  {status?.gatewayOnline ? 'Connected' : 'Offline'}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2">
+                <p className="text-slate-500 text-[10px]">Maglumat çeşmesi</p>
+                <p className="text-slate-200 font-medium truncate" title={dataSource}>
+                  {dataSource}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2 col-span-2">
+                <p className="text-slate-500 text-[10px]">Soňky catalog sync</p>
+                <p className="text-white font-medium tabular-nums">{lastSyncFull}</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Interval: {intervalLabel}
+                  {status?.catalogSyncIntervalSec ? ' · awto' : ''}
+                </p>
+              </div>
+              <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2 col-span-2">
+                <p className="text-slate-500 text-[10px]">Status barlandy</p>
+                <p className="text-slate-300 tabular-nums">{checkedFull}</p>
+              </div>
+            </div>
+
+            {status && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <span className="inline-flex items-center rounded-lg bg-indigo-500/15 border border-indigo-500/25 px-2 py-0.5 text-[10px] text-indigo-200">
+                  {status.counts.tenants} firma
+                </span>
+                <span className="inline-flex items-center rounded-lg bg-sky-500/15 border border-sky-500/25 px-2 py-0.5 text-[10px] text-sky-200">
+                  {status.counts.endpoints} API
+                </span>
+                <span className="inline-flex items-center rounded-lg bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] text-emerald-200">
+                  {status.counts.staff} işgär
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Per-firm tunnel list */}
+          <div className="px-4 py-2">
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">BI Client — firmalar</p>
+            <ul className="rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-800">
+              {(status?.tenantStatuses || []).length === 0 ? (
+                <li className="px-3 py-4 text-xs text-slate-500 text-center">Firma statusy ýok</li>
+              ) : (
+                (status?.tenantStatuses || []).map((t) => {
+                  const state = t.online ? 'online' : t.live ? 'live' : 'offline';
+                  const color =
+                    state === 'online' || state === 'live' ? 'text-emerald-300' : 'text-amber-300';
+                  const bg =
+                    state === 'online' || state === 'live'
+                      ? 'bg-emerald-500/10 border-emerald-500/30'
+                      : 'bg-amber-500/10 border-amber-500/30';
+                  return (
+                    <li key={t.slug} className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm">
+                      <div className="min-w-0">
+                        <p className="text-slate-100 truncate font-medium">{t.name}</p>
+                        <p className="text-[10px] text-slate-500 font-mono truncate">{t.slug}</p>
+                      </div>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${color} ${bg}`}>
+                        {state}
+                      </span>
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </div>
+        </div>
+
+        <div className="shrink-0 px-4 py-3 border-t border-slate-800 flex gap-2 bg-slate-950/50">
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
+            Täzele
+          </button>
+          <button
+            type="button"
+            onClick={() => setClientModal(false)}
+            className="flex-1 rounded-xl border border-slate-600 bg-slate-700/80 px-3 py-2 text-xs font-medium text-white hover:bg-slate-600"
+          >
+            Ýap
+          </button>
+        </div>
       </div>
     </div>
   ) : null;
@@ -183,8 +294,13 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   // Viewer / company user: still show live sync strip (not only VPS)
   if (!isSuperAdmin) {
     return (
-      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-slate-300 px-11 sm:px-2 py-1.5 text-center">
-        <div className="inline-flex items-center gap-1.5" title="VPS Gateway">
+      <div ref={barRef} className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-slate-300 px-11 sm:px-2 py-1.5 text-center">
+        <button
+          type="button"
+          onClick={() => openClientModal()}
+          className="inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 hover:bg-slate-800/80 transition-colors"
+          title="Birikme statusy — basyp aç"
+        >
           <Dot ok={!!status?.gatewayOnline} />
           {status?.gatewayOnline ? (
             <Cloud className="h-3.5 w-3.5 text-emerald-400" />
@@ -194,10 +310,10 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
           <span className={status?.gatewayOnline ? 'text-emerald-300' : 'text-rose-300'}>
             VPS {status?.gatewayOnline ? 'online' : 'offline'}
           </span>
-        </div>
+        </button>
         <button
           type="button"
-          onClick={() => setClientModal(true)}
+          onClick={() => openClientModal()}
           className="inline-flex items-center gap-1.5 max-w-full rounded-lg px-1 py-0.5 hover:bg-slate-800/80 transition-colors text-left"
           title="Firma tunnel statuslary — basyp aç"
         >
@@ -220,8 +336,13 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 text-[10px] sm:text-[11px] text-slate-400 px-11 sm:px-2 py-1.5 text-center">
-      <div className="inline-flex items-center gap-1.5" title="VPS Gateway /health">
+    <div ref={barRef} className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 text-[10px] sm:text-[11px] text-slate-400 px-11 sm:px-2 py-1.5 text-center">
+      <button
+        type="button"
+        onClick={() => openClientModal()}
+        className="inline-flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 hover:bg-slate-800/80 transition-colors"
+        title="Birikme statusy — basyp aç"
+      >
         <Dot ok={!!status?.gatewayOnline} />
         {status?.gatewayOnline ? (
           <Cloud className="h-3.5 w-3.5 text-emerald-400" />
@@ -231,11 +352,11 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
         <span className={status?.gatewayOnline ? 'text-emerald-300' : 'text-rose-300'}>
           VPS {status?.gatewayOnline ? 'connected' : 'offline'}
         </span>
-      </div>
+      </button>
 
       <button
         type="button"
-        onClick={() => setClientModal(true)}
+        onClick={() => openClientModal()}
         className="inline-flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 hover:bg-slate-800/80 transition-colors text-left"
         title="Firma tunnel statuslary — basyp aç"
       >

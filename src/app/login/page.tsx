@@ -3,12 +3,13 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X } from 'lucide-react';
+import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
 import { ToastHost } from '@/components/ui/Toast';
 import { LoginAppsSection } from '@/components/apps/LoginAppsSection';
+import { LoginSupportModal } from '@/components/support/LoginSupportModal';
 import { requestFullscreenSafe, fullscreenPrefDisabled } from '@/lib/fullscreen';
 
 interface Notif {
@@ -29,6 +30,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [authAnim, setAuthAnim] = useState(true);
+  const [supportOpen, setSupportOpen] = useState(false);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,6 +44,9 @@ export default function LoginPage() {
         if (!cancelled && typeof data.authAnimations === 'boolean') {
           setAuthAnim(data.authAnimations);
           localStorage.setItem('bi-auth-animations', data.authAnimations ? '1' : '0');
+        }
+        if (!cancelled && typeof data.registrationEnabled === 'boolean') {
+          setRegistrationEnabled(data.registrationEnabled);
         }
       } catch {
         /* keep default / cache */
@@ -106,6 +112,16 @@ export default function LoginPage() {
         return;
       }
       // Keep "Garaşyň..." until navigation completes (do not clear loading on success)
+      try {
+        const nr = await fetch('/api/news', { cache: 'no-store' });
+        const nd = await nr.json().catch(() => ({}));
+        const uc = Number(nd.unreadCount) || 0;
+        if (uc > 0) {
+          sessionStorage.setItem('bi-unread-news', String(uc));
+        }
+      } catch {
+        /* */
+      }
       router.push('/dashboards');
       router.refresh();
     } catch {
@@ -242,16 +258,30 @@ export default function LoginPage() {
             {loading ? 'Garaşyň...' : 'Girmek'}
           </Button>
 
-          <p className="text-center text-xs sm:text-sm text-slate-400 leading-relaxed">
-            Hasabyňyz ýokmy?{' '}
-            <Link href="/register" className="text-indigo-300 hover:text-indigo-300 font-medium">
-              Hasaba al
-            </Link>
+          {registrationEnabled && (
+            <p className="text-center text-xs sm:text-sm text-slate-400 leading-relaxed">
+              Hasabyňyz ýokmy?{' '}
+              <Link href="/register" className="text-indigo-300 hover:text-indigo-300 font-medium">
+                Hasaba al
+              </Link>
+            </p>
+          )}
+
+          <p className="text-center text-xs sm:text-sm text-slate-500">
+            <button
+              type="button"
+              onClick={() => setSupportOpen(true)}
+              className="inline-flex items-center gap-1.5 text-cyan-300/90 hover:text-cyan-200 font-medium underline-offset-2 hover:underline"
+            >
+              <Headphones className="h-3.5 w-3.5" />
+              Tehniki goldaw
+            </button>
           </p>
         </form>
 
         {/* Programmalar — docs + download from Admin → Programmalar (apps.json) */}
         <LoginAppsSection />
+        <LoginSupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
         <ToastHost />
       </div>
     </div>
