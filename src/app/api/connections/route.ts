@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageConnections, canAccessTenant } from '@/lib/auth';
 import {
   checkGatewayHealth,
   upsertConnectionOnGateway,
@@ -9,7 +9,7 @@ import {
 
 export async function GET() {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageConnections(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   try {
@@ -48,7 +48,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageConnections(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageConnections(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {

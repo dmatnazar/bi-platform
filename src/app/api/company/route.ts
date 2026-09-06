@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageCompany, isSuperAdmin, canDeleteCompany, canToggleCompanyActive, canChangeCompanySlug, canAccessTenant, actorTenantSlugs } from '@/lib/auth';
 import { checkGatewayHealth, updateTenantOnGateway, fetchCatalog, deleteTenantOnGateway, entityLockOnGateway } from '@/lib/gateway';
 import { getCompanyById, getCompanyBySlug, upsertCompany } from '@/lib/db';
 import type { Company } from '@/lib/types';
@@ -97,8 +97,14 @@ export async function POST(req: NextRequest) {
 
   // Hard delete company when requested
   if (body?.delete === true || req.nextUrl.searchParams.get('action') === 'delete') {
+    if (!canDeleteCompany(user)) {
+      return NextResponse.json({ error: 'Firma pozmak rugsat ýok' }, { status: 403 });
+    }
     const slug = body.slug || user.companySlug;
     if (!slug) return NextResponse.json({ error: 'slug gerek' }, { status: 400 });
+    if (!canAccessTenant(user, slug)) {
+      return NextResponse.json({ error: 'Bu firma size degişli däl' }, { status: 403 });
+    }
     const online = await checkGatewayHealth();
     if (!online) return NextResponse.json({ error: 'VPS offline' }, { status: 503 });
     const res = await deleteTenantOnGateway({ slug });
@@ -155,8 +161,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'ady gerek' }, { status: 400 });
   }
 
-  if (!isSuper && user.companySlug && targetSlug !== user.companySlug) {
-    return NextResponse.json({ error: 'Rugsat yok' }, { status: 403 });
+  if (!isSuperAdmin(user) && !canAccessTenant(user, targetSlug)) {
+    return NextResponse.json({ error: 'Bu firma size degişli däl' }, { status: 403 });
   }
 
   let company: Company | null = null;

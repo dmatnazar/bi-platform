@@ -16,6 +16,8 @@ export type NewsItem = {
   createdBy: string;
   published: boolean;
   pinned?: boolean;
+  /** Target firm slugs. Empty / missing = all firms (platform-wide, super only). */
+  tenantSlugs?: string[];
 };
 
 type NewsFile = { items: NewsItem[]; updatedAt: string };
@@ -74,9 +76,24 @@ function writeReads(f: ReadsFile) {
   fs.writeFileSync(READS_FILE, JSON.stringify(f, null, 2), 'utf8');
 }
 
-export function listNews(opts?: { includeDrafts?: boolean }): NewsItem[] {
+export function listNews(opts?: {
+  includeDrafts?: boolean;
+  /** If set, only news targeting these slugs (or global with empty tenantSlugs for super). */
+  tenantSlugs?: string[];
+  /** Super admin sees everything including global. */
+  isSuper?: boolean;
+}): NewsItem[] {
   const items = readNews().items;
-  const filtered = opts?.includeDrafts ? items : items.filter((n) => n.published);
+  let filtered = opts?.includeDrafts ? items : items.filter((n) => n.published);
+  if (!opts?.isSuper && opts?.tenantSlugs) {
+    const allowed = new Set(opts.tenantSlugs.map(String));
+    filtered = filtered.filter((n) => {
+      const targets = Array.isArray(n.tenantSlugs) ? n.tenantSlugs.map(String) : [];
+      // Global news (no targets): only super sees; non-super skip
+      if (!targets.length) return false;
+      return targets.some((t) => allowed.has(t));
+    });
+  }
   return filtered.sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
@@ -95,6 +112,7 @@ export function createNews(input: {
   published?: boolean;
   pinned?: boolean;
   createdBy: string;
+  tenantSlugs?: string[];
 }): NewsItem {
   const f = readNews();
   const now = new Date().toISOString();
@@ -108,6 +126,9 @@ export function createNews(input: {
     createdBy: input.createdBy,
     published: input.published !== false,
     pinned: !!input.pinned,
+    tenantSlugs: Array.isArray(input.tenantSlugs)
+      ? input.tenantSlugs.map(String).filter(Boolean)
+      : [],
   };
   f.items.unshift(item);
   writeNews(f);

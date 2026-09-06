@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageApis, canAccessTenant } from '@/lib/auth';
 import {
   checkGatewayHealth,
   updateEndpointOnGateway,
@@ -29,7 +29,7 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageApis(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {
@@ -39,6 +39,9 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'nädogry', details: parsed.error.flatten() }, { status: 400 });
+  }
+  if (!canAccessTenant(user, parsed.data.tenantSlug)) {
+    return NextResponse.json({ error: 'Bu firma size degişli däl' }, { status: 403 });
   }
 
   if (parsed.data.sqlQuery) {
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageApis(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {
@@ -88,6 +91,9 @@ export async function DELETE(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   if (!body.id && !(body.tenantSlug && body.method && body.pathTemplate)) {
     return NextResponse.json({ error: 'id ýa-da tenantSlug+method+pathTemplate gerek' }, { status: 400 });
+  }
+  if (body.tenantSlug && !canAccessTenant(user, String(body.tenantSlug))) {
+    return NextResponse.json({ error: 'Bu firma size degişli däl' }, { status: 403 });
   }
   const res = await deleteEndpointOnGateway({
     id: body.id,

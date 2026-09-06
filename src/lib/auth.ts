@@ -108,9 +108,7 @@ export async function loginWithCredentials(
     companyId: staff.companyId,
     companySlug: company?.slug,
     companyName: company?.name,
-    isSuperAdmin: Boolean(
-      staff.isSuperAdmin || staff.role === 'super_admin' || staff.role === 'admin'
-    ),
+    isSuperAdmin: Boolean(staff.isSuperAdmin || staff.role === 'super_admin'),
   };
 
   const token = await createSessionToken(user);
@@ -130,10 +128,43 @@ export function canManageCompany(role: StaffRole): boolean {
 }
 
 export function isSuperAdmin(user: SessionUser): boolean {
-  // Electron "admin" = platform super; mapped to super_admin on login
-  return (
-    user.isSuperAdmin ||
-    user.role === 'super_admin' ||
-    user.role === 'admin'
-  );
+  return user.isSuperAdmin || user.role === 'super_admin';
 }
+
+/** Platform/company admin (not editor) */
+export function isAdmin(user: SessionUser): boolean {
+  return user.role === 'admin' || isSuperAdmin(user);
+}
+
+/** Devices / API / DB / Apps / Settings — admin+ only */
+export function canAccessPlatformModules(role: StaffRole): boolean {
+  return role === 'super_admin' || role === 'admin';
+}
+
+
+// Re-export RBAC helpers for API routes
+export {
+  actorTenantSlugs,
+  canAccessTenant,
+  canAccessAnyTenant,
+  filterByTenantScope,
+  clampTenantSlugs,
+  canManageDevices,
+  canManageApis,
+  canManageConnections,
+  canManageApps,
+  canManageSettings,
+  canApproveDevices,
+  canDeleteCompany,
+  canToggleCompanyActive,
+  canChangeCompanySlug,
+  canManageTariffs,
+  canTopupBilling,
+  assignableRoles,
+  canDeleteStaffMember,
+  wouldRemoveLastSuperAdmin,
+  isAdminRole,
+  isAdminOrSuper,
+  canConfirmStaffRegistration,
+  canEditNews as rbacCanEditNews,
+} from './rbac';

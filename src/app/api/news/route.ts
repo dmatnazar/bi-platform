@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany, isSuperAdmin } from '@/lib/auth';
+import { getSession, isSuperAdmin, actorTenantSlugs, rbacCanEditNews } from '@/lib/auth';
 import {
   listNews,
   createNews,
@@ -8,16 +8,36 @@ import {
   markAllRead,
 } from '@/lib/news-store';
 
-function canEditNews(user: { role: string; isSuperAdmin?: boolean }) {
-  return isSuperAdmin(user as any) || canManageCompany(user.role as any);
+function newsVisibleTo(user: any, n: { tenantSlugs?: string[]; published?: boolean }) {
+  if (isSuperAdmin(user)) return true;
+  const targets = Array.isArray(n.tenantSlugs) ? n.tenantSlugs : [];
+  // empty tenantSlugs = platform-wide (super-created) — viewers of any firm can read
+  if (!targets.length) return true;
+  const mine = new Set(actorTenantSlugs(user));
+  return targets.some((s) => mine.has(String(s)));
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
 
-  const admin = canEditNews(user);
-  const items = listNews({ includeDrafts: admin });
+  const canEdit = rbacCanEditNews(user);
+  let items = listNews({ includeDrafts: canEdit && isSuperAdmin(user) });
+  // Non-super editors: drafts only for their firms; published filtered by scope
+  items = items.filter((n) => newsVisibleTo(user, n));
+  if (!isSuperAdmin(user) && canEdit) {
+    // editors/admins also see own-firm drafts
+    const all = listNews({ includeDrafts: true });
+    const mine = new Set(actorTenantSlugs(user));
+    const extra = all.filter((n) => {
+      if (n.published) return false;
+      const targets = Array.isArray(n.tenantSlugs) ? n.tenantSlugs : [];
+      return targets.some((s) => mine.has(String(s)));
+    });
+    const ids = new Set(items.map((i) => i.id));
+    for (const e of extra) if (!ids.has(e.id)) items.push(e);
+  }
+
   const readIds = getReadIds(user.username);
   const readSet = new Set(readIds);
   const withMeta = items.map((n) => ({
@@ -28,15 +48,16 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     items: withMeta,
     unreadCount: unreadCount(user.username),
-    canEdit: admin,
+    canEdit,
+    myTenantSlugs: actorTenantSlugs(user),
   });
 }
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
-  if (!canEditNews(user)) {
-    return NextResponse.json({ error: 'Diňe admin döredip bilýär' }, { status: 403 });
+  if (!rbacCanEditNews(user)) {
+    return NextResponse.json({ error: 'Habar döretmäge rugsat ýok' }, { status: 403 });
   }
 
   const body = await req.json().catch(() => ({}));
@@ -52,6 +73,22 @@ export async function POST(req: NextRequest) {
   const title = String(body.title || '').trim();
   if (!title) return NextResponse.json({ error: 'Sözbaşy gerek' }, { status: 400 });
 
+  let tenantSlugs: string[] = Array.isArray(body.tenantSlugs)
+    ? body.tenantSlugs.map(String).filter(Boolean)
+    : [];
+  if (!isSuperAdmin(user)) {
+    const mine = new Set(actorTenantSlugs(user));
+    tenantSlugs = tenantSlugs.filter((s) => mine.has(s));
+    if (!tenantSlugs.length) {
+      // default to all actor firms
+      tenantSlugs = [...mine];
+    }
+    if (!tenantSlugs.length) {
+      return NextResponse.json({ error: 'Firma saýlanmady' }, { status: 400 });
+    }
+  }
+  // super may leave empty = all firms
+
   const item = createNews({
     title,
     body: String(body.body || ''),
@@ -59,6 +96,7 @@ export async function POST(req: NextRequest) {
     published: body.published !== false,
     pinned: !!body.pinned,
     createdBy: user.username,
-  });
+    tenantSlugs,
+  } as any);
   return NextResponse.json({ ok: true, item });
 }

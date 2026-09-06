@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageCompany, actorTenantSlugs, isSuperAdmin } from '@/lib/auth';
 import {
   checkGatewayHealth,
   billingOverviewOnGateway,
@@ -98,16 +98,26 @@ export async function GET(req: NextRequest) {
   }
 
   if (action === 'ledger') {
-    if (!isSuper(user)) return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
-    // IMPORTANT: do NOT default to user.companySlug for super-admin global ledger.
-    // Otherwise "Soňky hereketler" only shows one firm and looks like entries are "not written".
-    const explicitSlug = (req.nextUrl.searchParams.get('tenantSlug') || '').trim() || undefined;
     const limitRaw = Number(req.nextUrl.searchParams.get('limit') || 100);
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 5000) : 100;
-    const res = await ledgerOnGateway({
-      tenantSlug: explicitSlug,
-      limit,
-    });
+    let explicitSlug = (req.nextUrl.searchParams.get('tenantSlug') || '').trim() || undefined;
+    if (!isSuper(user)) {
+      const mine = actorTenantSlugs(user);
+      if (explicitSlug && !mine.includes(explicitSlug)) {
+        return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+      }
+      // non-super: fetch per-tenant and merge
+      const slugs = explicitSlug ? [explicitSlug] : mine;
+      const chunks = await Promise.all(slugs.map((s) => ledgerOnGateway({ tenantSlug: s, limit })));
+      const entries: any[] = [];
+      for (const r of chunks) {
+        if (!r.ok) continue;
+        const list = r.data?.entries || r.data?.ledger || r.data?.rows || [];
+        if (Array.isArray(list)) entries.push(...list);
+      }
+      return NextResponse.json({ entries, ledger: entries });
+    }
+    const res = await ledgerOnGateway({ tenantSlug: explicitSlug, limit });
     if (!res.ok) return NextResponse.json({ error: res.data?.error || 'şowsuz' }, { status: 502 });
     return NextResponse.json(res.data);
   }
@@ -121,8 +131,29 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(res.data);
   }
 
+  // Overview: super = all; admin/editor = scoped wallets only (no tariff management data needed)
   if (!isSuper(user)) {
-    return NextResponse.json({ error: 'Diňe super admin' }, { status: 403 });
+    const mine = actorTenantSlugs(user);
+    const walletResults = await Promise.all(mine.map((s) => walletOnGateway(s)));
+    const wallets = walletResults
+      .map((r, i) => {
+        if (!r.ok) return null;
+        const w = r.data?.wallet || r.data;
+        if (!w) return null;
+        return {
+          tenantSlug: mine[i],
+          tenantName: r.data?.tenantName || r.data?.companyName || mine[i],
+          balanceCredits: (w as any).balanceCredits ?? (w as any).balance ?? 0,
+          lowBalanceThreshold: (w as any).lowBalanceThreshold ?? 0,
+          level: (w as any).level || 'ok',
+          warning: (w as any).warning,
+          tariff: (w as any).tariff || null,
+          subscription: (w as any).subscription || null,
+          ...((typeof w === 'object' && w) || {}),
+        };
+      })
+      .filter(Boolean);
+    return NextResponse.json({ wallets, tariffs: [] });
   }
 
   const res = await billingOverviewOnGateway();

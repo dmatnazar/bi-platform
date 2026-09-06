@@ -80,16 +80,53 @@ export default function StaffPage() {
   const [syncing, setSyncing] = useState(false);
   const [meId, setMeId] = useState<string | null>(null);
   const [meUsername, setMeUsername] = useState<string | null>(null);
+  const [meRole, setMeRole] = useState<string>('viewer');
+  const [meTenantSlugs, setMeTenantSlugs] = useState<string[]>([]);
+  const [meIsSuper, setMeIsSuper] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/me')
       .then((r) => r.json())
       .then((d) => {
-        if (d.user?.id) setMeId(d.user.id);
-        if (d.user?.username) setMeUsername(d.user.username);
+        const u = d.user;
+        if (!u) return;
+        if (u.id) setMeId(u.id);
+        if (u.username) setMeUsername(u.username);
+        if (u.role) setMeRole(String(u.role));
+        setMeIsSuper(Boolean(u.isSuperAdmin || u.role === 'super_admin'));
+        const slugs = [
+          ...(Array.isArray(u.tenantSlugs) ? u.tenantSlugs : []),
+          u.companySlug || '',
+        ]
+          .map((s: string) => String(s || '').trim())
+          .filter(Boolean);
+        setMeTenantSlugs(Array.from(new Set(slugs)));
       })
       .catch(() => {});
   }, []);
+
+  const roleOptions = useMemo(() => {
+    if (meIsSuper) {
+      return [
+        { value: 'viewer', label: 'Viewer' },
+        { value: 'editor', label: 'Editor' },
+        { value: 'admin', label: 'Admin' },
+        { value: 'super_admin', label: 'Super admin' },
+      ];
+    }
+    // admin & editor: only viewer + editor
+    return [
+      { value: 'viewer', label: 'Viewer' },
+      { value: 'editor', label: 'Editor' },
+    ];
+  }, [meRole, meIsSuper]);
+
+  const visibleCompanies = useMemo(() => {
+    if (meIsSuper) return companies;
+    // admin + editor: only own firms
+    if (!meTenantSlugs.length) return [];
+    return companies.filter((c) => meTenantSlugs.includes(c.slug));
+  }, [companies, meIsSuper, meTenantSlugs]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -142,7 +179,11 @@ export default function StaffPage() {
       phoneLocal: '',
       email: '',
       active: true,
-      tenantSlugs: companies[0]?.slug ? [companies[0].slug] : [],
+      tenantSlugs: (visibleCompanies[0]?.slug
+        ? [visibleCompanies[0].slug]
+        : meTenantSlugs[0]
+          ? [meTenantSlugs[0]]
+          : []),
     });
     setShowPw(false);
     setError('');
@@ -155,7 +196,11 @@ export default function StaffPage() {
       fullName: row.fullName,
       username: row.username,
       password: row.passwordReveal || '',
-      role: row.role === 'admin' || row.role === 'editor' ? row.role : 'viewer',
+      role: (() => {
+        const allowed = roleOptions.map((o) => o.value);
+        if (allowed.includes(row.role)) return row.role;
+        return 'viewer';
+      })(),
       phoneLocal: phoneLocal(row.phone),
       email: row.email || '',
       active: row.active,
@@ -195,10 +240,14 @@ export default function StaffPage() {
         return;
       }
       setModal(false);
-      toastSuccess(
-        editing ? 'Işgär üýtgedildi' : 'Işgär goşuldy',
-        'VPS bilen sync edildi · Electron awto-çekip biler'
-      );
+      if (data.warning) {
+        toastInfo(editing ? 'Işgär üýtgedildi' : 'Işgär goşuldy', String(data.warning));
+      } else {
+        toastSuccess(
+          editing ? 'Işgär üýtgedildi' : 'Işgär goşuldy',
+          'VPS bilen sync edildi · Electron awto-çekip biler'
+        );
+      }
       await load();
     } finally {
       setSaving(false);
@@ -487,17 +536,13 @@ export default function StaffPage() {
                 label="Rol"
                 value={form.role}
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
-                options={[
-                  { value: 'viewer', label: 'Viewer' },
-                  { value: 'editor', label: 'Editor' },
-                  { value: 'admin', label: 'Admin' },
-                ]}
+                options={roleOptions}
               />
             </div>
             <div className="space-y-1">
               <label className="text-[11px] font-medium text-slate-400">Firmalar</label>
               <div className="max-h-24 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950/80 p-1 space-y-0.5">
-                {companies.length ? companies.map((c) => {
+                {visibleCompanies.length ? visibleCompanies.map((c) => {
                   const checked = (form.tenantSlugs || []).includes(c.slug);
                   return (
                     <label
@@ -522,7 +567,7 @@ export default function StaffPage() {
                       <span className="truncate">{c.name || c.slug}</span>
                     </label>
                   );
-                }) : <div className="px-2 py-2 text-[11px] text-slate-500">Firma tapylmady</div>}
+                }) : <div className="px-2 py-2 text-[11px] text-slate-500">Firma tapylmady (diňe size degişli firmalar)</div>}
               </div>
             </div>
             <label className="flex items-center gap-2 text-xs text-slate-300 pt-0.5">

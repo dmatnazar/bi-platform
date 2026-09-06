@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageStaff, isSuperAdmin } from '@/lib/auth';
+import { getSession, canManageStaff, isSuperAdmin, assignableRoles, canDeleteStaffMember, wouldRemoveLastSuperAdmin, actorTenantSlugs, filterByTenantScope } from '@/lib/auth';
 import {
   fetchCatalog,
   checkGatewayHealth,
@@ -48,12 +48,23 @@ export async function GET() {
   try {
     const catalog = await fetchCatalog(true);
     let remote = catalog.staff || [];
-    if (!isSuperAdmin(user) && user.companySlug) {
-      remote = remote.filter(
-        (s) =>
-          s.tenantSlug === user.companySlug ||
-          s.tenantSlugs?.includes(user.companySlug!)
+    if (!isSuperAdmin(user)) {
+      const mySlugs = new Set(
+        [user.companySlug, ...(user.tenantSlugs || [])]
+          .map((s) => String(s || '').trim())
+          .filter(Boolean)
       );
+      if (mySlugs.size) {
+        remote = remote.filter((s) => {
+          const slugs = [
+            s.tenantSlug,
+            ...(Array.isArray(s.tenantSlugs) ? s.tenantSlugs : []),
+          ]
+            .map((x) => String(x || '').trim())
+            .filter(Boolean);
+          return slugs.some((slug) => mySlugs.has(slug));
+        });
+      }
     }
     const nameBySlug = new Map(
       (catalog.tenants || []).map((t) => [t.slug, t.name] as const)
@@ -96,7 +107,7 @@ const upsertSchema = z.object({
   fullName: z.string().min(1),
   username: z.string().min(3),
   password: z.string().min(6).optional(),
-  role: z.enum(['admin', 'editor', 'viewer']),
+  role: z.enum(['super_admin', 'admin', 'editor', 'viewer']),
   phone: z.string().optional(),
   email: z.string().email().optional().or(z.literal('')),
   active: z.boolean().default(true),
@@ -131,9 +142,23 @@ export async function POST(req: NextRequest) {
       .map((s: string) => String(s || '').trim())
       .filter((s): s is string => Boolean(s))
   ));
+  // Role assignment limits
+  const allowedRoles = assignableRoles(user);
+  if (!allowedRoles.includes(data.role as any)) {
+    return NextResponse.json(
+      { error: `Bu rol bermäge rugsat ýok. Rugsat: ${allowedRoles.join(', ')}` },
+      { status: 403 }
+    );
+  }
+
+  const mySlugs = new Set(
+    [user.companySlug, ...(user.tenantSlugs || [])]
+      .map((s) => String(s || '').trim())
+      .filter(Boolean)
+  );
   const allowedSlugs = isSuperAdmin(user)
     ? requestedSlugs
-    : requestedSlugs.filter((s) => s === user.companySlug);
+    : requestedSlugs.filter((s) => mySlugs.has(s));
   const tenantSlugs = allowedSlugs.length
     ? allowedSlugs
     : (user.companySlug ? [user.companySlug] : []);
@@ -169,12 +194,29 @@ export async function POST(req: NextRequest) {
       .map((s: unknown) => String(s ?? '').trim())
       .filter((s): s is string => s.length > 0)
   ));
+  if (
+    existingAnywhere &&
+    wouldRemoveLastSuperAdmin(
+      allStaff,
+      existingAnywhere.id,
+      data.role,
+      data.active
+    )
+  ) {
+    return NextResponse.json(
+      { error: 'Iň az bir super_admin galmaly — soňky super admin-i üýtgedip bolanok' },
+      { status: 403 }
+    );
+  }
+
   const entry: any = {
     id: existingAnywhere?.id || id,
     fullName: data.fullName,
     username: data.username,
     passwordHash,
-    role: data.role === 'admin' ? 'admin' : data.role === 'editor' ? 'editor' : 'viewer',
+    role: (['super_admin', 'admin', 'editor', 'viewer'].includes(data.role)
+      ? data.role
+      : 'viewer') as 'super_admin' | 'admin' | 'editor' | 'viewer',
     tenantSlugs,
     tenantSlug: tenantSlugs[0],
     phone: data.phone,
@@ -219,21 +261,43 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2) Per-tenant sync so each firm's staff roster stays consistent (Electron pulls).
-  //    Mark authoritative so sync-staff does not re-expand a firm we intentionally removed.
+  // 2) Per-tenant sync (Electron roster). Upsert already wrote the row — do not fail the
+  //    whole save if one tenant sync rejects (e.g. legacy role enum). Collect warnings.
+  const syncWarnings: string[] = [];
   for (const slug of affectedSlugs) {
     const members = staffForTenant(slug).map((m: any) => ({
       ...m,
+      // Normalize legacy roles for gateway validators that still list manager
+      role:
+        m.role === 'super_admin'
+          ? 'super_admin'
+          : m.role === 'admin'
+            ? 'admin'
+            : m.role === 'editor' || m.role === 'manager'
+              ? 'editor'
+              : 'viewer',
       authoritative: m.id === entry.id || m.username?.toLowerCase() === entry.username.toLowerCase(),
     }));
-    // Per-row authoritative is set only on the edited staff; others keep merge-safe behavior.
     const res = await syncStaffToGateway(slug, members as any);
     if (!res.ok) {
-      return NextResponse.json({ error: `VPS-e "${slug}" firmasyna işgär sync bolmady`, detail: res.data }, { status: 502 });
+      syncWarnings.push(
+        `${slug}: ${res.data?.message || res.data?.error || res.status || 'sync fail'}`
+      );
     }
   }
 
-  return NextResponse.json({ ok: true, staffId: entry.id, synced: true, tenantSlugs });
+  return NextResponse.json({
+    ok: true,
+    staffId: entry.id,
+    synced: syncWarnings.length === 0,
+    tenantSlugs,
+    ...(syncWarnings.length
+      ? {
+          warning:
+            'Işgär saklandy, käbir firma sync duýduryşy: ' + syncWarnings.join('; '),
+        }
+      : {}),
+  });
 }
 
 export async function DELETE(req: NextRequest) {
@@ -250,6 +314,46 @@ export async function DELETE(req: NextRequest) {
 
   const tenantSlug =
     user.companySlug || req.nextUrl.searchParams.get('tenantSlug') || undefined;
+
+  // Protect super_admin + last-super rule + tenant scope
+  try {
+    const catalog = await fetchCatalog(true);
+    const all = catalog.staff || [];
+    const target = all.find(
+      (s: any) =>
+        (id && s.id === id) ||
+        (username && String(s.username || '').toLowerCase() === username.toLowerCase())
+    );
+    if (target) {
+      const check = canDeleteStaffMember(user, { role: target.role, id: target.id });
+      if (!check.ok) {
+        return NextResponse.json({ error: check.reason }, { status: 403 });
+      }
+      if (
+        wouldRemoveLastSuperAdmin(all, target.id) ||
+        String(target.role || '').toLowerCase() === 'super_admin'
+      ) {
+        return NextResponse.json(
+          { error: 'Super admin pozup bolanok — iň az bir super_admin bolmaly' },
+          { status: 403 }
+        );
+      }
+      if (!isSuperAdmin(user)) {
+        const mine = new Set(actorTenantSlugs(user));
+        const slugs = [
+          target.tenantSlug,
+          ...(Array.isArray(target.tenantSlugs) ? target.tenantSlugs : []),
+        ]
+          .map((s: any) => String(s || '').trim())
+          .filter(Boolean);
+        if (!slugs.some((s: string) => mine.has(s))) {
+          return NextResponse.json({ error: 'Bu işgär size degişli däl' }, { status: 403 });
+        }
+      }
+    }
+  } catch {
+    /* if catalog fails, still attempt delete but super_admin string id checks above are best-effort */
+  }
 
   const online = await checkGatewayHealth();
   if (!online) {

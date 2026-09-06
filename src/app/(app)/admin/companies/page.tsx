@@ -100,6 +100,14 @@ export default function CompaniesPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
+  const [meRole, setMeRole] = useState('viewer');
+  const [meTenantSlugs, setMeTenantSlugs] = useState<string[]>([]);
+  const isEditorOnly = meRole === 'editor' && !isSuper;
+  const isAdminOnly = meRole === 'admin' && !isSuper;
+  const scopedUser = isEditorOnly || isAdminOnly; // not super — only own firms
+  const canDeleteFirm = isSuper || isAdminOnly; // editor cannot delete
+  const canToggleActive = isSuper || isAdminOnly; // editor cannot
+  const canEditSlug = isSuper; // only super
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -107,6 +115,14 @@ export default function CompaniesPage() {
       .then((d) => {
         const u = d.user;
         setIsSuper(!!(u?.isSuperAdmin || u?.role === 'super_admin'));
+        if (u?.role) setMeRole(String(u.role));
+        const slugs = [
+          ...(Array.isArray(u?.tenantSlugs) ? u.tenantSlugs : []),
+          u?.companySlug || '',
+        ]
+          .map((s: string) => String(s || '').trim())
+          .filter(Boolean);
+        setMeTenantSlugs(Array.from(new Set(slugs)));
       })
       .catch(() => {});
   }, []);
@@ -121,14 +137,22 @@ export default function CompaniesPage() {
         setList([]);
         return;
       }
-      setList(data.tenants || []);
+      let tenants = data.tenants || [];
+      // Editor: only own firms
+      if (scopedUser && meTenantSlugs.length) {
+        const allow = new Set(meTenantSlugs);
+        tenants = tenants.filter((c: Company) => allow.has(c.slug));
+      } else if (scopedUser) {
+        tenants = [];
+      }
+      setList(tenants);
     } catch (e) {
       toastError('Yuklenmedi', String(e));
       setList([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [meRole, isSuper, meTenantSlugs]);
 
   useEffect(() => {
     load();
@@ -225,9 +249,11 @@ export default function CompaniesPage() {
     try {
       const payload = {
         id: editing?.id || undefined,
-        slug: form.slug || editing?.slug,
+        slug: !canEditSlug ? (editing?.slug || form.slug) : (form.slug || editing?.slug),
         name: form.name.trim(),
-        isActive: form.isActive !== false,
+        isActive: !canToggleActive
+          ? (editing ? editing.isActive !== false : true)
+          : form.isActive !== false,
         legalName: form.legalName || undefined,
         taxId: form.taxId || undefined,
         registrationNumber: form.registrationNumber || undefined,
@@ -408,7 +434,7 @@ export default function CompaniesPage() {
             >
               <Pencil className="h-4 w-4" />
             </button>
-            {r.isActive !== false && (
+            {canDeleteFirm && r.isActive !== false && (
               <button
                 type="button"
                 onClick={() => void deactivate(r)}
@@ -433,7 +459,7 @@ export default function CompaniesPage() {
         ),
       },
     ],
-    []
+    [canDeleteFirm]
   );
 
   const inputCls =
@@ -512,7 +538,7 @@ export default function CompaniesPage() {
                     className={`${inputCls} font-mono`}
                     value={form.slug}
                     onChange={(e) => setField('slug', e.target.value.toLowerCase().replace(/\s+/g, '-'))}
-                    disabled={!!editing}
+                    disabled={!!editing || !canEditSlug}
                     placeholder="acme-llc"
                   />
                 </div>
@@ -582,6 +608,7 @@ export default function CompaniesPage() {
               <textarea className={inputCls} rows={2} value={form.notes} onChange={(e) => setField('notes', e.target.value)} />
             </section>
 
+            {canToggleActive && (
             <section className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Status</h4>
               <label className="flex items-center gap-3 cursor-pointer select-none">
@@ -599,6 +626,7 @@ export default function CompaniesPage() {
                 </span>
               </label>
             </section>
+            )}
 
             <div className="flex gap-2 pt-1 border-t border-slate-800">
               <Button className="flex-1" loading={saving} onClick={() => void save()}>

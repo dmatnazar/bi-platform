@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, isSuperAdmin, canManageCompany } from '@/lib/auth';
+import {
+  getSession,
+  isSuperAdmin,
+  canManageDevices as canDev,
+  canApproveDevices,
+  actorTenantSlugs,
+  canAccessAnyTenant,
+  clampTenantSlugs,
+  filterByTenantScope,
+} from '@/lib/auth';
 import {
   listDevicesOnGateway,
   approveDeviceOnGateway,
@@ -10,10 +19,10 @@ import {
 
 function canManageDevices(user: Awaited<ReturnType<typeof getSession>>) {
   if (!user) return false;
-  return isSuperAdmin(user) || canManageCompany(user.role);
+  return canDev(user);
 }
 
-/** GET — list devices from VPS Gateway */
+/** GET — list devices from VPS Gateway (scoped) */
 export async function GET() {
   const user = await getSession();
   if (!user || !canManageDevices(user)) {
@@ -28,19 +37,39 @@ export async function GET() {
     );
   }
 
-  // Optionally attach tenant list for approve UI
+  let devices = res.data?.devices || [];
+  if (!isSuperAdmin(user)) {
+    const mine = new Set(actorTenantSlugs(user));
+    devices = devices.filter((d: any) => {
+      const slugs = [
+        d.tenantSlug,
+        ...(Array.isArray(d.tenantSlugs) ? d.tenantSlugs : []),
+      ]
+        .map((s: any) => String(s || '').trim())
+        .filter(Boolean);
+      // pending without tenants: only super sees for approve
+      if (!slugs.length) return false;
+      return slugs.some((s: string) => mine.has(s));
+    });
+  }
+
   let tenants: { slug: string; name: string }[] = [];
   try {
     const catalog = await fetchCatalog(false);
     tenants = (catalog.tenants || []).map((t) => ({ slug: t.slug, name: t.name }));
+    if (!isSuperAdmin(user)) {
+      const mine = new Set(actorTenantSlugs(user));
+      tenants = tenants.filter((t) => mine.has(t.slug));
+    }
   } catch {
     /* ignore */
   }
 
   return NextResponse.json({
     ok: true,
-    devices: res.data?.devices || [],
+    devices,
     tenants,
+    canApprove: canApproveDevices(user),
   });
 }
 
@@ -59,6 +88,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'approve') {
+    if (!canApproveDevices(user)) {
+      return NextResponse.json(
+        { error: 'Enjam tassyklamak diňe super admin üçin' },
+        { status: 403 }
+      );
+    }
     const tenantSlugs: string[] = Array.isArray(body.tenantSlugs)
       ? body.tenantSlugs.filter(Boolean)
       : body.tenantSlug
@@ -81,19 +116,23 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'status') {
-    const status = body.status as 'pending' | 'approved' | 'blocked';
-    if (!status) {
-      return NextResponse.json({ error: 'status gerek' }, { status: 400 });
-    }
-    const tenantSlugs: string[] = Array.isArray(body.tenantSlugs)
+    let tenantSlugs: string[] = Array.isArray(body.tenantSlugs)
       ? body.tenantSlugs.filter(Boolean)
       : body.tenantSlug
         ? [body.tenantSlug]
         : [];
+    tenantSlugs = clampTenantSlugs(user, tenantSlugs);
+    if (body.tenantSlugs?.length && tenantSlugs.length === 0) {
+      return NextResponse.json({ error: 'Saýlanan firmalar size degişli däl' }, { status: 403 });
+    }
+    const status = body.status as 'pending' | 'approved' | 'blocked';
+    if (!status) {
+      return NextResponse.json({ error: 'status gerek' }, { status: 400 });
+    }
     const res = await updateDeviceStatusOnGateway(id, {
       status,
       tenantSlugs: tenantSlugs.length ? tenantSlugs : undefined,
-      tenantSlug: body.tenantSlug,
+      tenantSlug: tenantSlugs[0] || body.tenantSlug,
       name: body.name,
     });
     if (!res.ok) {

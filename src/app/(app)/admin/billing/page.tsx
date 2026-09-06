@@ -234,6 +234,30 @@ export default function BillingPage() {
     maxApiCallsDay: '100',
     maxConnections: '2',
   });
+  const [meRole, setMeRole] = useState('viewer');
+  const [meIsSuper, setMeIsSuper] = useState(false);
+  const [meTenantSlugs, setMeTenantSlugs] = useState<string[]>([]);
+  // admin + editor: own firms only, no tariffs/topup (super sees all)
+  const scopedBilling = (meRole === 'editor' || meRole === 'admin') && !meIsSuper;
+
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => r.json())
+      .then((d) => {
+        const u = d.user;
+        if (!u) return;
+        setMeRole(String(u.role || 'viewer'));
+        setMeIsSuper(Boolean(u.isSuperAdmin || u.role === 'super_admin'));
+        const slugs = [
+          ...(Array.isArray(u.tenantSlugs) ? u.tenantSlugs : []),
+          u.companySlug || '',
+        ]
+          .map((s: string) => String(s || '').trim())
+          .filter(Boolean);
+        setMeTenantSlugs(Array.from(new Set(slugs)));
+      })
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -246,10 +270,21 @@ export default function BillingPage() {
         toastError('Ýüklenmedi', ov.error);
         return;
       }
-      setTariffs(ov.tariffs || []);
-      setWallets(ov.wallets || []);
-      const list = led.entries || led.ledger || led.rows || led.items || [];
-      setLedger(Array.isArray(list) ? list.map(normalizeLedgerEntry) : []);
+      setTariffs(scopedBilling ? [] : (ov.tariffs || []));
+      let ws: WalletRow[] = ov.wallets || [];
+      if (scopedBilling && meTenantSlugs.length) {
+        const allow = new Set(meTenantSlugs);
+        ws = ws.filter((w) => allow.has(w.tenantSlug));
+      }
+      setWallets(ws);
+      let list = led.entries || led.ledger || led.rows || led.items || [];
+      if (!Array.isArray(list)) list = [];
+      let mapped = list.map(normalizeLedgerEntry);
+      if (scopedBilling && meTenantSlugs.length) {
+        const allow = new Set(meTenantSlugs);
+        mapped = mapped.filter((e: LedgerEntry) => allow.has(e.tenantSlug));
+      }
+      setLedger(mapped);
 
       // Beautiful warnings for low balances
       const bad = (ov.wallets || []).filter(
@@ -269,7 +304,7 @@ export default function BillingPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [scopedBilling, meTenantSlugs]);
 
   useEffect(() => {
     load();
@@ -432,6 +467,7 @@ export default function BillingPage() {
       {/* Hub navigation cards */}
       {hubPanel === 'home' && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {!scopedBilling && (
           <button
             type="button"
             onClick={() => setHubPanel('tariffs')}
@@ -446,6 +482,7 @@ export default function BillingPage() {
             <p className="mt-3 text-base font-semibold text-white">Tarifler</p>
             <p className="text-xs text-slate-400 mt-1">{tariffs.length} tarif · paket we limitler</p>
           </button>
+          )}
 
           <button
             type="button"
@@ -599,6 +636,7 @@ export default function BillingPage() {
                   {w.balanceCredits.toLocaleString()} <span className="text-[10px] text-slate-500">REQ</span>
                 </span>
               </div>
+              {!scopedBilling && (
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -615,6 +653,7 @@ export default function BillingPage() {
                   Tarif
                 </button>
               </div>
+              )}
             </div>
           ))}
           {wallets.length === 0 && !loading && (
@@ -675,6 +714,7 @@ export default function BillingPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="inline-flex gap-1">
+                        {!scopedBilling && (
                         <button
                           type="button"
                           className="text-[11px] px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
@@ -686,6 +726,8 @@ export default function BillingPage() {
                         >
                           Top-up
                         </button>
+                        )}
+                        {!scopedBilling && (
                         <button
                           type="button"
                           className="text-[11px] px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25"
@@ -697,6 +739,7 @@ export default function BillingPage() {
                         >
                           Tarif
                         </button>
+                        )}
                       </div>
                     </td>
                   </tr>

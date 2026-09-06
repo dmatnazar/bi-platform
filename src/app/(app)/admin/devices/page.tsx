@@ -79,6 +79,7 @@ export default function DevicesPage() {
   const modalAnimOn = useModalAnimations();
   const [devices, setDevices] = useState<Device[]>([]);
   const [tenants, setTenants] = useState<TenantOpt[]>([]);
+  const [canApprove, setCanApprove] = useState(false);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [approveId, setApproveId] = useState<string | null>(null);
@@ -243,6 +244,7 @@ export default function DevicesPage() {
       }
       setDevices(Array.isArray(data.devices) ? data.devices : []);
       setTenants(Array.isArray(data.tenants) ? data.tenants : []);
+      setCanApprove(Boolean(data.canApprove));
     } catch (e: any) {
       toastError('Enjamlar', e?.message || 'Network error');
       setDevices([]);
@@ -562,7 +564,7 @@ export default function DevicesPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2 shrink-0">
-                    {(d.status === 'pending' || d.status === 'blocked' || slugs.length === 0) && (
+                    {canApprove && (d.status === 'pending' || d.status === 'blocked' || slugs.length === 0) && (
                       <Button
                         size="sm"
                         onClick={() => openApprove(d)}

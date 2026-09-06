@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageApps } from '@/lib/auth';
 import {
   readAppsCatalog,
   writeAppsCatalog,
@@ -10,7 +10,7 @@ import {
 
 export async function GET() {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageApps(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   return NextResponse.json(readAppsCatalog());
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageApps(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   const body = await req.json();
@@ -42,7 +42,7 @@ export async function PUT(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageApps(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   const body = await req.json();

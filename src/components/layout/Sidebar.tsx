@@ -25,7 +25,7 @@ import {
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/lib/types';
-import { canManageStaff, canManageCompany, isSuperAdmin, isViewerOnly } from '@/lib/auth-client';
+import { canManageStaff, isSuperAdmin, isViewerOnly, isEditor, isAdmin, canManageDevices, canManageApis, canManageConnections, canManageApps, canManageSettings } from '@/lib/auth-client';
 import { BalanceBadge } from '@/components/billing/BalanceBadge';
 
 interface Props {
@@ -95,6 +95,18 @@ export function Sidebar({ user }: Props) {
     return () => clearInterval(t);
   }, [loadBadges]);
 
+  const superA = isSuperAdmin(user);
+  const adminA = isAdmin(user); // admin or super
+  const editorA = isEditor(user.role);
+  const staffOk = canManageStaff(user.role);
+  const devicesOk = canManageDevices(user);
+  const apisOk = canManageApis(user);
+  const connOk = canManageConnections(user);
+  const appsOk = canManageApps(user);
+  const settingsOk = canManageSettings(user);
+  // companies + billing: editor, admin, super
+  const firmsOk = editorA || adminA || superA;
+
   const nav: {
     href: string;
     label: string;
@@ -108,12 +120,10 @@ export function Sidebar({ user }: Props) {
       icon: Newspaper,
       badge: badges.newsUnread,
     },
-    ...(isViewerOnly(user.role)
-      ? [{ href: '/tech-support', label: 'Tehniki goldaw', icon: Headphones }]
-      : []),
+    { href: '/tech-support', label: 'Tehniki goldaw', icon: Headphones },
     ...(!isViewerOnly(user.role)
       ? [
-          ...(canManageStaff(user.role)
+          ...(staffOk
             ? [
                 {
                   href: '/admin/staff',
@@ -123,10 +133,10 @@ export function Sidebar({ user }: Props) {
                 },
               ]
             : []),
-          ...(isSuperAdmin(user)
+          ...(firmsOk
             ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
             : []),
-          ...(isSuperAdmin(user)
+          ...(firmsOk
             ? [
                 {
                   href: '/admin/billing',
@@ -136,7 +146,7 @@ export function Sidebar({ user }: Props) {
                 },
               ]
             : []),
-          ...(isSuperAdmin(user) || canManageCompany(user.role)
+          ...(devicesOk
             ? [
                 {
                   href: '/admin/devices',
@@ -146,18 +156,12 @@ export function Sidebar({ user }: Props) {
                 },
               ]
             : []),
-          ...(canManageCompany(user.role)
-            ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }]
-            : []),
-          ...(canManageCompany(user.role)
+          ...(apisOk ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }] : []),
+          ...(connOk
             ? [{ href: '/admin/connections', label: 'DB baglanyşyklar', icon: Database }]
             : []),
-          ...(canManageCompany(user.role) || isSuperAdmin(user)
-            ? [{ href: '/admin/apps', label: 'Programmalar', icon: AppWindow }]
-            : []),
-          ...(canManageCompany(user.role) || isSuperAdmin(user)
-            ? [{ href: '/admin/settings', label: 'Sazlamalar', icon: Settings }]
-            : []),
+          ...(appsOk ? [{ href: '/admin/apps', label: 'Programmalar', icon: AppWindow }] : []),
+          ...(settingsOk ? [{ href: '/admin/settings', label: 'Sazlamalar', icon: Settings }] : []),
         ]
       : []),
   ];

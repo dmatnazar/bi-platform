@@ -1,11 +1,24 @@
 import type { SessionUser, StaffRole } from './types';
-
-/**
- * 3 effective roles in BI:
- * - viewer: diňe dashboard görýär
- * - admin: öz kompaniýasynda ähli dolandyryş (Electron editor/admin)
- * - super_admin: ähli firmalar
- */
+import {
+  isSuperAdmin as rbacIsSuper,
+  isAdminRole,
+  actorTenantSlugs as rbacSlugs,
+  assignableRoles as rbacAssignable,
+  canManageStaff as rbacStaff,
+  canManageCompanies,
+  canManageDevices,
+  canManageApis,
+  canManageConnections,
+  canManageApps,
+  canManageSettings,
+  canEditNews as rbacNews,
+  canApproveDevices,
+  canDeleteCompany,
+  canToggleCompanyActive,
+  canManageBilling,
+  canManageTariffs,
+  canTopupBilling,
+} from './rbac';
 
 export function canEditDashboard(role: StaffRole): boolean {
   return role === 'super_admin' || role === 'admin' || role === 'editor';
@@ -20,13 +33,54 @@ export function canManageStaff(role: StaffRole): boolean {
 }
 
 export function isSuperAdmin(user: SessionUser): boolean {
-  return user.isSuperAdmin || user.role === 'super_admin';
+  return rbacIsSuper(user);
+}
+
+export function isAdmin(user: SessionUser): boolean {
+  return isAdminRole(user) || rbacIsSuper(user);
+}
+
+export function canAccessPlatformModules(role: StaffRole): boolean {
+  return role === 'super_admin' || role === 'admin';
 }
 
 export function isViewerOnly(role: StaffRole): boolean {
   return role === 'viewer';
 }
 
+export function isEditor(role: StaffRole): boolean {
+  return role === 'editor';
+}
+
 export function canHandleSupport(role: StaffRole): boolean {
   return role === 'super_admin' || role === 'admin' || role === 'editor';
 }
+
+export function canEditNews(role: StaffRole, user?: SessionUser): boolean {
+  if (user) return rbacNews(user);
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
+}
+
+export function assignableRoles(actor: SessionUser): StaffRole[] {
+  return rbacAssignable(actor);
+}
+
+export function actorTenantSlugs(user: SessionUser): string[] {
+  return rbacSlugs(user);
+}
+
+export {
+  canManageDevices,
+  canManageApis,
+  canManageConnections,
+  canManageApps,
+  canManageSettings,
+  canApproveDevices,
+  canDeleteCompany,
+  canToggleCompanyActive,
+  canManageBilling,
+  canManageTariffs,
+  canTopupBilling,
+  canManageCompanies,
+  rbacStaff as canManageStaffUser,
+};

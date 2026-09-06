@@ -12,15 +12,15 @@ const schema = z.object({
 });
 
 /**
- * Electron roles: admin | editor | viewer
- * - admin  → platform super admin (ähli kompaniýalar)
- * - editor → company admin
- * - viewer → viewer
+ * Roles preserved as stored in staff:
+ * super_admin | admin | editor | viewer
+ * (no remapping — previous map elevated admin→super_admin and editor→admin)
  */
 function mapRole(role: string): StaffRole {
-  const r = String(role || '').toLowerCase();
-  if (r === 'super_admin' || r === 'admin') return 'super_admin';
-  if (r === 'editor') return 'admin';
+  const r = String(role || '').toLowerCase().replace(/\s+/g, '_');
+  if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
+  if (r === 'admin') return 'admin';
+  if (r === 'editor') return 'editor';
   return 'viewer';
 }
 
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
           companyName: company?.name,
           tenantSlugs: (local as any).tenantSlugs || (company?.slug ? [company.slug] : []),
           tenantIds: (local as any).tenantIds || (local.companyId ? [local.companyId] : []),
-          isSuperAdmin: Boolean(local.isSuperAdmin || local.role === 'super_admin' || local.role === 'admin'),
+          isSuperAdmin: Boolean(local.isSuperAdmin || local.role === 'super_admin'),
         };
         const token = await createSessionToken(user);
         await setSessionCookie(token);
