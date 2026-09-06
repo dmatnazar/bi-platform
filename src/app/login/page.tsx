@@ -11,6 +11,7 @@ import { ToastHost } from '@/components/ui/Toast';
 import { LoginAppsSection } from '@/components/apps/LoginAppsSection';
 import { LoginSupportModal } from '@/components/support/LoginSupportModal';
 import { requestFullscreenSafe, fullscreenPrefDisabled } from '@/lib/fullscreen';
+import { InstallAppBanner } from '@/components/pwa/InstallAppBanner';
 
 interface Notif {
   id: string;
@@ -162,6 +163,8 @@ export default function LoginPage() {
         </div>
 
         {/* Notifications for this username */}
+        <InstallAppBanner className="mb-4 sm:mb-5" />
+
         {notifs.length > 0 && (
           <div className="mb-4 space-y-2">
             {notifs.map((n) => (
