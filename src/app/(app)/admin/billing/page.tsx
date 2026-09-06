@@ -14,6 +14,9 @@ import {
   Building2,
   ArrowUpRight,
   ArrowDownRight,
+  ListOrdered,
+  ChevronRight,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
@@ -209,6 +212,9 @@ export default function BillingPage() {
   const [wallets, setWallets] = useState<WalletRow[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  /** Main hub: cards → open section */
+  const [hubPanel, setHubPanel] = useState<'home' | 'tariffs' | 'firms'>('home');
+  const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
   const [topupOpen, setTopupOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [tariffOpen, setTariffOpen] = useState(false);
@@ -397,27 +403,11 @@ export default function BillingPage() {
             <RefreshCw className="h-4 w-4" />
             Täzele
           </Button>
-          <Button size="sm" onClick={() => {
-              setEditingTariffId(null);
-              setTariffForm({
-                code: '',
-                name: '',
-                description: '',
-                priceMonthly: '0',
-                includedCredits: '500',
-                maxStaff: '5',
-                maxApiCallsDay: '100',
-                maxConnections: '2',
-              });
-              setTariffOpen(true);
-            }}>
-            <Plus className="h-4 w-4" />
-            Tarif
-          </Button>
         </div>
       </div>
 
-      {/* Summary cards */}
+
+      {/* Summary cards — always visible */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-xl border border-slate-700/80 bg-slate-900/80 p-4">
           <p className="text-[11px] uppercase tracking-wide text-slate-500">Firmalar</p>
@@ -439,69 +429,158 @@ export default function BillingPage() {
         </div>
       </div>
 
-      {/* Tariffs */}
-      <section>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-violet-400" />
-          Tarifler
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {tariffs.map((t) => (
-            <div
-              key={t.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                setTariffForm({
-                  code: t.code,
-                  name: t.name,
-                  description: t.description || '',
-                  priceMonthly: String(t.priceMonthly),
-                  includedCredits: String(t.includedCredits),
-                  maxStaff: String(t.maxStaff),
-                  maxApiCallsDay: String(t.maxApiCallsDay),
-                  maxConnections: String(t.maxConnections),
-                });
-                setEditingTariffId(t.id);
-                setTariffOpen(true);
-              }}
-              className="rounded-xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 p-4 space-y-2 cursor-pointer hover:border-indigo-500/40 transition-colors"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-white">{t.name}</p>
-                  <p className="text-[11px] font-mono text-slate-500">{t.code}</p>
-                </div>
-                <span className="text-sm font-semibold text-indigo-300 tabular-nums">
-                  {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} ${t.currency}`}
-                  {t.priceMonthly > 0 && <span className="text-[10px] text-slate-500">/aý</span>}
-                </span>
+      {/* Hub navigation cards */}
+      {hubPanel === 'home' && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={() => setHubPanel('tariffs')}
+            className="group text-left rounded-2xl border border-violet-500/25 bg-gradient-to-br from-violet-500/10 to-slate-950 p-5 hover:border-violet-400/50 transition-all shadow-lg"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="h-11 w-11 rounded-xl bg-violet-500/20 text-violet-300 flex items-center justify-center">
+                <Sparkles className="h-5 w-5" />
               </div>
-              <p className="text-xs text-slate-400 line-clamp-2">{t.description || '—'}</p>
-              <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                <span>
-                  <Coins className="inline h-3 w-3 mr-1 text-amber-400" />
-                  {t.includedCredits.toLocaleString()} REQ
-                </span>
-                <span>{t.maxStaff} işgär</span>
-                <span>{t.maxApiCallsDay}/gün REQ</span>
-                <span>{t.maxConnections} DB</span>
-              </div>
+              <ChevronRight className="h-5 w-5 text-slate-600 group-hover:text-violet-300 transition-colors" />
             </div>
-          ))}
-          {tariffs.length === 0 && !loading && (
-            <p className="text-sm text-slate-500 col-span-3">Tarif ýok — täze goşuň</p>
-          )}
-        </div>
-      </section>
+            <p className="mt-3 text-base font-semibold text-white">Tarifler</p>
+            <p className="text-xs text-slate-400 mt-1">{tariffs.length} tarif · paket we limitler</p>
+          </button>
 
-      {/* Wallets */}
-      <section>
-        <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-sky-400" />
-          Firma gaplary
-        </h2>
-        {/* Mobile cards */}
+          <button
+            type="button"
+            onClick={() => setHubPanel('firms')}
+            className="group text-left rounded-2xl border border-sky-500/25 bg-gradient-to-br from-sky-500/10 to-slate-950 p-5 hover:border-sky-400/50 transition-all shadow-lg"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="h-11 w-11 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-600 group-hover:text-sky-300 transition-colors" />
+            </div>
+            <p className="mt-3 text-base font-semibold text-white">Firmalar</p>
+            <p className="text-xs text-slate-400 mt-1">{wallets.length} firma · balans we tarif bagla</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLedgerModalOpen(true)}
+            className="group text-left rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 to-slate-950 p-5 hover:border-emerald-400/50 transition-all shadow-lg"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="h-11 w-11 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+                <ListOrdered className="h-5 w-5" />
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-600 group-hover:text-emerald-300 transition-colors" />
+            </div>
+            <p className="mt-3 text-base font-semibold text-white">Soňky hereketler</p>
+            <p className="text-xs text-slate-400 mt-1">REQ log · tablisa we export</p>
+          </button>
+        </div>
+      )}
+
+      {/* Panel: Tarifler */}
+      {hubPanel === 'tariffs' && (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setHubPanel('home')}
+              className="text-sm text-slate-400 hover:text-white inline-flex items-center gap-1"
+            >
+              ← Yza
+            </button>
+            <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-violet-400" />
+              Tarifler
+            </h2>
+            <Button size="sm" onClick={() => {
+              setEditingTariffId(null);
+              setTariffForm({
+                code: '',
+                name: '',
+                description: '',
+                priceMonthly: '0',
+                includedCredits: '500',
+                maxStaff: '5',
+                maxApiCallsDay: '100',
+                maxConnections: '2',
+              });
+              setTariffOpen(true);
+            }}>
+              <Plus className="h-4 w-4" />
+              Täze tarif
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {tariffs.map((t) => (
+              <div
+                key={t.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setTariffForm({
+                    code: t.code,
+                    name: t.name,
+                    description: t.description || '',
+                    priceMonthly: String(t.priceMonthly),
+                    includedCredits: String(t.includedCredits),
+                    maxStaff: String(t.maxStaff),
+                    maxApiCallsDay: String(t.maxApiCallsDay),
+                    maxConnections: String(t.maxConnections),
+                  });
+                  setEditingTariffId(t.id);
+                  setTariffOpen(true);
+                }}
+                className="rounded-xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 p-4 space-y-2 cursor-pointer hover:border-indigo-500/40 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-white">{t.name}</p>
+                    <p className="text-[11px] font-mono text-slate-500">{t.code}</p>
+                  </div>
+                  <span className="text-sm font-semibold text-indigo-300 tabular-nums">
+                    {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} ${t.currency}`}
+                    {t.priceMonthly > 0 && <span className="text-[10px] text-slate-500">/aý</span>}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 line-clamp-2">{t.description || '—'}</p>
+                <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                  <span>
+                    <Coins className="inline h-3 w-3 mr-1 text-amber-400" />
+                    {t.includedCredits.toLocaleString()} REQ
+                  </span>
+                  <span>{t.maxStaff} işgär</span>
+                  <span>{t.maxApiCallsDay}/gün REQ</span>
+                  <span>{t.maxConnections} DB</span>
+                </div>
+              </div>
+            ))}
+            {tariffs.length === 0 && !loading && (
+              <p className="text-sm text-slate-500 col-span-3">Tarif ýok — täze goşuň</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Panel: Firmalar (wallets) */}
+      {hubPanel === 'firms' && (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setHubPanel('home')}
+              className="text-sm text-slate-400 hover:text-white"
+            >
+              ← Yza
+            </button>
+            <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-sky-400" />
+              Firmalar
+            </h2>
+            <span className="text-xs text-slate-500">{wallets.length} firma</span>
+          </div>
+{/* Mobile cards */}
         <div className="sm:hidden space-y-3">
           {wallets.map((w) => (
             <div key={w.tenantId} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 space-y-3">
@@ -633,119 +712,91 @@ export default function BillingPage() {
             </table>
           </div>
         </div>
-      </section>
+        </section>
+      )}
 
-      {/* Ledger — table like API list */}
-      <section>
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <h2 className="text-sm font-semibold text-slate-300">Soňky hereketler</h2>
-          <Link
-            href="/admin/billing/ledger"
-            className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
-          >
-            Ählisi →
-          </Link>
-        </div>
-
-        {/* Mobile cards */}
-        <div className="sm:hidden space-y-2 mb-3">
-          {ledger.slice(0, 10).map((e) => (
-            <div key={e.id} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-3 space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-slate-500">{formatDateTime(e.createdAt)}</span>
-                <span className={`text-xs font-semibold tabular-nums ${e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {e.amount >= 0 ? '+' : ''}{e.amount}
-                </span>
+      {/* Soňky hereketler modal */}
+      {ledgerModalOpen && (
+        <ModalPortal open>
+          <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="absolute inset-0 bg-black/70" onClick={() => setLedgerModalOpen(false)} />
+            <div className="relative w-full sm:max-w-5xl max-h-[92dvh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+              <div className="shrink-0 flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-3 border-b border-slate-800 bg-slate-950/80">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white truncate">Soňky hereketler</h3>
+                  <p className="text-[11px] text-slate-500">Soňky {Math.min(ledger.length, 30)} ýazgy</p>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                  <Link
+                    href="/admin/billing/ledger"
+                    className="text-[10px] sm:text-xs font-medium text-indigo-300 hover:text-indigo-200 px-2 py-1 rounded-lg border border-indigo-500/30 whitespace-nowrap"
+                  >
+                    Ählisi + Export
+                  </Link>
+                  <button type="button" className="p-1.5 text-slate-400 hover:text-white" onClick={() => setLedgerModalOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <p className="text-sm text-white font-medium truncate">{e.tenantSlug}</p>
-              <p className="text-xs text-slate-400 truncate">{e.reason || e.type}</p>
-              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">
-                <span>Ulanyjy: <span className="text-slate-300">{displayUser(e)}</span></span>
-                <span>Device: <span className="text-slate-300">{displayDevice(e)}</span></span>
+              <div className="flex-1 min-h-0 overflow-auto p-2 sm:p-3">
+                {/* Mobile cards */}
+                <div className="sm:hidden space-y-2">
+                  {ledger.slice(0, 30).map((e) => (
+                    <div key={e.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 space-y-1">
+                      <div className="flex justify-between gap-2 text-[11px] text-slate-500">
+                        <span>{formatDateTime(e.createdAt)}</span>
+                        <span className={`font-semibold tabular-nums ${e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {e.amount >= 0 ? '+' : ''}{e.amount}
+                        </span>
+                      </div>
+                      <p className="text-sm text-white font-medium">{e.tenantSlug}</p>
+                      <p className="text-xs text-slate-400">{e.type} · {e.reason || '—'}</p>
+                      <p className="text-[11px] text-slate-500">Ulanyjy: {displayUser(e)} · Balans: {e.balanceAfter}</p>
+                    </div>
+                  ))}
+                  {ledger.length === 0 && <p className="text-center text-slate-500 text-sm py-8">Hereket ýok</p>}
+                </div>
+                <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-800">
+                  <table className="w-full text-sm text-left min-w-[720px]">
+                    <thead className="bg-slate-950 text-slate-400 text-xs uppercase">
+                      <tr className="border-b border-slate-800">
+                        <th className="px-3 py-2">Wagt</th>
+                        <th className="px-3 py-2">Firma</th>
+                        <th className="px-3 py-2">Görnüş</th>
+                        <th className="px-3 py-2">Sebäp</th>
+                        <th className="px-3 py-2">Ulanyjy</th>
+                        <th className="px-3 py-2 text-right">Mukdar</th>
+                        <th className="px-3 py-2 text-right">Balans</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      {ledger.slice(0, 30).map((e) => (
+                        <tr key={e.id} className="hover:bg-slate-800/40">
+                          <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-slate-300">{e.tenantSlug}</td>
+                          <td className="px-3 py-2 text-xs text-slate-300">{e.type}</td>
+                          <td className="px-3 py-2 text-xs text-slate-400 max-w-[160px] truncate">{e.reason || '—'}</td>
+                          <td className="px-3 py-2 text-xs text-slate-300">{displayUser(e)}</td>
+                          <td className={`px-3 py-2 text-right text-xs font-semibold tabular-nums ${e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {e.amount >= 0 ? '+' : ''}{e.amount}
+                          </td>
+                          <td className="px-3 py-2 text-right text-xs text-slate-500 tabular-nums">{e.balanceAfter}</td>
+                        </tr>
+                      ))}
+                      {ledger.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-8 text-center text-slate-500">Hereket ýok</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                </div>
               </div>
             </div>
-          ))}
-          {ledger.length === 0 && (
-            <p className="text-center text-slate-500 text-sm py-6">Hereket ýok</p>
-          )}
-        </div>
-
-        <div className="hidden sm:block rounded-xl border border-slate-700/80 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-900/80 text-slate-400 text-xs uppercase tracking-wider">
-                <tr>
-                  <th className="px-3 py-2.5 font-medium">Wagt</th>
-                  <th className="px-3 py-2.5 font-medium">Firma</th>
-                  <th className="px-3 py-2.5 font-medium">Görnüş</th>
-                  <th className="px-3 py-2.5 font-medium">Sebäp</th>
-                  <th className="px-3 py-2.5 font-medium">Ulanyjy</th>
-                  <th className="px-3 py-2.5 font-medium">Device</th>
-                  <th className="px-3 py-2.5 font-medium text-right">Mukdar</th>
-                  <th className="px-3 py-2.5 font-medium text-right">Balans</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800">
-                {ledger.slice(0, 10).map((e) => {
-                  const user = displayUser(e);
-                  const device = displayDevice(e);
-                  return (
-                    <tr key={e.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-3 py-2 text-slate-400 whitespace-nowrap text-xs">
-                        {formatDateTime(e.createdAt)}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-300 whitespace-nowrap">
-                        {e.tenantSlug}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md border ${
-                            e.amount >= 0
-                              ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/10'
-                              : 'border-rose-500/30 text-rose-400 bg-rose-500/10'
-                          }`}
-                        >
-                          {e.amount >= 0 ? (
-                            <ArrowUpRight className="h-3 w-3" />
-                          ) : (
-                            <ArrowDownRight className="h-3 w-3" />
-                          )}
-                          {e.type}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-slate-300 max-w-[180px] truncate" title={e.reason || ''}>
-                        {e.reason || '—'}
-                      </td>
-                      <td className="px-3 py-2 text-slate-300 whitespace-nowrap text-xs">{String(user)}</td>
-                      <td className="px-3 py-2 text-slate-400 whitespace-nowrap text-xs font-mono max-w-[120px] truncate" title={String(device)}>
-                        {String(device)}
-                      </td>
-                      <td
-                        className={`px-3 py-2 text-right font-semibold tabular-nums whitespace-nowrap ${
-                          e.amount >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                        }`}
-                      >
-                        {e.amount >= 0 ? '+' : ''}
-                        {e.amount}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-400 tabular-nums whitespace-nowrap text-xs">
-                        {e.balanceAfter}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {ledger.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
-                      Hereket ýok
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
           </div>
-        </div>
-      </section>
+        </ModalPortal>
+      )}
 
       {/* Top-up modal */}
       {topupOpen && selected && (

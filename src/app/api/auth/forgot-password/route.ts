@@ -161,7 +161,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(generic);
+    // Show which mailbox received the link (masked) so user can open Gmail
+    const [local, domain] = email.split('@');
+    const maskedLocal =
+      local.length <= 2
+        ? local[0] + '*'
+        : local.slice(0, 2) + '*'.repeat(Math.min(6, local.length - 2)) + local.slice(-1);
+    const emailMasked = `${maskedLocal}@${domain}`;
+
+    return NextResponse.json({
+      ok: true,
+      message: `Paroly täzelemek baglanyşygy e-poçta iberildi (15 min).`,
+      emailMasked,
+      emailDomain: domain,
+      sentToGmail: /gmail\.com$/i.test(domain),
+    });
   } catch (e: any) {
     console.error('[forgot-password]', e);
     return NextResponse.json({ error: e?.message || 'Ýalňyşlyk' }, { status: 500 });

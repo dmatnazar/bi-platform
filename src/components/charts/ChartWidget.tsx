@@ -144,6 +144,10 @@ function TableWidgetBody({
   const [search, setSearch] = useState('');
   const [colFilters, setColFilters] = useState<Record<string, string>>({});
   const [showColFilters, setShowColFilters] = useState(false);
+  /** Mobile: filter via modal (column → distinct multi-select) */
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [mobileFilterCol, setMobileFilterCol] = useState('');
+  const [mobileFilterSelected, setMobileFilterSelected] = useState<string[]>([]);
   const [sorts, setSorts] = useState<SortSpec[]>(widget.dataSource?.orderBy || []);
   const enableSearch = widget.dataSource?.enableSearch !== false;
   const dragCol = useRef<string | null>(null);
@@ -651,18 +655,135 @@ function TableWidgetBody({
           <div className="flex items-center gap-1.5 shrink-0 ml-auto">
           <button
             type="button"
-            onClick={() => setShowColFilters((v) => !v)}
+            onClick={() => {
+              // Mobile: modal with column + distinct values
+              if (typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches) {
+                setMobileFilterCol(visibleCols[0] || colOrder[0] || '');
+                setMobileFilterSelected([]);
+                setMobileFilterOpen(true);
+                return;
+              }
+              setShowColFilters((v) => !v);
+            }}
             className={cn(
-              'h-8 px-2 rounded-lg border text-xs inline-flex items-center gap-1 shrink-0',
-              showColFilters || activeColFilterCount
+              'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1 shrink-0 relative',
+              showColFilters || activeColFilterCount || mobileFilterOpen
                 ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                 : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
             )}
             title="Sütün filterleri"
           >
             <Filter className="h-3.5 w-3.5" />
-            {activeColFilterCount > 0 ? activeColFilterCount : 'Filter'}
+            <span className="hidden sm:inline">{activeColFilterCount > 0 ? activeColFilterCount : 'Filter'}</span>
+            {activeColFilterCount > 0 && (
+              <span className="sm:hidden absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 rounded-full bg-rose-500 text-[9px] font-bold text-white flex items-center justify-center">
+                {activeColFilterCount}
+              </span>
+            )}
           </button>
+          
+          {mobileFilterOpen && typeof document !== 'undefined' && createPortal(
+            <div className="fixed inset-0 z-[2147482100] flex items-end sm:items-center justify-center p-0 sm:p-4">
+              <div className="absolute inset-0 bg-black/70" onClick={() => setMobileFilterOpen(false)} />
+              <div className="relative w-full sm:max-w-md max-h-[85dvh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
+                <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                  <p className="text-sm font-semibold text-white">Sütün filter</p>
+                  <button type="button" className="p-1.5 text-slate-400" onClick={() => setMobileFilterOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="p-3 space-y-3 overflow-y-auto flex-1 min-h-0">
+                  <div>
+                    <label className="text-[11px] text-slate-400 mb-1 block">Sütün saýla</label>
+                    <select
+                      className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950 text-sm text-white px-3"
+                      value={mobileFilterCol}
+                      onChange={(e) => {
+                        setMobileFilterCol(e.target.value);
+                        setMobileFilterSelected([]);
+                      }}
+                    >
+                      {visibleCols.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-slate-400 mb-1.5">Baha (birnäçesini saýlap bilersiňiz)</p>
+                    <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800">
+                      {(() => {
+                        const col = mobileFilterCol;
+                        if (!col) return <p className="text-xs text-slate-500 p-3">Sütün ýok</p>;
+                        const uniq = [...new Set(rows.map((r) => (r[col] == null ? '' : String(r[col]))).filter((x) => x !== ''))].sort();
+                        if (!uniq.length) return <p className="text-xs text-slate-500 p-3">Baha ýok</p>;
+                        return uniq.slice(0, 500).map((val) => {
+                          const on = mobileFilterSelected.includes(val);
+                          return (
+                            <label key={val} className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 cursor-pointer hover:bg-slate-800/50">
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={() => {
+                                  setMobileFilterSelected((prev) =>
+                                    on ? prev.filter((x) => x !== val) : [...prev, val]
+                                  );
+                                }}
+                                className="rounded border-slate-600"
+                              />
+                              <span className="truncate">{val}</span>
+                            </label>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                <div className="shrink-0 flex gap-2 px-3 py-3 border-t border-slate-800">
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl border border-slate-700 py-2.5 text-xs text-slate-300"
+                    onClick={() => {
+                      if (mobileFilterCol) {
+                        setColFilters((prev) => {
+                          const n = { ...prev };
+                          delete n[mobileFilterCol];
+                          return n;
+                        });
+                      }
+                      setMobileFilterSelected([]);
+                      setMobileFilterOpen(false);
+                    }}
+                  >
+                    Arassala
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-medium text-white"
+                    onClick={() => {
+                      if (!mobileFilterCol) return;
+                      if (!mobileFilterSelected.length) {
+                        setColFilters((prev) => {
+                          const n = { ...prev };
+                          delete n[mobileFilterCol];
+                          return n;
+                        });
+                      } else {
+                        setColFilters((prev) => ({
+                          ...prev,
+                          [mobileFilterCol]: mobileFilterSelected.join(','),
+                        }));
+                      }
+                      setMobileFilterOpen(false);
+                    }}
+                  >
+                    Ulan ({mobileFilterSelected.length})
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
           <div className="relative shrink-0">
             <button
               type="button"
@@ -923,22 +1044,14 @@ function TableWidgetBody({
                 }}
               >
                 {/* Row 1 — primary cols: "col: value" same line, wrap if long */}
-                <div className="grid grid-cols-2 gap-x-1.5 gap-y-0.5">
-                  {primary.map((c, j) => (
+                <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline">
+                  {primary.map((c) => (
                     <div
                       key={c}
-                      className={cn(
-                        'min-w-0 text-[10px] sm:text-[11px] leading-snug break-words',
-                        primary.length === 1 || j === 0 ? 'col-span-2' : ''
-                      )}
+                      className="min-w-0 text-[10px] sm:text-[11px] leading-snug break-words"
                     >
                       <span className="text-slate-500">{c}: </span>
-                      <span
-                        className={cn(
-                          'text-slate-100',
-                          (primary.length === 1 || j === 0) && 'font-medium text-white'
-                        )}
-                      >
+                      <span className="font-bold text-white">
                         {formatCellValue(row[c])}
                       </span>
                     </div>
@@ -1214,22 +1327,11 @@ function TableWidgetBody({
                       return (
                         <div key={idx} className="rounded-lg border border-slate-800 bg-slate-900/50 px-2 py-1.5">
                           {/* Row 1 — primary (saýlanan) sütünler */}
-                          <div className="grid grid-cols-2 gap-x-1.5 gap-y-0.5">
-                            {primary.map((c, j) => (
-                              <div
-                                key={c}
-                                className={cn(
-                                  'min-w-0 text-[10px] sm:text-[11px] leading-snug break-words',
-                                  primary.length === 1 || j === 0 ? 'col-span-2' : ''
-                                )}
-                              >
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 items-baseline">
+                            {primary.map((c) => (
+                              <div key={c} className="min-w-0 text-[10px] sm:text-[11px] leading-snug break-words">
                                 <span className="text-slate-500">{c}: </span>
-                                <span
-                                  className={cn(
-                                    'text-slate-100',
-                                    (primary.length === 1 || j === 0) && 'font-medium text-white'
-                                  )}
-                                >
+                                <span className="font-bold text-white">
                                   {formatCellValue(r[c])}
                                 </span>
                               </div>
@@ -1418,11 +1520,13 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             else if (abs >= 1e3) text = (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
             else text = String(Math.round(num * 100) / 100);
           }
-          const nm = String(p.seriesName || seriesNameFallback || '');
-          // Show field name + value (user request); keep short so edge clamp works
-          if (nm) {
-            const short = nm.length > 11 ? nm.slice(0, 10) + '…' : nm;
-            return short + '\n' + text;
+          // Column/series name only when explicitly enabled in widget settings
+          if ((widget.config as any)?.showValueFieldName) {
+            const nm = String(p.seriesName || seriesNameFallback || '');
+            if (nm) {
+              const short = nm.length > 14 ? nm.slice(0, 13) + '…' : nm;
+              return short + '\n' + text;
+            }
           }
           return text;
         },

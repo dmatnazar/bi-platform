@@ -775,66 +775,6 @@ export function WidgetConfigPanel({
         )}
       </div>
 
-      {/* Multi-select Series fields */}
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-medium text-slate-400">
-          Series field (optional, birnäçe)
-        </label>
-        {sampleColumns.length > 0 ? (
-          <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
-            {sampleColumns.map((c) => {
-              const selected = (ds?.seriesFields?.length
-                ? ds.seriesFields
-                : ds?.seriesField
-                  ? [ds.seriesField]
-                  : []
-              ).includes(c);
-              return (
-                <label
-                  key={`sf-${c}`}
-                  className="flex items-center gap-2 text-sm text-slate-200 py-0.5 cursor-pointer hover:bg-slate-900/80 rounded px-1"
-                >
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-600 accent-indigo-500"
-                    checked={selected}
-                    onChange={() => {
-                      const prev = ds?.seriesFields?.length
-                        ? [...ds.seriesFields]
-                        : ds?.seriesField
-                          ? [ds.seriesField]
-                          : [];
-                      const next = selected ? prev.filter((x) => x !== c) : [...prev, c];
-                      patchDs({
-                        seriesFields: next.length ? next : undefined,
-                        seriesField: next[0] || undefined,
-                      });
-                    }}
-                  />
-                  <span className="truncate">{c}</span>
-                </label>
-              );
-            })}
-          </div>
-        ) : (
-          <Input
-            label=""
-            value={(ds?.seriesFields || (ds?.seriesField ? [ds.seriesField] : [])).join(', ')}
-            onChange={(e) => {
-              const next = e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-              patchDs({
-                seriesFields: next.length ? next : undefined,
-                seriesField: next[0] || undefined,
-              });
-            }}
-            placeholder="region, type (el bilen)"
-          />
-        )}
-      </div>
-
       <Input
         label="Auto-refresh (sekunt, 0=öçür)"
         type="number"
@@ -998,6 +938,24 @@ export function WidgetConfigPanel({
                       />
                       Data labels
                     </label>
+                    {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!(widget.config as any)?.showValueFieldName}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: {
+                                ...widget.config,
+                                showValueFieldName: e.target.checked,
+                              } as any,
+                            })
+                          }
+                        />
+                        Value-da column ady
+                      </label>
+                    )}
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"

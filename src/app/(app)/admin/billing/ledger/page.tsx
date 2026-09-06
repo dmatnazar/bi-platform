@@ -13,6 +13,7 @@ import {
   Search,
   Square,
   Trash2,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
@@ -310,6 +311,58 @@ export default function BillingLedgerPage() {
     }
   }
 
+  function exportExcel() {
+    const data = filtered;
+    if (!data.length) {
+      toastError('Export', 'Filtr boýunça maglumat ýok');
+      return;
+    }
+    const headers = [
+      'Wagt',
+      'Firma',
+      'Görnüş',
+      'Sebäp',
+      'Ulanyjy',
+      'Device',
+      'Mukdar',
+      'Balans',
+    ];
+    const escape = (v: unknown) => {
+      const s = String(v ?? '');
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+    const lines = [
+      headers.join(','),
+      ...data.map((e) =>
+        [
+          formatDateTime(e.createdAt),
+          e.tenantSlug,
+          e.type,
+          e.reason || '',
+          displayUser(e),
+          displayDevice(e),
+          e.amount,
+          e.balanceAfter,
+        ]
+          .map(escape)
+          .join(',')
+      ),
+    ];
+    // BOM so Excel opens UTF-8 correctly
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.href = url;
+    a.download = `req-hereketler-${tenantFilter || 'all'}-${typeFilter || 'all'}-${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toastSuccess('Export', `${data.length} setir Excel (CSV) faýla ýazyldy`);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
@@ -338,6 +391,18 @@ export default function BillingLedgerPage() {
           >
             <RefreshCw className="h-4 w-4" />
             Täzele
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!filtered.length}
+            onClick={exportExcel}
+            className="shrink-0"
+            title="Filtrlenén setirleri Excel (CSV) export"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Excel export</span>
+            <span className="sm:hidden">Export</span>
           </Button>
           <Button
             variant="outline"

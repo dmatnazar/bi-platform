@@ -71,6 +71,7 @@ export default function SettingsPage() {
   const [appAnimations, setAppAnimations] = useState(true);
   const [modalAnimations, setModalAnimations] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [fullscreenAuto, setFullscreenAuto] = useState(false);
 
   const loadGateway = useCallback(async () => {
     const res = await fetch('/api/settings');
@@ -85,6 +86,11 @@ export default function SettingsPage() {
       setAppAnimations(data.settings?.appAnimations !== false);
       setModalAnimations(data.settings?.modalAnimations !== false);
       setRegistrationEnabled(data.settings?.registrationEnabled !== false);
+      try {
+        setFullscreenAuto(localStorage.getItem('bi-fullscreen-auto') === '1');
+      } catch {
+        /* */
+      }
     }
   }, []);
 
@@ -478,6 +484,32 @@ export default function SettingsPage() {
 
         {/* Login registration toggle */}
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4">
+
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-white">Doly ekran (F11)</h2>
+          <p className="text-xs text-slate-500">
+            Default: diňe ýokarky ikona basanda açylýar. Awto açmak öçürilen — refresh / modal
+            girende doly ekran açylmaz. Awto açmak isleseňiz aşakdaky switch-i açyň (birinji basyş
+            soňra synanyşýar — brauzer talaby).
+          </p>
+          <label className="flex items-center gap-2 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={fullscreenAuto}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setFullscreenAuto(on);
+                try {
+                  localStorage.setItem('bi-fullscreen-auto', on ? '1' : '0');
+                } catch {
+                  /* */
+                }
+              }}
+            />
+            Awto doly ekran (ilkinji basyşda)
+          </label>
+        </section>
+
           <h2 className="text-sm font-semibold text-white">Login · Hasaba al</h2>
           <p className="text-xs text-slate-500">
             Öçürileninde login sahypasynda «Hasaba al» baglanyşygy görünmeýär. Täze işgär diňe admin tarapyndan goşulýar.
