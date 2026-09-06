@@ -309,6 +309,8 @@ export default function ApisPage() {
     setEditParams(mergeParamsFromSql(e.sqlQuery || '', rows));
     setExecResult(null);
     try { document.body.style.overflow = 'hidden'; } catch { /* */ }
+    // Warm SQL table names for autocomplete (silent)
+    void warmSqlSchema(e.tenantSlug, e.dbKey || 'primary');
   }
 
   function openCreate(prefillSlug?: string) {
@@ -340,6 +342,8 @@ export default function ApisPage() {
     setEditParams([]);
     setTestParamValues({});
     setExecResult(null);
+    try { document.body.style.overflow = 'hidden'; } catch { /* */ }
+    void warmSqlSchema(slug, firstDb);
   }
 
   function isEditorDirty(): boolean {
@@ -888,7 +892,9 @@ export default function ApisPage() {
                     const slug = e.target.value;
                     setEditTenantSlug(slug);
                     const tn = tenants.find((t) => t.slug === slug);
-                    setEditDbKey(tn?.connections?.[0]?.dbKey || 'primary');
+                    const db = tn?.connections?.[0]?.dbKey || 'primary';
+                    setEditDbKey(db);
+                    void warmSqlSchema(slug, db);
                   }}
                 >
                   <option value="">— saýlaň —</option>
@@ -917,7 +923,7 @@ export default function ApisPage() {
               </div>
               <div>
                 <label className="text-xs text-slate-400">Connection (dbKey)</label>
-                <select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={editDbKey} onChange={(e) => setEditDbKey(e.target.value)}>
+                <select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={editDbKey} onChange={(e) => { const v = e.target.value; setEditDbKey(v); void warmSqlSchema(editTenantSlug || editEp?.tenantSlug || '', v); }}>
                   {(() => {
                     const tn = tenants.find((t) => t.slug === (editTenantSlug || editEp?.tenantSlug));
                     const conns = tn?.connections || [];
@@ -1049,8 +1055,9 @@ export default function ApisPage() {
                     // company's first connection so dbKey never points at a
                     // connection belonging to the previous firma
                     const tn = tenants.find((t) => t.slug === slug);
-                    const firstConn = tn?.connections?.[0]?.dbKey;
-                    setEditDbKey(firstConn || 'primary');
+                    const firstConn = tn?.connections?.[0]?.dbKey || 'primary';
+                    setEditDbKey(firstConn);
+                    void warmSqlSchema(slug, firstConn);
                   }}
                 >
                   <option value="">— saýlaň —</option>
@@ -1122,7 +1129,9 @@ export default function ApisPage() {
                               setEditDbKey((prev) => (knownKeys.has(prev) ? '' : prev));
                               return;
                             }
-                            setEditDbKey(e.target.value);
+                            const v = e.target.value;
+                            setEditDbKey(v);
+                            void warmSqlSchema(editTenantSlug || editEp?.tenantSlug || '', v);
                           }}
                         >
                           {conns.length === 0 && <option value="primary">primary</option>}
@@ -1145,7 +1154,7 @@ export default function ApisPage() {
                             className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
                             placeholder="dbKey el bilen ýaz"
                             value={editDbKey}
-                            onChange={(e) => setEditDbKey(e.target.value)}
+                            onChange={(e) => { const v = e.target.value; setEditDbKey(v); void warmSqlSchema(editTenantSlug || editEp?.tenantSlug || '', v); }}
                           />
                         )}
                       </>

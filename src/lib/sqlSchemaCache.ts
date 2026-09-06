@@ -87,20 +87,16 @@ export async function fetchTableNames(
     return fromLs.tables;
   }
 
-  try {
-    const rows = await runMetaQuery(
-      tenantSlug,
-      dbKey,
-      `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t
-       FROM INFORMATION_SCHEMA.TABLES
-       WHERE TABLE_TYPE IN ('BASE TABLE','VIEW')
-       ORDER BY TABLE_SCHEMA, TABLE_NAME`
-    );
+  const parseTableRows = (rows: Record<string, unknown>[]): string[] => {
     const tables: string[] = [];
     const seen = new Set<string>();
     for (const r of rows) {
-      const schema = String(r.s ?? r.S ?? r.TABLE_SCHEMA ?? '').trim();
-      const name = String(r.t ?? r.T ?? r.TABLE_NAME ?? '').trim();
+      const schema = String(
+        r.s ?? r.S ?? r.TABLE_SCHEMA ?? r.schema_name ?? r.SCHEMA_NAME ?? ''
+      ).trim();
+      const name = String(
+        r.t ?? r.T ?? r.TABLE_NAME ?? r.name ?? r.NAME ?? ''
+      ).trim();
       if (!name) continue;
       // Prefer short name; keep schema.table if not dbo
       const full =
@@ -109,6 +105,47 @@ export async function fetchTableNames(
       seen.add(full.toLowerCase());
       tables.push(full);
     }
+    return tables;
+  };
+
+  try {
+    // Primary: INFORMATION_SCHEMA (portable)
+    let rows = await runMetaQuery(
+      tenantSlug,
+      dbKey,
+      `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t
+       FROM INFORMATION_SCHEMA.TABLES
+       WHERE TABLE_TYPE IN ('BASE TABLE','VIEW')
+       ORDER BY TABLE_SCHEMA, TABLE_NAME`
+    );
+    let tables = parseTableRows(rows);
+
+    // Fallback: sys.tables + sys.views (MSSQL) — some hosts restrict INFORMATION_SCHEMA
+    if (!tables.length) {
+      rows = await runMetaQuery(
+        tenantSlug,
+        dbKey,
+        `SELECT SCHEMA_NAME(schema_id) AS s, name AS t
+         FROM (
+           SELECT schema_id, name FROM sys.tables
+           UNION ALL
+           SELECT schema_id, name FROM sys.views
+         ) x
+         ORDER BY s, t`
+      );
+      tables = parseTableRows(rows);
+    }
+
+    // Last resort: simple sys.tables name only
+    if (!tables.length) {
+      rows = await runMetaQuery(
+        tenantSlug,
+        dbKey,
+        `SELECT name AS t FROM sys.tables ORDER BY name`
+      );
+      tables = parseTableRows(rows);
+    }
+
     const entry: TablesCache = { at: Date.now(), tables };
     tablesMem.set(key, entry);
     lsSet(lsKey, entry);

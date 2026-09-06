@@ -85,9 +85,14 @@ export default function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    // Must fire synchronously inside this gesture — calling it after an
-    // `await` loses the user-activation flag and browsers silently reject it.
-    if (!fullscreenPrefDisabled()) requestFullscreenSafe();
+    // Only auto-fullscreen when Settings → "Awto doly ekran" is enabled.
+    // Otherwise fullscreen happens solely via the top-right icon.
+    try {
+      const auto = localStorage.getItem('bi-fullscreen-auto') === '1';
+      if (auto && !fullscreenPrefDisabled()) requestFullscreenSafe();
+    } catch {
+      /* ignore */
+    }
     setError('');
     setWarning('');
     setLoading(true);
