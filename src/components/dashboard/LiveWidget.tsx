@@ -162,6 +162,7 @@ function LiveWidgetInner({
   className,
 }: Props) {
   const [rows, setRows] = useState<Record<string, unknown>[] | undefined>(undefined);
+  const [truncatedWarn, setTruncatedWarn] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [inView, setInView] = useState(false);
@@ -305,7 +306,27 @@ function LiveWidgetInner({
         if (!cancelled) {
           if (!res.ok) setError(data.error || 'API säwlik');
           else {
-            const next = Array.isArray(data.rows) ? data.rows : [];
+            let next = Array.isArray(data.rows)
+              ? data.rows
+              : Array.isArray(data)
+                ? data
+                : [];
+            const maxRows =
+              (typeof data.maxRows === 'number' && data.maxRows > 0
+                ? data.maxRows
+                : typeof (ds as any)?.maxRows === 'number' && (ds as any).maxRows > 0
+                  ? (ds as any).maxRows
+                  : 1000);
+            let truncated = Boolean(data.truncated);
+            if (next.length > maxRows) {
+              next = next.slice(0, maxRows);
+              truncated = true;
+            }
+            if (truncated) {
+              setTruncatedWarn(`Ilkinji ${maxRows} setir görkezilýär (API max setir çägi).`);
+            } else {
+              setTruncatedWarn(null);
+            }
             setRows(next);
             cacheSet(queryKey, next);
             lastFetchedKey.current = queryKey;
@@ -371,7 +392,12 @@ function LiveWidgetInner({
             : 'transition-opacity flex-1 min-h-0 h-full'
         }
       >
-        <ChartWidget
+        {truncatedWarn && (
+        <div className="shrink-0 text-[10px] text-amber-300/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-2 py-1 mb-1">
+          {truncatedWarn}
+        </div>
+      )}
+      <ChartWidget
           widget={widget}
           data={displayRows}
           globalSearch={searchQuery}

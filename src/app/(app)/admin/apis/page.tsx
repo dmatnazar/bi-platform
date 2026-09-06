@@ -29,6 +29,7 @@ interface Endpoint {
   sqlQuery?: string;
   paramsSchema?: unknown;
   cacheTtlSec?: number;
+  maxRows?: number;
   authRequired?: boolean;
 }
 
@@ -111,6 +112,7 @@ export default function ApisPage() {
   const [editSql, setEditSql] = useState('');
   const [editDbKey, setEditDbKey] = useState('primary');
   const [editCache, setEditCache] = useState(0);
+  const [editMaxRows, setEditMaxRows] = useState(1000);
   const [editAuth, setEditAuth] = useState(true);
   const [isCreate, setIsCreate] = useState(false);
   type ParamRow = { name: string; type: string; required: boolean; source: 'query' | 'url' | 'body' };
@@ -130,6 +132,7 @@ export default function ApisPage() {
   const [testParamValues, setTestParamValues] = useState<Record<string, string>>({});
   const sqlEditorRef = useRef<SqlCodeEditorHandle | null>(null);
   const [sqlHintTables, setSqlHintTables] = useState<Record<string, string[]>>({});
+  const [sqlTableNames, setSqlTableNames] = useState<string[]>([]);
   const sqlColsByTableRef = useRef<Record<string, string[]>>({});
   const sqlTablesListRef = useRef<string[]>([]);
 
@@ -191,6 +194,7 @@ export default function ApisPage() {
       const tables = await fetchTableNames(tenantSlug, dbKey || 'primary');
       if (!tables.length) return;
       sqlTablesListRef.current = tables;
+      setSqlTableNames(tables);
       // Seed empty column arrays so table names appear in autocomplete
       for (const tname of tables) {
         const k = tname.toLowerCase();
@@ -276,6 +280,12 @@ export default function ApisPage() {
     });
     setEditDbKey(e.dbKey || 'primary');
     setEditCache(e.cacheTtlSec || 0);
+    setEditMaxRows((() => {
+      const fromEp = typeof e.maxRows === 'number' && e.maxRows > 0 ? e.maxRows : 0;
+      const ps = e.paramsSchema as any;
+      const fromPs = ps && typeof ps.maxRows === 'number' && ps.maxRows > 0 ? ps.maxRows : 0;
+      return fromEp || fromPs || 1000;
+    })());
     setEditAuth(e.authRequired !== false);
     setEditTenantSlug(e.tenantSlug);
     // Parse paramsSchema into editable rows
@@ -324,6 +334,7 @@ export default function ApisPage() {
     setEditSql('SELECT 1 AS ok');
     setEditDbKey(firstDb);
     setEditCache(0);
+    setEditMaxRows(1000);
     setEditAuth(false);
     setEditTenantSlug(slug);
     setEditParams([]);
@@ -364,6 +375,7 @@ export default function ApisPage() {
       editSql !== (editEp.sqlQuery || '') ||
       editDbKey !== (editEp.dbKey || 'primary') ||
       editCache !== (editEp.cacheTtlSec || 0) ||
+      editMaxRows !== (editEp.maxRows || 1000) ||
       editAuth !== (editEp.authRequired !== false) ||
       JSON.stringify(editParams) !== JSON.stringify(origParams)
     );
@@ -464,6 +476,7 @@ export default function ApisPage() {
           dbKey: editDbKey || 'primary',
           sqlQuery: editSql,
           cacheTtlSec: editCache,
+          maxRows: editMaxRows > 0 ? editMaxRows : 1000,
           authRequired: editAuth,
           paramsSchema: {
             urlParams: editParams.filter((x) => x.source === 'url' && x.name.trim()).map((x) => ({
@@ -481,6 +494,7 @@ export default function ApisPage() {
               type: x.type || 'string',
               required: x.required,
             })),
+            maxRows: editMaxRows > 0 ? editMaxRows : 1000,
           },
         }),
       });
@@ -649,17 +663,25 @@ export default function ApisPage() {
         toastError('Execute şowsuz', data.error);
         return;
       }
+      let rows = Array.isArray(data.rows) ? data.rows : [];
+      const lim = editMaxRows > 0 ? editMaxRows : 1000;
+      let truncated = false;
+      if (rows.length > lim) {
+        rows = rows.slice(0, lim);
+        truncated = true;
+      }
       setExecResult({
         ok: true,
-        rows: data.rows || [],
-        rowCount: data.rowCount ?? (data.rows?.length || 0),
+        rows,
+        rowCount: rows.length,
         elapsedMs: data.elapsedMs,
       });
       setShowResultModal(true);
       toastSuccess(
         'Execute OK',
-        `${data.rowCount ?? data.rows?.length ?? 0} setir` +
-          (usedSelection ? ' · diňe saýlanan bölek' : '')
+        `${rows.length} setir` +
+          (usedSelection ? ' · diňe saýlanan bölek' : '') +
+          (truncated ? ` · max ${lim}` : '')
       );
     } catch (e: any) {
       setExecResult({ ok: false, error: String(e) });
@@ -913,6 +935,7 @@ export default function ApisPage() {
                 </select>
               </div>
               <Input label="Cache TTL (sek)" type="number" value={String(editCache)} onChange={(e) => setEditCache(Number(e.target.value) || 0)} />
+              <Input label="Max setir (default 1000)" type="number" value={String(editMaxRows)} onChange={(e) => setEditMaxRows(Math.max(1, Number(e.target.value) || 1000))} />
               <label className="flex items-center gap-2 text-sm text-slate-200">
                 <input type="checkbox" checked={editAuth} onChange={(e) => setEditAuth(e.target.checked)} />
                 Auth required
@@ -1140,7 +1163,17 @@ export default function ApisPage() {
                     onChange={(e) => setEditCache(Number(e.target.value) || 0)}
                   />
                 </div>
-                <div className="flex items-end pb-2">
+                <div>
+                  <label className="text-xs text-slate-400">Max setir (default 1000)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+                    value={editMaxRows}
+                    onChange={(e) => setEditMaxRows(Math.max(1, Number(e.target.value) || 1000))}
+                  />
+                </div>
+                <div className="flex items-end pb-2 col-span-2">
                   <label className="flex items-center gap-2 text-sm text-slate-300">
                     <input
                       type="checkbox"
@@ -1288,9 +1321,6 @@ export default function ApisPage() {
             <div className="flex flex-col lg:col-span-9 min-h-0" style={{ height: 'min(80vh, calc(100vh - 5.5rem))' }}>
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <label className="text-xs text-slate-400 mr-auto">SQL query</label>
-                <button type="button" onClick={() => void sqlPaste()} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
-                  <ClipboardPaste className="h-3 w-3" /> Paste
-                </button>
                 <button
                   type="button"
                   onClick={autoCompleteParams}
@@ -1298,6 +1328,9 @@ export default function ApisPage() {
                   title="SQL-däki @param-lary sanawa goş"
                 >
                   <Sparkles className="h-3 w-3" /> Auto params
+                </button>
+                <button type="button" onClick={() => void sqlPaste()} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
+                  <ClipboardPaste className="h-3 w-3" /> Paste
                 </button>
                 <button type="button" onClick={sqlCopy} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800">
                   <Copy className="h-3 w-3" /> Copy
@@ -1342,6 +1375,7 @@ export default function ApisPage() {
                   }}
                   height="100%"
                   hintTables={sqlHintTables}
+                  tableNames={sqlTableNames}
                   onNeedTableColumns={(name) => void ensureTableColumns(name)}
                 />
               </div>

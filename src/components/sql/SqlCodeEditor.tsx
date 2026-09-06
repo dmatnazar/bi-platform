@@ -25,7 +25,18 @@ const CM_JS = [
   '/vendor/codemirror/sql.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/sql-hint.min.js',
+];
+
+/** Navicat-like SQL keywords (upper-case insert) */
+const SQL_KEYWORDS = [
+  'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'NOT', 'IN', 'EXISTS', 'BETWEEN', 'LIKE',
+  'JOIN', 'INNER JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'FULL JOIN', 'CROSS JOIN', 'ON',
+  'GROUP BY', 'ORDER BY', 'HAVING', 'ASC', 'DESC', 'TOP', 'DISTINCT', 'AS', 'WITH',
+  'UNION', 'UNION ALL', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'IS', 'NULL',
+  'INNER', 'LEFT', 'RIGHT', 'FULL', 'OUTER', 'CROSS',
+  'COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COALESCE', 'ISNULL', 'CAST', 'CONVERT',
+  'GETDATE', 'DATEADD', 'DATEDIFF', 'YEAR', 'MONTH', 'DAY',
+  'INSERT', 'INTO', 'VALUES', 'UPDATE', 'SET', 'DELETE', // shown but blocked on run by safety
 ];
 
 function loadCss(href: string) {
@@ -34,6 +45,49 @@ function loadCss(href: string) {
   link.rel = 'stylesheet';
   link.href = href;
   document.head.appendChild(link);
+}
+
+/** One-time Navicat-ish hint list styling */
+function ensureHintStyles() {
+  if (document.getElementById('bi-sql-hint-style')) return;
+  const st = document.createElement('style');
+  st.id = 'bi-sql-hint-style';
+  st.textContent = `
+    .CodeMirror-hints {
+      z-index: 2147483000 !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      max-height: 280px;
+      min-width: 220px;
+      border: 1px solid #334155 !important;
+      background: #0f172a !important;
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.55);
+      padding: 4px 0;
+    }
+    .CodeMirror-hint {
+      color: #e2e8f0 !important;
+      padding: 4px 10px !important;
+      line-height: 1.35;
+    }
+    .CodeMirror-hint-active {
+      background: #4f46e5 !important;
+      color: #fff !important;
+    }
+    .bi-hint-kw { color: #c4b5fd; }
+    .bi-hint-tbl { color: #6ee7b7; }
+    .bi-hint-col { color: #93c5fd; }
+    .CodeMirror-hint-active .bi-hint-kw,
+    .CodeMirror-hint-active .bi-hint-tbl,
+    .CodeMirror-hint-active .bi-hint-col { color: #fff; }
+    .bi-hint-meta {
+      float: right;
+      margin-left: 12px;
+      opacity: 0.55;
+      font-size: 10px;
+    }
+  `;
+  document.head.appendChild(st);
 }
 
 function loadScript(src: string): Promise<void> {
@@ -59,6 +113,7 @@ function ensureCodeMirror(): Promise<void> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     CM_CSS.forEach(loadCss);
+    ensureHintStyles();
     for (const src of CM_JS) {
       await loadScript(src);
     }
@@ -67,7 +122,6 @@ function ensureCodeMirror(): Promise<void> {
 }
 
 export type SqlCodeEditorHandle = {
-  /** Selected text if any, else full value */
   getSelectedOrFull: () => string;
   getSelection: () => string;
   getValue: () => string;
@@ -79,18 +133,172 @@ interface Props {
   onChange: (val: string) => void;
   height?: string;
   autoFocus?: boolean;
-  /**
-   * CodeMirror sql-hint tables map: { TableName: ['col1','col2'], alias: [...] }
-   * Updated silently when schema cache loads — no UI spinner.
-   */
+  /** { tableOrAlias: string[] columns } */
   hintTables?: Record<string, string[]>;
-  /** Optional: called when user types a likely table/alias so parent can fetch columns */
+  /** Flat list of table names (for LIKE search) */
+  tableNames?: string[];
   onNeedTableColumns?: (tableOrAlias: string) => void;
+}
+
+type HintKind = 'keyword' | 'table' | 'column';
+
+function likeMatch(candidate: string, q: string): boolean {
+  if (!q) return true;
+  return candidate.toLowerCase().includes(q.toLowerCase());
+}
+
+function rankMatch(candidate: string, q: string): number {
+  if (!q) return 0;
+  const c = candidate.toLowerCase();
+  const qq = q.toLowerCase();
+  if (c === qq) return 0;
+  if (c.startsWith(qq)) return 1;
+  if (c.includes(`.${qq}`)) return 2;
+  const idx = c.indexOf(qq);
+  if (idx > 0) return 3 + idx;
+  return 100;
+}
+
+function makeHintItem(CM: any, text: string, kind: HintKind, meta?: string) {
+  return {
+    text,
+    displayText: text,
+    className:
+      kind === 'keyword' ? 'bi-hint-kw' : kind === 'table' ? 'bi-hint-tbl' : 'bi-hint-col',
+    render: (el: HTMLElement, _self: unknown, data: { text: string }) => {
+      const span = document.createElement('span');
+      span.className =
+        kind === 'keyword' ? 'bi-hint-kw' : kind === 'table' ? 'bi-hint-tbl' : 'bi-hint-col';
+      span.textContent = data.text;
+      el.appendChild(span);
+      if (meta) {
+        const m = document.createElement('span');
+        m.className = 'bi-hint-meta';
+        m.textContent = meta;
+        el.appendChild(m);
+      }
+    },
+  };
+}
+
+function buildSmartHint(CM: any, cm: any, opts: {
+  tables: Record<string, string[]>;
+  tableNames: string[];
+  onNeed?: (name: string) => void;
+}) {
+  const cur = cm.getCursor();
+  const line = cm.getLine(cur.line) || '';
+  const before = line.slice(0, cur.ch);
+  // word being typed
+  const wordMatch = before.match(/([A-Za-z_@#][\w@#$]*)$/);
+  const word = wordMatch ? wordMatch[1] : '';
+  const from = word
+    ? CM.Pos(cur.line, cur.ch - word.length)
+    : cur;
+  const to = cur;
+
+  // "alias." or "table." just before cursor (word may be empty after dot)
+  const dotMatch = before.match(/([A-Za-z_][\w]*)\.\s*([A-Za-z_@#][\w@#$]*)?$/);
+  const list: any[] = [];
+
+  if (dotMatch) {
+    const obj = dotMatch[1];
+    const partial = dotMatch[2] || '';
+    opts.onNeed?.(obj);
+    const cols =
+      opts.tables[obj] ||
+      opts.tables[obj.toLowerCase()] ||
+      [];
+    // also try case-insensitive key search
+    let colList = cols;
+    if (!colList.length) {
+      const k = Object.keys(opts.tables).find((x) => x.toLowerCase() === obj.toLowerCase());
+      if (k) colList = opts.tables[k] || [];
+    }
+    for (const c of colList) {
+      if (likeMatch(c, partial)) {
+        list.push(makeHintItem(CM, c, 'column', 'col'));
+      }
+    }
+    list.sort((a, b) => rankMatch(a.text, partial) - rankMatch(b.text, partial));
+    return { list: list.slice(0, 80), from: partial ? CM.Pos(cur.line, cur.ch - partial.length) : cur, to };
+  }
+
+  // After FROM / JOIN → prefer tables (LIKE)
+  const afterFrom = /\b(FROM|JOIN)\s+([A-Za-z_@#][\w@#$.]*)?$/i.test(before);
+  // After SELECT / comma / SET-like list → columns + keywords
+  const afterSelect =
+    /\bSELECT\s+(?:TOP\s+\d+\s+)?(?:DISTINCT\s+)?([\w\s,.*]*)$/i.test(before) ||
+    /,\s*([A-Za-z_@#][\w@#$]*)?$/i.test(before);
+
+  if (afterFrom) {
+    const names = opts.tableNames.length
+      ? opts.tableNames
+      : Object.keys(opts.tables);
+    for (const t of names) {
+      if (likeMatch(t, word)) {
+        list.push(makeHintItem(CM, t, 'table', 'table'));
+      }
+    }
+    list.sort((a, b) => rankMatch(a.text, word) - rankMatch(b.text, word));
+    // also schema.table short names already in list
+    return { list: list.slice(0, 100), from, to };
+  }
+
+  // Keywords first when matching (se → SELECT, fr → FROM)
+  for (const kw of SQL_KEYWORDS) {
+    if (likeMatch(kw, word) && (word.length === 0 || kw.toLowerCase().startsWith(word.toLowerCase()) || likeMatch(kw.replace(/\s+/g, ''), word))) {
+      // Prefer prefix for keywords
+      if (!word || kw.toLowerCase().startsWith(word.toLowerCase()) || kw.toLowerCase().includes(word.toLowerCase())) {
+        list.push(makeHintItem(CM, kw, 'keyword', 'SQL'));
+      }
+    }
+  }
+
+  // Tables (LIKE anywhere)
+  const names = opts.tableNames.length ? opts.tableNames : Object.keys(opts.tables);
+  for (const t of names) {
+    if (likeMatch(t, word)) list.push(makeHintItem(CM, t, 'table', 'table'));
+  }
+
+  // Columns from all known tables (when writing select list)
+  if (afterSelect || word.length >= 1) {
+    const seen = new Set<string>();
+    for (const cols of Object.values(opts.tables)) {
+      for (const c of cols || []) {
+        if (seen.has(c.toLowerCase())) continue;
+        if (likeMatch(c, word)) {
+          seen.add(c.toLowerCase());
+          list.push(makeHintItem(CM, c, 'column', 'col'));
+        }
+      }
+    }
+  }
+
+  // Dedupe by text, keep first kind priority keyword > table > column already ordered loosely
+  const dedup: any[] = [];
+  const seenText = new Set<string>();
+  for (const item of list) {
+    const k = item.text.toLowerCase();
+    if (seenText.has(k)) continue;
+    seenText.add(k);
+    dedup.push(item);
+  }
+  dedup.sort((a, b) => rankMatch(a.text, word) - rankMatch(b.text, word) || a.text.localeCompare(b.text));
+  return { list: dedup.slice(0, 120), from, to };
 }
 
 export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
   function SqlCodeEditor(
-    { value, onChange, height = '100%', autoFocus, hintTables, onNeedTableColumns },
+    {
+      value,
+      onChange,
+      height = '100%',
+      autoFocus,
+      hintTables,
+      tableNames,
+      onNeedTableColumns,
+    },
     ref
   ) {
     const hostRef = useRef<HTMLTextAreaElement>(null);
@@ -101,9 +309,10 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
     onNeedRef.current = onNeedTableColumns;
     const hintTablesRef = useRef(hintTables || {});
     hintTablesRef.current = hintTables || {};
+    const tableNamesRef = useRef(tableNames || []);
+    tableNamesRef.current = tableNames || [];
     const [ready, setReady] = useState(false);
     const [failed, setFailed] = useState(false);
-    const fallbackSelRef = useRef({ start: 0, end: 0 });
 
     useImperativeHandle(ref, () => ({
       getSelection: () => {
@@ -158,6 +367,24 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
     useEffect(() => {
       if (!ready || !hostRef.current || cmRef.current || !window.CodeMirror) return;
       const CM = window.CodeMirror;
+      ensureHintStyles();
+
+      function triggerHint(instance: any) {
+        try {
+          instance.showHint({
+            completeSingle: false,
+            hint: (cm: any) =>
+              buildSmartHint(CM, cm, {
+                tables: hintTablesRef.current,
+                tableNames: tableNamesRef.current,
+                onNeed: (n) => onNeedRef.current?.(n),
+              }),
+          });
+        } catch {
+          /* */
+        }
+      }
+
       const cm = CM.fromTextArea(hostRef.current, {
         mode: 'text/x-mssql',
         theme: 'material-darker',
@@ -168,26 +395,34 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
         matchBrackets: true,
         autofocus: !!autoFocus,
         extraKeys: {
-          'Ctrl-Space': 'autocomplete',
-          'Cmd-Space': 'autocomplete',
-        },
-        hintOptions: {
-          tables: hintTablesRef.current,
-          completeSingle: false,
+          'Ctrl-Space': (cm: any) => triggerHint(cm),
+          'Cmd-Space': (cm: any) => triggerHint(cm),
         },
       });
       cm.setValue(value || '');
-      cm.on('change', (instance: any) => {
+      cm.on('change', (instance: any, change: any) => {
         onChangeRef.current(instance.getValue());
+        // After finishing a token with space — try load columns for previous word if FROM context
+        if (change && change.origin === '+input' && change.text && change.text[0] === ' ') {
+          try {
+            const cur = instance.getCursor();
+            const line = instance.getLine(cur.line) || '';
+            const before = line.slice(0, cur.ch);
+            const m = before.match(
+              /\b(?:FROM|JOIN)\s+(?:\[?\w+\]?\.)?\[?(\w+)\]?\s+$/i
+            );
+            if (m) onNeedRef.current?.(m[1]);
+          } catch {
+            /* */
+          }
+        }
       });
 
-      // Auto-suggest while typing letters or after "."
       cm.on('inputRead', (instance: any, change: any) => {
         if (!change || change.origin !== '+input') return;
         const text = (change.text && change.text[0]) || '';
         if (!text) return;
         if (text === '.' || /[A-Za-z_@]/.test(text)) {
-          // Detect alias/table before dot for column fetch
           if (text === '.') {
             try {
               const cur = instance.getCursor();
@@ -198,24 +433,8 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
             } catch {
               /* */
             }
-          } else if (/[A-Za-z_]/.test(text)) {
-            // After FROM/JOIN word start — parent may already have tables
-            try {
-              const cur = instance.getCursor();
-              const line = instance.getLine(cur.line) || '';
-              const before = line.slice(0, cur.ch);
-              if (/\b(FROM|JOIN)\s+[A-Za-z_@]*$/i.test(before)) {
-                // tables already in hintOptions
-              }
-            } catch {
-              /* */
-            }
           }
-          try {
-            CM.commands.autocomplete(instance, null, { completeSingle: false });
-          } catch {
-            /* */
-          }
+          triggerHint(instance);
         }
       });
 
@@ -237,7 +456,6 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ready]);
 
-    // Sync external value
     useEffect(() => {
       const cm = cmRef.current;
       if (!cm) return;
@@ -252,18 +470,10 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
       }
     }, [value]);
 
-    // Update hint tables silently
     useEffect(() => {
-      const cm = cmRef.current;
-      if (!cm) return;
-      const tables = hintTables || {};
-      hintTablesRef.current = tables;
-      try {
-        cm.setOption('hintOptions', { tables, completeSingle: false });
-      } catch {
-        /* */
-      }
-    }, [hintTables]);
+      hintTablesRef.current = hintTables || {};
+      tableNamesRef.current = tableNames || [];
+    }, [hintTables, tableNames]);
 
     if (failed) {
       return (
@@ -272,10 +482,6 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
           className="w-full h-full min-h-[200px] resize-none bg-slate-950 px-3 py-2 text-xs font-mono text-emerald-300 outline-none"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onSelect={(e) => {
-            const t = e.currentTarget;
-            fallbackSelRef.current = { start: t.selectionStart, end: t.selectionEnd };
-          }}
           spellCheck={false}
         />
       );
@@ -294,7 +500,6 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
   }
 );
 
-/** Warm CodeMirror CDN cache — safe to call many times */
 export function preloadSqlEditor() {
   return ensureCodeMirror().catch(() => {});
 }

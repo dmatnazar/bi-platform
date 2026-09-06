@@ -21,6 +21,7 @@ const schema = z.object({
   paramsSchema: z.any().optional(),
   responseSchema: z.any().optional(),
   cacheTtlSec: z.number().optional(),
+  maxRows: z.number().optional(),
   authRequired: z.boolean().optional(),
   connectionId: z.string().optional(),
   databaseName: z.string().optional(),
