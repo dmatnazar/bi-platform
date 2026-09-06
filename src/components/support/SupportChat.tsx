@@ -205,22 +205,29 @@ export function SupportChat({ mode }: Props) {
     if (!file.type.startsWith('image/')) return { blob: file, compressed: false };
     try {
       const bitmap = await createImageBitmap(file);
-      const max = 1600;
+      // Mobile-friendly: max 1280px, jpeg ~0.75
+      const max = 1280;
       let { width, height } = bitmap;
-      if (width > max || height > max) {
-        const scale = Math.min(max / width, max / height);
-        width = Math.round(width * scale);
-        height = Math.round(height * scale);
-      }
+      const scale = Math.min(1, max / width, max / height);
+      width = Math.max(1, Math.round(width * scale));
+      height = Math.max(1, Math.round(height * scale));
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      if (!ctx) return { blob: file, compressed: false };
+      if (!ctx) {
+        bitmap.close?.();
+        return { blob: file, compressed: false };
+      }
       ctx.drawImage(bitmap, 0, 0, width, height);
+      bitmap.close?.();
       const blob: Blob = await new Promise((resolve) =>
-        canvas.toBlob((b) => resolve(b || file), 'image/jpeg', 0.82)
+        canvas.toBlob((b) => resolve(b || file), 'image/jpeg', 0.75)
       );
+      // Prefer smaller result
+      if (blob.size >= file.size && scale >= 0.99) {
+        return { blob: file, compressed: false };
+      }
       return { blob, compressed: true };
     } catch {
       return { blob: file, compressed: false };
@@ -321,27 +328,26 @@ export function SupportChat({ mode }: Props) {
     mode === 'admin' ? t.unreadForAdmin || 0 : t.unreadForUser || 0;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-4 h-[calc(100dvh-8rem)] min-h-[420px]">
+    <div className="flex flex-col lg:flex-row gap-2 sm:gap-4 h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-8rem)] min-h-[360px] sm:min-h-[420px]">
       {/* List */}
       <div
         className={cn(
-          'lg:w-80 shrink-0 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden',
-          activeId ? 'hidden lg:flex' : 'flex'
+          'lg:w-80 shrink-0 flex flex-col rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden',
+          activeId || composing ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'
         )}
       >
-        <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <MessageCircle className="h-4 w-4 text-indigo-400 shrink-0" />
             <h2 className="text-sm font-semibold text-white truncate">
               {mode === 'admin' ? 'Goldaw ticketleri' : 'Meniň ýüzlenmelerim'}
             </h2>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* User: checkbox filter — Ählisi / Açyk (trashed never shown to user) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {mode === 'user' && (
               <label
-                className="inline-flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5 hover:border-slate-600"
-                title={statusFilter === 'open' ? 'Diňe açyk' : 'Ählisi (açyk we beýlekiler)'}
+                className="inline-flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] text-slate-400 cursor-pointer select-none rounded-lg border border-slate-700 bg-slate-950/60 px-1.5 sm:px-2 py-1 sm:py-1.5 hover:border-slate-600"
+                title={statusFilter === 'open' ? 'Diňe açyk' : 'Ählisi'}
               >
                 <input
                   type="checkbox"
@@ -359,9 +365,9 @@ export function SupportChat({ mode }: Props) {
               </label>
             )}
             {mode === 'user' && (
-              <Button size="sm" onClick={() => setComposing(true)}>
+              <Button size="sm" onClick={() => setComposing(true)} className="h-8 px-2 sm:px-3">
                 <Plus className="h-3.5 w-3.5" />
-                Täze
+                <span className="hidden xs:inline sm:inline">Täze</span>
               </Button>
             )}
           </div>
@@ -477,7 +483,7 @@ export function SupportChat({ mode }: Props) {
       {/* Thread / compose */}
       <div
         className={cn(
-          'flex-1 flex flex-col rounded-2xl border border-slate-800 bg-slate-900/40 min-w-0 overflow-hidden',
+          'flex-1 flex flex-col rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/40 min-w-0 overflow-hidden min-h-0',
           !activeId && !composing ? 'hidden lg:flex' : 'flex'
         )}
       >
@@ -676,7 +682,7 @@ export function SupportChat({ mode }: Props) {
 
             {active.status !== 'closed' && active.status !== 'trashed' ? (
               <div
-                className="p-3 border-t border-slate-800 space-y-2 shrink-0 bg-slate-900/90 backdrop-blur-sm"
+                className="p-2 sm:p-3 border-t border-slate-800 space-y-1.5 sm:space-y-2 shrink-0 bg-slate-900/95 backdrop-blur-sm"
                 style={kbInset > 0 ? { paddingBottom: Math.max(12, kbInset) } : undefined}
               >
                 <input
@@ -715,7 +721,7 @@ export function SupportChat({ mode }: Props) {
                     ))}
                   </div>
                 )}
-                <div className="flex gap-1.5 sm:gap-2 items-end">
+                <div className="flex gap-1 sm:gap-2 items-end">
                   <div className="flex items-center gap-0.5 shrink-0">
                     <button
                       type="button"
@@ -726,7 +732,7 @@ export function SupportChat({ mode }: Props) {
                           fileRef.current.click();
                         }
                       }}
-                      className="h-9 w-9 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 inline-flex items-center justify-center"
+                      className="h-10 w-9 sm:h-9 sm:w-9 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 inline-flex items-center justify-center"
                     >
                       <Paperclip className="h-4 w-4" />
                     </button>
@@ -739,7 +745,7 @@ export function SupportChat({ mode }: Props) {
                           fileRef.current.click();
                         }
                       }}
-                      className="h-9 w-9 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 inline-flex items-center justify-center"
+                      className="h-10 w-9 sm:h-9 sm:w-9 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 inline-flex items-center justify-center"
                     >
                       <ImageIcon className="h-4 w-4" />
                     </button>
@@ -747,9 +753,9 @@ export function SupportChat({ mode }: Props) {
                   <textarea
                     value={reply}
                     onChange={(e) => setReply(e.target.value)}
-                    rows={2}
+                    rows={1}
                     placeholder={mode === 'admin' ? 'Jogap ýazyň...' : 'Adminlere ýazyň...'}
-                    className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none"
+                    className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950/80 px-2.5 sm:px-3 py-2.5 sm:py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none max-h-28"
                     onFocus={(e) => scrollFocusedIntoView(e.currentTarget)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -763,7 +769,7 @@ export function SupportChat({ mode }: Props) {
                     loading={sending}
                     onClick={() => void sendReply()}
                     disabled={!reply.trim() && pendingFiles.length === 0}
-                    className="h-9 w-9 p-0 shrink-0"
+                    className="h-10 w-10 sm:h-9 sm:w-9 p-0 shrink-0"
                   >
                     <Send className="h-4 w-4" />
                   </Button>

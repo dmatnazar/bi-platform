@@ -1,32 +1,23 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { UserCircle, Camera, Trash2, Eye, EyeOff } from 'lucide-react';
+import {
+  UserCircle,
+  Eye,
+  EyeOff,
+  Check,
+  Trash2,
+  Shield,
+  Building2,
+  Save,
+} from 'lucide-react';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { BalanceBadge } from '@/components/billing/BalanceBadge';
+import { cn } from '@/lib/utils';
 
-function compressImage(file: File, maxW: number, quality: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const scale = Math.min(1, maxW / img.width);
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, w, h);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = reject;
-    img.src = url;
-  });
-}
+type PresetAvatar = { id: string; url: string; name: string };
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -36,40 +27,40 @@ export default function ProfilePage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [maxW, setMaxW] = useState(256);
-  const [quality, setQuality] = useState(0.75);
+  const [avatars, setAvatars] = useState<PresetAvatar[]>([]);
+  const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   function toLocalPhone(p?: string | null) {
     if (!p) return '';
     return String(p).replace(/^\+?993\s?/, '').replace(/\D/g, '').slice(0, 8);
   }
 
-  async function load() {
-    const d = await fetch('/api/auth/me').then((r) => r.json());
-    const u = d.user;
+  const load = useCallback(async () => {
+    const [meRes, avRes] = await Promise.all([
+      fetch('/api/auth/me').then((r) => r.json()),
+      fetch('/api/profile/avatars').then((r) => r.json()).catch(() => ({ avatars: [] })),
+    ]);
+    const u = meRes.user;
     setUser(u);
     setFullName(u?.fullName || '');
     setLogin(u?.username || '');
     setPhoneLocal(toLocalPhone(u?.phone));
     setEmail(u?.email || '');
     setPassword(u?.passwordPlain || '');
-    if (u?.username) {
-      const base = (await fetch('/api/settings/public').then((r) => r.json()).catch(() => ({})))
-        .gatewayUrl;
-      if (base) {
-        setAvatarUrl(
-          `${String(base).replace(/\/$/, '')}/api/avatars/${encodeURIComponent(u.username)}?t=${Date.now()}`
-        );
-      }
-    }
-  }
+    setAvatars(avRes.avatars || []);
+    setSelectedAvatar(avRes.selected || u?.avatar || null);
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    void load();
+  }, [load]);
+
+  const avatarUrl = selectedAvatar
+    ? `/avatars/${encodeURIComponent(selectedAvatar)}`
+    : null;
 
   async function saveProfile() {
     setSaving(true);
@@ -99,155 +90,199 @@ export default function ProfilePage() {
     }
   }
 
-  async function onFile(file: File | null) {
-    if (!file || !user?.username) return;
+  async function selectAvatar(id: string) {
+    setSavingAvatar(true);
     try {
-      const dataUrl = await compressImage(file, maxW, quality);
-      const res = await fetch('/api/profile/avatar', {
+      const res = await fetch('/api/profile/avatars', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: dataUrl }),
+        body: JSON.stringify({ avatarId: id }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Avatar ýüklenmedi', data.error);
+        toastError('Avatar', data.error);
         return;
       }
-      toastSuccess('Avatar saklandy');
-      setAvatarUrl((data.url || avatarUrl) + `?t=${Date.now()}`);
-    } catch (e) {
-      toastError('Surat ýalňyşlygy', String(e));
+      setSelectedAvatar(data.selected);
+      setPickerOpen(false);
+      toastSuccess('Avatar saýlandy');
+    } finally {
+      setSavingAvatar(false);
     }
   }
 
-  async function removeAvatar() {
-    const res = await fetch('/api/profile/avatar', { method: 'DELETE' });
-    if (res.ok) {
-      setAvatarUrl('');
-      toastSuccess('Avatar pozuldy');
+  async function clearAvatar() {
+    setSavingAvatar(true);
+    try {
+      await fetch('/api/profile/avatars', { method: 'DELETE' });
+      setSelectedAvatar(null);
+      toastSuccess('Avatar aýryldy');
+    } finally {
+      setSavingAvatar(false);
     }
   }
 
-  if (!user) return <p className="text-slate-500 text-sm">Ýüklenýär...</p>;
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+        Ýüklenýär...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-[70vh] flex items-center justify-center p-2">
-      <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900/80 shadow-2xl p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col items-center gap-2 text-center sm:flex-row sm:items-start sm:justify-between sm:text-left">
-          <div className="space-y-1">
-            <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Profil</h1>
-            <p className="text-sm text-slate-400">Hasap sazlamalary</p>
-          </div>
-          {user?.companySlug && (
-            <BalanceBadge
-              companySlug={user.companySlug}
-              username={user.username}
-              role={user.role}
-            />
-          )}
-        </div>
+    <div className="mx-auto w-full max-w-md space-y-3 pb-6">
+      {/* Compact header row */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-base sm:text-xl font-bold text-white leading-tight">Profil</h1>
+        {user?.companySlug && (
+          <BalanceBadge
+            companySlug={user.companySlug}
+            username={user.username}
+            role={user.role}
+            compact
+          />
+        )}
+      </div>
 
-        {/* Avatar row: photo + actions beside it */}
-        <div className="flex items-center gap-4">
-          <div className="relative h-24 w-24 shrink-0 rounded-full overflow-hidden border-2 border-indigo-500/40 bg-slate-800">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 overflow-hidden">
+        {/* Compact avatar row */}
+        <div className="px-3 sm:px-4 pt-3 pb-2 flex items-center gap-3">
+          <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full overflow-hidden border-2 border-indigo-500/40 bg-slate-800 shrink-0">
             {avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={avatarUrl}
                 alt="avatar"
                 className="h-full w-full object-cover"
-                onError={() => setAvatarUrl('')}
               />
             ) : (
               <div className="h-full w-full flex items-center justify-center">
-                <UserCircle className="h-14 w-14 text-slate-600" />
+                <UserCircle className="h-8 w-8 text-slate-600" />
               </div>
             )}
           </div>
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" onClick={() => fileRef.current?.click()}>
-                <Camera className="h-4 w-4" />
-                Surat
-              </Button>
-              {avatarUrl && (
-                <Button size="sm" variant="ghost" onClick={removeAvatar}>
-                  <Trash2 className="h-4 w-4" />
-                  Poz
-                </Button>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-white truncate">{fullName || login}</p>
+            <p className="text-[11px] text-slate-500 truncate">@{login}</p>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
+                <Shield className="h-2.5 w-2.5 text-indigo-400" />
+                {user.role}
+              </span>
+              {(user.companyName || user.companySlug) && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300 max-w-[9rem] truncate">
+                  <Building2 className="h-2.5 w-2.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">{user.companyName || user.companySlug}</span>
+                </span>
               )}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => onFile(e.target.files?.[0] || null)}
-            />
-            <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
-              <label className="flex items-center gap-1.5">
-                max
-                <input
-                  type="number"
-                  min={64}
-                  max={1024}
-                  value={maxW}
-                  onChange={(e) => setMaxW(Number(e.target.value) || 256)}
-                  className="w-14 h-7 rounded-md border border-slate-700 bg-slate-950 px-1.5 text-slate-300"
-                />
-                px
-              </label>
-              <label className="flex items-center gap-1.5">
-                hil
-                <input
-                  type="number"
-                  min={0.3}
-                  max={1}
-                  step={0.05}
-                  value={quality}
-                  onChange={(e) => setQuality(Number(e.target.value) || 0.75)}
-                  className="w-14 h-7 rounded-md border border-slate-700 bg-slate-950 px-1.5 text-slate-300"
-                />
-              </label>
             </div>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <Input label="Doly ady" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <div className="px-3 sm:px-4 pb-2 flex flex-wrap gap-1.5">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8 text-xs"
+            onClick={() => setPickerOpen((v) => !v)}
+            loading={savingAvatar}
+          >
+            Avatar saýla
+          </Button>
+          {selectedAvatar && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 text-xs"
+              onClick={clearAvatar}
+              disabled={savingAvatar}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Aýyr
+            </Button>
+          )}
+        </div>
+
+        {pickerOpen && (
+          <div className="px-3 sm:px-4 pb-3">
+            <div className="rounded-xl border border-slate-700/80 bg-slate-950/60 p-2">
+              {avatars.length === 0 ? (
+                <p className="text-[11px] text-slate-500 py-3 text-center">
+                  Avatar ýok. Admin <code className="text-slate-400">public/avatars</code> goýmaly.
+                </p>
+              ) : (
+                <div className="grid grid-cols-5 sm:grid-cols-6 gap-1.5">
+                  {avatars.map((a) => {
+                    const on = selectedAvatar === a.id;
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        disabled={savingAvatar}
+                        onClick={() => void selectAvatar(a.id)}
+                        className={cn(
+                          'relative aspect-square rounded-lg overflow-hidden border-2 transition-all',
+                          on
+                            ? 'border-indigo-400 ring-2 ring-indigo-500/30'
+                            : 'border-slate-700 hover:border-slate-500'
+                        )}
+                        title={a.name}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={a.url} alt={a.name} className="h-full w-full object-cover" />
+                        {on && (
+                          <span className="absolute inset-0 bg-indigo-500/25 flex items-center justify-center">
+                            <Check className="h-4 w-4 text-white drop-shadow" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="px-3 sm:px-4 pb-4 space-y-2.5 border-t border-slate-800/80 pt-3">
+          <Input
+            label="Doly ady"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
           <Input
             label="Login"
             value={login}
             onChange={(e) => setLogin(e.target.value)}
             autoComplete="username"
           />
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-300">Parol</label>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-400">Parol</label>
             <div className="relative">
               <input
                 type={showPw ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                className="w-full h-11 px-3.5 pr-10 rounded-xl bg-slate-900/80 border border-slate-700 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                placeholder="Parol"
+                autoComplete="new-password"
+                className="w-full h-10 px-3 pr-9 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                placeholder="Täze parol (min 6)"
               />
               <button
                 type="button"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                 onClick={() => setShowPw((v) => !v)}
               >
                 {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            <p className="text-[11px] text-slate-500">
-              VPS-de saklanan parol görkezilýär. Üýtgetmek üçin täze parol ýazyň (min 6).
-            </p>
           </div>
-          <div className="space-y-1.5">
-            <label className="block text-sm font-medium text-slate-300">Telefon</label>
+
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-400">Telefon</label>
             <div className="flex rounded-xl border border-slate-700 bg-slate-900/80 overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500/50">
-              <span className="shrink-0 px-3 py-2.5 text-sm font-mono text-slate-400 bg-slate-950 border-r border-slate-700">
+              <span className="shrink-0 px-2.5 py-2 text-xs font-mono text-slate-400 bg-slate-950 border-r border-slate-700">
                 +993
               </span>
               <input
@@ -255,10 +290,12 @@ export default function ProfilePage() {
                 value={phoneLocal}
                 onChange={(e) => setPhoneLocal(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 placeholder="61 123456"
-                className="flex-1 min-w-0 bg-transparent px-3 py-2.5 text-sm text-white outline-none"
+                inputMode="numeric"
+                className="flex-1 min-w-0 bg-transparent px-2.5 py-2 text-sm text-white outline-none"
               />
             </div>
           </div>
+
           <Input
             label="Email"
             type="email"
@@ -266,11 +303,21 @@ export default function ProfilePage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="name@example.com"
           />
-        </div>
 
-        <Button className="w-full" loading={saving} onClick={saveProfile}>
-          Ýatda sakla
-        </Button>
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-slate-400">Rol</label>
+            <div className="h-10 px-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center gap-2 text-sm text-slate-400">
+              <Shield className="h-3.5 w-3.5 text-slate-500" />
+              <span className="font-medium text-slate-300 text-xs sm:text-sm">{user.role}</span>
+              <span className="ml-auto text-[9px] text-slate-600">üýtgedip bolanok</span>
+            </div>
+          </div>
+
+          <Button className="w-full h-10 mt-0.5" loading={saving} onClick={saveProfile}>
+            <Save className="h-4 w-4" />
+            Ýatda sakla
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -245,7 +245,7 @@ export async function getSettings() {
   const s = data.settings || defaultData().settings;
   // Prefer stored JSON (UI Settings) over process.env so Save is not overwritten
   // by stale .env.local / startup env. Env is only the bootstrap fallback.
-  return {
+  const settings = {
     ...s,
     gatewayUrl: (s.gatewayUrl && String(s.gatewayUrl).trim()) || process.env.GATEWAY_URL || 'http://localhost:4000',
     jwtSecret: process.env.JWT_SECRET || s.jwtSecret,
@@ -255,12 +255,28 @@ export async function getSettings() {
       process.env.ADMIN_SYNC_SECRET ||
       '',
   };
+  // Hydrate in-memory permission matrix for RBAC checks
+  try {
+    const { setPermissionOverrides } = await import('./permissions');
+    setPermissionOverrides((settings.rolePermissions as any) || null);
+  } catch {
+    /* */
+  }
+  return settings;
 }
 
 export async function updateSettings(patch: Partial<DbSchema['settings']>) {
   const data = await getData();
   data.settings = { ...data.settings, ...patch };
   writeDb(data);
+  if (patch.rolePermissions !== undefined) {
+    try {
+      const { setPermissionOverrides } = await import('./permissions');
+      setPermissionOverrides((patch.rolePermissions as any) || null);
+    } catch {
+      /* */
+    }
+  }
 }
 
 export async function listSupportTickets(opts?: {

@@ -326,7 +326,9 @@ export function BalanceBadge({
     <>
       <button
         type="button"
-        onClick={() => {
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
           setOpen(true);
           void load();
         }}

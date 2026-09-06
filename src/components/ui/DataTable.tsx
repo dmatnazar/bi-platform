@@ -213,11 +213,12 @@ export function DataTable<T>({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 justify-between">
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
+      {/* Toolbar: always one line — search + filter icon + columns icon */}
+      <div className="flex items-center gap-1.5 sm:gap-2 justify-between">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
           {toolbarLeft}
-          <div className="relative flex-1 min-w-[140px] max-w-xs">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+          <div className="relative flex-1 min-w-0 max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
             <input
               value={search}
               onChange={(e) => {
@@ -237,30 +238,30 @@ export function DataTable<T>({
               </button>
             )}
           </div>
-            <button
-              type="button"
-              onClick={() => setShowColFilters((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${
-                showColFilters
-                  ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
-                  : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
-              }`}
-              title="Sütün filterleri"
-            >
-              <Filter className="h-3.5 w-3.5" />
-              Filter
-            </button>
-        </div>
-        <div className="flex items-center gap-2">
-          {toolbarRight}
-          <div className="relative">
+          {/* Filter: icon-only on mobile, label on sm+ */}
+          <button
+            type="button"
+            onClick={() => setShowColFilters((v) => !v)}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg border h-9 w-9 sm:w-auto sm:px-2.5 shrink-0 text-xs ${
+              showColFilters
+                ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
+                : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Sütün filterleri"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Filter</span>
+          </button>
+          {/* Columns icon: next to filter on all breakpoints */}
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setColsOpen((v) => !v)}
-              className="h-9 px-3 rounded-xl border border-slate-700 bg-slate-900/80 text-xs text-slate-300 inline-flex items-center gap-1.5"
+              className="h-9 w-9 sm:w-auto sm:px-3 rounded-xl border border-slate-700 bg-slate-900/80 text-xs text-slate-300 inline-flex items-center justify-center gap-1.5"
+              title="Sütünler"
             >
               <Columns3 className="h-3.5 w-3.5" />
-              <span className="hidden xs:inline">Sütünler</span>
+              <span className="hidden sm:inline">Sütünler</span>
             </button>
             {colsOpen && (
               <>
@@ -292,6 +293,9 @@ export function DataTable<T>({
             )}
           </div>
         </div>
+        {toolbarRight ? (
+          <div className="flex items-center gap-2 shrink-0">{toolbarRight}</div>
+        ) : null}
       </div>
 
       {/* Desktop table */}

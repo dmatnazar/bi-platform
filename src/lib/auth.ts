@@ -77,7 +77,19 @@ export async function clearSessionCookie() {
   jar.delete(COOKIE_NAME);
 }
 
+let permissionsHydrated = false;
+
 export async function getSession(): Promise<SessionUser | null> {
+  // One-time load of rolePermissions matrix so canManage* see overrides
+  if (!permissionsHydrated) {
+    permissionsHydrated = true;
+    try {
+      const { getSettings } = await import('./db');
+      await getSettings();
+    } catch {
+      /* */
+    }
+  }
   const jar = await cookies();
   const token = jar.get(COOKIE_NAME)?.value;
   if (!token) return null;
@@ -160,11 +172,19 @@ export {
   canChangeCompanySlug,
   canManageTariffs,
   canTopupBilling,
+  canManageBilling,
+  canManageCompanies,
+  canManagePermissions,
+  canHandleSupport,
+  canEditDashboards,
+  canViewDashboards,
   assignableRoles,
+  visibleStaffRoles,
   canDeleteStaffMember,
   wouldRemoveLastSuperAdmin,
   isAdminRole,
   isAdminOrSuper,
   canConfirmStaffRegistration,
   canEditNews as rbacCanEditNews,
+  canManageStaff as canManageStaffUser,
 } from './rbac';

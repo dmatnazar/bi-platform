@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageStaff, isSuperAdmin, assignableRoles, canDeleteStaffMember, wouldRemoveLastSuperAdmin, actorTenantSlugs, filterByTenantScope } from '@/lib/auth';
+import { getSession, canManageStaff, canManageStaffUser, isSuperAdmin, assignableRoles, visibleStaffRoles, canDeleteStaffMember, wouldRemoveLastSuperAdmin, actorTenantSlugs, filterByTenantScope } from '@/lib/auth';
 import {
   fetchCatalog,
   checkGatewayHealth,
@@ -10,13 +10,21 @@ import {
   staffLookup,
   decryptPasswordPlain,
 } from '@/lib/gateway';
-import { listStaff, ensureDemoUsers, getCompanyById } from '@/lib/db';
+import { listStaff, ensureDemoUsers, getCompanyById, getSettings } from '@/lib/db';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 
-export async function GET() {
+async function assertCanManageStaff() {
   const user = await getSession();
-  if (!user || !canManageStaff(user.role)) {
+  await getSettings(); // hydrate rolePermissions matrix
+  if (!user) return null;
+  if (canManageStaffUser(user) || canManageStaff(user.role)) return user;
+  return null;
+}
+
+export async function GET() {
+  const user = await assertCanManageStaff();
+  if (!user) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
@@ -95,9 +103,11 @@ export async function GET() {
   for (const s of localMapped) byUser.set(s.username.toLowerCase(), s);
   for (const s of remoteMapped) byUser.set(s.username.toLowerCase(), s);
 
-  const staff = Array.from(byUser.values()).sort((a, b) =>
-    a.fullName.localeCompare(b.fullName)
+  const allowedRoles = new Set(visibleStaffRoles(user).map((r) => r.toLowerCase()));
+  let staff = Array.from(byUser.values()).filter((s) =>
+    allowedRoles.has(String(s.role || '').toLowerCase())
   );
+  staff = staff.sort((a, b) => a.fullName.localeCompare(b.fullName));
 
   return NextResponse.json({ staff, count: staff.length });
 }
@@ -117,8 +127,8 @@ const upsertSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const user = await getSession();
-  if (!user || !canManageStaff(user.role)) {
+  const user = await assertCanManageStaff();
+  if (!user) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
@@ -301,8 +311,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const user = await getSession();
-  if (!user || !canManageStaff(user.role)) {
+  const user = await assertCanManageStaff();
+  if (!user) {
     return NextResponse.json({ error: 'Rugsat yok' }, { status: 403 });
   }
 

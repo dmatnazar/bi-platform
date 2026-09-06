@@ -114,11 +114,15 @@ export default function StaffPage() {
         { value: 'super_admin', label: 'Super admin' },
       ];
     }
-    // admin & editor: only viewer + editor
-    return [
-      { value: 'viewer', label: 'Viewer' },
-      { value: 'editor', label: 'Editor' },
-    ];
+    // admin: viewer + editor
+    if (meRole === 'admin') {
+      return [
+        { value: 'viewer', label: 'Viewer' },
+        { value: 'editor', label: 'Editor' },
+      ];
+    }
+    // editor: only viewer
+    return [{ value: 'viewer', label: 'Viewer' }];
   }, [meRole, meIsSuper]);
 
   const visibleCompanies = useMemo(() => {
@@ -139,18 +143,26 @@ export default function StaffPage() {
         ...row,
         companyName: row.companyName || row.tenantSlug || '',
       }));
+      const allowedRoles =
+        meIsSuper
+          ? null
+          : meRole === 'admin' || meRole === 'editor'
+            ? new Set(['viewer', 'editor'])
+            : new Set<string>();
       setStaff(
-        list.filter(
-          (row: StaffRow) =>
-            (meId ? row.id !== meId : true) &&
-            true // login bolan işgär hem sanawda görünsin
-        )
+        list.filter((row: StaffRow) => {
+          if (meId && row.id === meId) return false;
+          if (allowedRoles && !allowedRoles.has(String(row.role || '').toLowerCase())) {
+            return false;
+          }
+          return true;
+        })
       );
       setRegs(r.registrations || []);
     } finally {
       setLoading(false);
     }
-  }, [meId, meUsername]);
+  }, [meId, meUsername, meRole, meIsSuper]);
 
   useEffect(() => {
     load();
@@ -191,6 +203,20 @@ export default function StaffPage() {
   }
 
   function openEdit(row: StaffRow) {
+    // Editor may only open/edit viewer staff
+    if (meRole === 'editor' && String(row.role || '').toLowerCase() !== 'viewer') {
+      toastError('Rugsat ýok', 'Editor diňe viewer işgärleri üýtgedip bilýär');
+      return;
+    }
+    // Admin may not open admin / super_admin
+    if (
+      meRole === 'admin' &&
+      !meIsSuper &&
+      ['admin', 'super_admin'].includes(String(row.role || '').toLowerCase())
+    ) {
+      toastError('Rugsat ýok', 'Admin diňe viewer we editor işgärleri üýtgedip bilýär');
+      return;
+    }
     setEditing(row);
     setForm({
       fullName: row.fullName,

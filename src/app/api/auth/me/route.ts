@@ -2,6 +2,18 @@ import { NextResponse } from 'next/server';
 import { getSession, clearSessionCookie } from '@/lib/auth';
 import { getStaffById, getStaffByUsername } from '@/lib/db';
 import { checkGatewayHealth, fetchCatalog, decryptPasswordPlain } from '@/lib/gateway';
+import path from 'node:path';
+import fs from 'node:fs/promises';
+
+async function readAvatarMap(): Promise<Record<string, string>> {
+  try {
+    const raw = await fs.readFile(path.join(process.cwd(), 'data', 'user-avatars.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 export async function GET() {
   const user = await getSession();
@@ -14,6 +26,7 @@ export async function GET() {
   let passwordPlain = '';
   let fullName = user.fullName || '';
   let username = user.username;
+  let avatar: string | null = null;
 
   try {
     const staff = (await getStaffById(user.id)) || (await getStaffByUsername(user.username));
@@ -22,9 +35,19 @@ export async function GET() {
       email = staff.email || null;
       fullName = staff.fullName || fullName;
       username = staff.username || username;
+      avatar = (staff as any).avatar || null;
     }
   } catch {
     /* ignore */
+  }
+
+  // Dedicated avatar map (survives missing local staff / profile save)
+  try {
+    const map = await readAvatarMap();
+    const k = String(user.username || '').toLowerCase();
+    if (k && map[k]) avatar = map[k];
+  } catch {
+    /* */
   }
 
   // Enrich from VPS catalog (source of truth)
@@ -57,7 +80,8 @@ export async function GET() {
       username,
       phone,
       email,
-      /** Plain password when VPS has encrypted copy (for profile edit UI) */
+      avatar,
+      avatarUrl: avatar ? `/avatars/${encodeURIComponent(avatar)}` : null,
       passwordPlain: passwordPlain || null,
     },
   });

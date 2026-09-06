@@ -21,11 +21,25 @@ import {
   Loader2,
   Newspaper,
   Headphones,
+  Shield,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/lib/types';
-import { canManageStaff, isSuperAdmin, isViewerOnly, isEditor, isAdmin, canManageDevices, canManageApis, canManageConnections, canManageApps, canManageSettings } from '@/lib/auth-client';
+import {
+  canManageStaff,
+  isSuperAdmin,
+  isViewerOnly,
+  isEditor,
+  isAdmin,
+  canManageDevices,
+  canManageApis,
+  canManageConnections,
+  canManageApps,
+  canManageSettings,
+  canManageBilling,
+  canManageCompanies,
+} from '@/lib/auth-client';
 import { BalanceBadge } from '@/components/billing/BalanceBadge';
 
 interface Props {
@@ -52,6 +66,8 @@ export function Sidebar({ user }: Props) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [badges, setBadges] = useState<NavBadges>({});
+  /** Effective permission flags from server matrix (overrides static role defaults) */
+  const [permFlags, setPermFlags] = useState<Record<string, boolean> | null>(null);
 
   useEffect(() => {
     try {
@@ -60,6 +76,28 @@ export function Sidebar({ user }: Props) {
       /* */
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/permissions');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.self) {
+          setPermFlags(data.self);
+        } else if (data.matrix && user.role) {
+          setPermFlags(data.matrix[user.role] || null);
+        }
+      } catch {
+        /* keep static fallbacks */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user.role]);
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {
@@ -96,16 +134,19 @@ export function Sidebar({ user }: Props) {
   }, [loadBadges]);
 
   const superA = isSuperAdmin(user);
-  const adminA = isAdmin(user); // admin or super
-  const editorA = isEditor(user.role);
-  const staffOk = canManageStaff(user.role);
-  const devicesOk = canManageDevices(user);
-  const apisOk = canManageApis(user);
-  const connOk = canManageConnections(user);
-  const appsOk = canManageApps(user);
-  const settingsOk = canManageSettings(user);
-  // companies + billing: editor, admin, super
-  const firmsOk = editorA || adminA || superA;
+  // Prefer live matrix flags; fall back to static role helpers
+  const p = (key: string, fallback: boolean) =>
+    permFlags && typeof permFlags[key] === 'boolean' ? Boolean(permFlags[key]) : fallback;
+
+  const staffOk = p('manage_staff', canManageStaff(user.role));
+  const firmsOk = p('manage_companies', canManageCompanies(user) || isEditor(user.role) || isAdmin(user));
+  const billingOk = p('manage_billing', canManageBilling(user) || isEditor(user.role) || isAdmin(user));
+  const devicesOk = p('manage_devices', canManageDevices(user));
+  const apisOk = p('manage_apis', canManageApis(user));
+  const connOk = p('manage_connections', canManageConnections(user));
+  const appsOk = p('manage_apps', canManageApps(user));
+  const settingsOk = p('manage_settings', canManageSettings(user));
+  const permissionsOk = p('manage_permissions', superA);
 
   const nav: {
     href: string;
@@ -121,48 +162,48 @@ export function Sidebar({ user }: Props) {
       badge: badges.newsUnread,
     },
     { href: '/tech-support', label: 'Tehniki goldaw', icon: Headphones },
-    ...(!isViewerOnly(user.role)
+    ...(staffOk
       ? [
-          ...(staffOk
-            ? [
-                {
-                  href: '/admin/staff',
-                  label: 'Işgärler',
-                  icon: Users,
-                  badge: badges.staffPending,
-                },
-              ]
-            : []),
-          ...(firmsOk
-            ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
-            : []),
-          ...(firmsOk
-            ? [
-                {
-                  href: '/admin/billing',
-                  label: 'Tarif & Balans',
-                  icon: Wallet,
-                  badge: badges.billingEmpty,
-                },
-              ]
-            : []),
-          ...(devicesOk
-            ? [
-                {
-                  href: '/admin/devices',
-                  label: 'Enjamlar',
-                  icon: Server,
-                  badge: badges.devicesPending,
-                },
-              ]
-            : []),
-          ...(apisOk ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }] : []),
-          ...(connOk
-            ? [{ href: '/admin/connections', label: 'DB baglanyşyklar', icon: Database }]
-            : []),
-          ...(appsOk ? [{ href: '/admin/apps', label: 'Programmalar', icon: AppWindow }] : []),
-          ...(settingsOk ? [{ href: '/admin/settings', label: 'Sazlamalar', icon: Settings }] : []),
+          {
+            href: '/admin/staff',
+            label: 'Işgärler',
+            icon: Users,
+            badge: badges.staffPending,
+          },
         ]
+      : []),
+    ...(firmsOk
+      ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
+      : []),
+    ...(billingOk
+      ? [
+          {
+            href: '/admin/billing',
+            label: 'Tarif & Balans',
+            icon: Wallet,
+            badge: badges.billingEmpty,
+          },
+        ]
+      : []),
+    ...(devicesOk
+      ? [
+          {
+            href: '/admin/devices',
+            label: 'Enjamlar',
+            icon: Server,
+            badge: badges.devicesPending,
+          },
+        ]
+      : []),
+    ...(apisOk ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }] : []),
+    ...(connOk
+      ? [{ href: '/admin/connections', label: 'DB baglanyşyklar', icon: Database }]
+      : []),
+    ...(appsOk ? [{ href: '/admin/apps', label: 'Programmalar', icon: AppWindow }] : []),
+    ...(settingsOk ? [{ href: '/admin/settings', label: 'Sazlamalar', icon: Settings }] : []),
+    // Rugsatlar — diňe super admin (matrix + hard lock)
+    ...(permissionsOk || superA
+      ? [{ href: '/admin/permissions', label: 'Rugsatlar', icon: Shield }]
       : []),
   ];
 
@@ -249,24 +290,66 @@ export function Sidebar({ user }: Props) {
       </nav>
 
       <div className="border-t border-slate-800 p-3 space-y-2">
-        <div className="flex items-center gap-2 px-1">
-          <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0">
-            <UserCircle className="h-5 w-5 text-slate-400" />
+        <Link
+          href="/profile"
+          onClick={(e) => {
+            if (logoutPending || navPending) {
+              e.preventDefault();
+              return;
+            }
+            if (pathname === '/profile' || pathname.startsWith('/profile/')) {
+              e.preventDefault();
+              setOpen(false);
+              return;
+            }
+            setNavPending('/profile');
+            setOpen(false);
+          }}
+          className={cn(
+            'flex items-center gap-2 px-1 py-1.5 rounded-xl transition-colors',
+            pathname === '/profile' || pathname.startsWith('/profile/')
+              ? 'bg-indigo-500/10 ring-1 ring-indigo-500/30'
+              : 'hover:bg-slate-800/60'
+          )}
+          title="Profil"
+        >
+          <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden border border-slate-700">
+            {(user as any).avatarUrl || (user as any).avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={
+                  (user as any).avatarUrl ||
+                  `/avatars/${encodeURIComponent(String((user as any).avatar))}`
+                }
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <UserCircle className="h-5 w-5 text-slate-400" />
+            )}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 text-left">
             <p className="text-xs font-medium text-slate-200 truncate">
               {user.fullName || user.username}
             </p>
-            <p className="text-[10px] text-slate-500 truncate">{user.role}</p>
+            <p className="text-[10px] text-slate-500 truncate">Profil · {user.role}</p>
           </div>
-          <BalanceBadge
-            compact
-            companySlug={user.companySlug}
-            tenantSlugs={user.tenantSlugs}
-            username={user.username}
-            role={user.role}
-          />
-        </div>
+          <span
+            className="shrink-0"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          >
+            <BalanceBadge
+              compact
+              companySlug={user.companySlug}
+              tenantSlugs={user.tenantSlugs}
+              username={user.username}
+              role={user.role}
+            />
+          </span>
+        </Link>
         <button
           type="button"
           disabled={logoutPending || !!navPending}

@@ -1,4 +1,5 @@
 import type { SessionUser, StaffRole } from './types';
+import { userHasPermission, roleHasPermission } from './permissions';
 
 /** Tenant slugs the actor may touch (empty = none; super_admin = unrestricted) */
 export function actorTenantSlugs(user: SessionUser | null | undefined): string[] {
@@ -87,86 +88,107 @@ export function clampTenantSlugs(
   return req.filter((s) => mine.has(s));
 }
 
-/* ─── module gates ─────────────────────────────────────────── */
+/* ─── module gates (driven by Rugsatlar matrix; super always allowed) ─── */
 
 export function canViewDashboards(user: SessionUser): boolean {
-  return Boolean(user);
+  return userHasPermission(user, 'view_dashboards');
 }
 
 export function canEditDashboards(user: SessionUser): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'editor';
+  return userHasPermission(user, 'edit_dashboards');
 }
 
 export function canManageStaff(user: SessionUser): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'editor';
+  return userHasPermission(user, 'manage_staff');
 }
 
 export function canManageCompanies(user: SessionUser): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'editor';
+  return userHasPermission(user, 'manage_companies');
 }
 
 export function canDeleteCompany(user: SessionUser): boolean {
-  return isSuperAdmin(user) || isAdminRole(user);
+  return userHasPermission(user, 'delete_company');
 }
 
 export function canToggleCompanyActive(user: SessionUser): boolean {
-  return isSuperAdmin(user) || isAdminRole(user);
+  return userHasPermission(user, 'toggle_company_active');
 }
 
 export function canChangeCompanySlug(user: SessionUser): boolean {
-  return isSuperAdmin(user);
+  return userHasPermission(user, 'change_company_slug');
 }
 
 export function canManageBilling(user: SessionUser): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'editor';
+  return userHasPermission(user, 'manage_billing');
 }
 
 export function canManageTariffs(user: SessionUser): boolean {
-  return isSuperAdmin(user);
+  return userHasPermission(user, 'manage_tariffs');
 }
 
 export function canTopupBilling(user: SessionUser): boolean {
-  return isSuperAdmin(user);
+  return userHasPermission(user, 'topup_billing');
 }
 
 export function canManageDevices(user: SessionUser): boolean {
-  return isSuperAdmin(user) || isAdminRole(user);
+  return userHasPermission(user, 'manage_devices');
 }
 
-/** Pending device approve UI — super only */
+/** Pending device approve UI — super only by default */
 export function canApproveDevices(user: SessionUser): boolean {
-  return isSuperAdmin(user);
+  return userHasPermission(user, 'approve_devices');
 }
 
 export function canManageApis(user: SessionUser): boolean {
-  return isSuperAdmin(user) || isAdminRole(user);
+  return userHasPermission(user, 'manage_apis');
 }
 
 export function canManageConnections(user: SessionUser): boolean {
-  return isSuperAdmin(user) || isAdminRole(user);
+  return userHasPermission(user, 'manage_connections');
 }
 
 export function canManageApps(user: SessionUser): boolean {
-  return isSuperAdmin(user);
+  return userHasPermission(user, 'manage_apps');
 }
 
 export function canManageSettings(user: SessionUser): boolean {
-  return isSuperAdmin(user);
+  return userHasPermission(user, 'manage_settings');
 }
 
 export function canEditNews(user: SessionUser): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'editor';
+  return userHasPermission(user, 'edit_news');
 }
 
 export function canConfirmStaffRegistration(user: SessionUser): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'editor';
+  return userHasPermission(user, 'confirm_registration');
 }
 
-/** Roles actor may assign to staff */
+export function canManagePermissions(user: SessionUser): boolean {
+  return userHasPermission(user, 'manage_permissions');
+}
+
+export function canHandleSupport(user: SessionUser): boolean {
+  return userHasPermission(user, 'handle_support');
+}
+
+/** Roles actor may assign to staff (matrix-driven) */
 export function assignableRoles(actor: SessionUser): StaffRole[] {
   if (isSuperAdmin(actor)) return ['viewer', 'editor', 'admin', 'super_admin'];
-  // admin & editor: only viewer + editor
-  if (actor.role === 'admin' || actor.role === 'editor') return ['viewer', 'editor'];
+  const out: StaffRole[] = [];
+  if (roleHasPermission(actor.role, 'assign_viewer')) out.push('viewer');
+  if (roleHasPermission(actor.role, 'assign_editor')) out.push('editor');
+  if (roleHasPermission(actor.role, 'assign_admin')) out.push('admin');
+  if (roleHasPermission(actor.role, 'assign_super_admin')) out.push('super_admin');
+  return out;
+}
+
+/** Roles actor may see in staff list (tenant scope still applies separately) */
+export function visibleStaffRoles(actor: SessionUser): StaffRole[] {
+  if (isSuperAdmin(actor)) return ['viewer', 'editor', 'admin', 'super_admin'];
+  // admin: no super_admin / other admins — only viewer + editor of own firm
+  if (actor.role === 'admin') return ['viewer', 'editor'];
+  // editor: viewers + editors of own firm
+  if (actor.role === 'editor') return ['viewer', 'editor'];
   return [];
 }
 
@@ -186,6 +208,10 @@ export function canDeleteStaffMember(
   // admin cannot delete admin (only super)
   if (tr === 'admin' && !isSuperAdmin(actor)) {
     return { ok: false, reason: 'Admin işgäri diňe super admin pozup bilýär' };
+  }
+  // editor may only manage / delete viewers
+  if (actor.role === 'editor' && tr !== 'viewer') {
+    return { ok: false, reason: 'Editor diňe viewer işgärleri dolandryp bilýär' };
   }
   return { ok: true };
 }

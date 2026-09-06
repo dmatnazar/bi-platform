@@ -117,13 +117,20 @@ export default function NewsPage() {
   async function uploadImage(file: File) {
     setUploading(true);
     try {
+      const { compressImageFile } = await import('@/lib/image-compress-client');
+      const { file: out, compressed } = await compressImageFile(file, {
+        maxWidth: 1600,
+        maxHeight: 1600,
+        quality: 0.78,
+      });
       const fd = new FormData();
-      fd.append('file', file);
+      fd.append('file', out);
+      if (compressed) fd.append('compressed', '1');
       const res = await fetch('/api/news/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
       setImages((prev) => [...prev, data.url]);
-      toastSuccess('Surat goşuldy');
+      toastSuccess(compressed ? 'Surat gysyldy we goşuldy' : 'Surat goşuldy');
     } catch (e) {
       toastError('Surat', String(e));
     } finally {

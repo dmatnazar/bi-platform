@@ -39,6 +39,8 @@ export interface StaffMember {
   active: boolean;
   /** If true, this is a platform-level super admin (sees all companies) */
   isSuperAdmin?: boolean;
+  /** Preset avatar filename under /public/avatars (no custom upload) */
+  avatar?: string;
   tenantSlugs?: string[];
   tenantIds?: string[];
   createdAt: string;
@@ -465,6 +467,16 @@ export interface DbSchema {
     modalAnimations?: boolean;
     /** Show «Hasaba al» on login page (default true) */
     registrationEnabled?: boolean;
+    /**
+     * Role → permission overrides (Rugsatlar module).
+     * super_admin is always full access; superOnly keys locked for others.
+     */
+    rolePermissions?: {
+      super_admin?: Record<string, boolean>;
+      admin?: Record<string, boolean>;
+      editor?: Record<string, boolean>;
+      viewer?: Record<string, boolean>;
+    };
     /** Gmail / SMTP for forgot-password */
     mail?: {
       enabled?: boolean;
