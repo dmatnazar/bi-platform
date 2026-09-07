@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, isSuperAdmin } from '@/lib/auth';
+import { getSession, isSuperAdmin, canHandleSupport } from '@/lib/auth';
 import {
   getSupportTicket,
   upsertSupportTicket,
@@ -12,8 +12,8 @@ import { z } from 'zod';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-function isAdminRole(role: string) {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+function isSupportStaff(user: any) {
+  return canHandleSupport(user) || isSuperAdmin(user);
 }
 
 function canAccess(
@@ -21,7 +21,7 @@ function canAccess(
   ticket: { userId: string; companyId: string }
 ) {
   if (isSuperAdmin(user as any) || user.role === 'super_admin') return true;
-  if (isAdminRole(user.role) && ticket.companyId === user.companyId) return true;
+  if (isSupportStaff(user) && ticket.companyId === user.companyId) return true;
   if (ticket.userId === user.id) return true;
   return false;
 }
@@ -37,7 +37,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
-  const admin = isAdminRole(user.role) || isSuperAdmin(user);
+  const admin = isSupportStaff(user);
   await markSupportRead(id, admin ? 'admin' : 'user');
 
   let fresh = await getSupportTicket(id);
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Ticket ýapyk / pozulan' }, { status: 400 });
   }
 
-  const admin = isAdminRole(user.role) || isSuperAdmin(user);
+  const admin = isSupportStaff(user);
   // User may only write on their own ticket; admin replies as staff
   if (!admin && ticket.userId !== user.id) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
@@ -142,7 +142,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
 
-  const admin = isAdminRole(user.role) || isSuperAdmin(user);
+  const admin = isSupportStaff(user);
   if (!admin) return NextResponse.json({ error: 'Diňe admin' }, { status: 403 });
 
   const { id } = await ctx.params;
@@ -176,7 +176,7 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
 
-  const admin = isAdminRole(user.role) || isSuperAdmin(user);
+  const admin = isSupportStaff(user);
   if (!admin) return NextResponse.json({ error: 'Diňe admin' }, { status: 403 });
 
   const { id } = await ctx.params;

@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSessionToken, setSessionCookie } from '@/lib/auth';
+import { getSettings } from '@/lib/db';
+import {
+  listActiveSessionsForUser,
+  createSession,
+  revokeUserSessions,
+  revokeSession,
+  publicSessionView,
+  type SessionLoginPolicy,
+} from '@/lib/session-store';
+
 import { staffLookup, verifyPasswordHash } from '@/lib/gateway';
 import { getStaffByUsername, verifyPassword as localVerify } from '@/lib/auth-local';
 import { getCompanyById, ensureDemoUsers } from '@/lib/db';
@@ -9,6 +19,10 @@ import type { SessionUser, StaffRole } from '@/lib/types';
 const schema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
+  deviceId: z.string().min(1).optional(),
+  deviceName: z.string().optional(),
+  /** User confirmed replacing other sessions (after session_limit warning) */
+  confirmReplace: z.boolean().optional(),
 });
 
 /**
@@ -23,6 +37,113 @@ function mapRole(role: string): StaffRole {
   if (r === 'editor') return 'editor';
   return 'viewer';
 }
+
+function clientIp(req: NextRequest): string {
+  const xf = req.headers.get('x-forwarded-for');
+  if (xf) return xf.split(',')[0]?.trim() || 'unknown';
+  return req.headers.get('x-real-ip')?.trim() || req.headers.get('cf-connecting-ip')?.trim() || 'unknown';
+}
+
+/**
+ * Enforce max concurrent devices / login policy, then create session + JWT cookie.
+ * Returns NextResponse on block/warn, or null if caller should continue with... actually returns response always for success path.
+ */
+async function issueSessionResponse(
+  req: NextRequest,
+  user: SessionUser,
+  opts: { deviceId?: string; deviceName?: string; confirmReplace?: boolean }
+): Promise<NextResponse> {
+  const settings = await getSettings();
+  const maxDevices = Math.max(1, Number((settings as any).maxConcurrentDevices) || 1);
+  const policy = (String((settings as any).sessionLoginPolicy || 'warn') as SessionLoginPolicy);
+  const deviceId = String(opts.deviceId || `web-${user.id}`).slice(0, 128);
+  const deviceName = String(opts.deviceName || 'Web brauzer').slice(0, 120);
+  const ip = clientIp(req);
+  const ua = req.headers.get('user-agent') || '';
+
+  let active = listActiveSessionsForUser(user.id);
+  // Same device reconnect: revoke old sessions for this deviceId only, don't count as conflict
+  const sameDevice = active.filter((s) => s.deviceId === deviceId);
+  for (const s of sameDevice) {
+    revokeSession(s.id, 'same_device_relogin');
+  }
+  active = listActiveSessionsForUser(user.id);
+
+  if (active.length >= maxDevices) {
+    if (policy === 'strict' && !opts.confirmReplace) {
+      return NextResponse.json(
+        {
+          error: 'Bu hasap başga enjamda açyk. Iň köp enjam çägine ýetdi.',
+          code: 'session_limit_strict',
+          maxDevices,
+          sessions: active.map(publicSessionView),
+        },
+        { status: 403 }
+      );
+    }
+    if (policy === 'warn' && !opts.confirmReplace) {
+      return NextResponse.json(
+        {
+          error: 'Bu hasap başga enjamda açyk. Dowam etseňiz beýleki seanslar ýapylar.',
+          code: 'session_limit',
+          maxDevices,
+          sessions: active.map(publicSessionView),
+        },
+        { status: 409 }
+      );
+    }
+    // confirmReplace or kick_oldest
+    if (policy === 'kick_oldest' && !opts.confirmReplace) {
+      // drop oldest until room for 1 new
+      const sorted = [...active].sort((a, b) => a.lastSeenAt.localeCompare(b.lastSeenAt));
+      const need = active.length - maxDevices + 1;
+      for (let i = 0; i < need && i < sorted.length; i++) {
+        revokeSession(sorted[i].id, 'kick_oldest');
+      }
+    } else {
+      // warn confirmed or strict shouldn't reach here with confirm; replace all others
+      revokeUserSessions(user.id, { reason: 'replaced_by_new_login' });
+    }
+  }
+
+  const session = createSession({
+    userId: user.id,
+    username: user.username,
+    deviceId,
+    deviceName,
+    userAgent: ua,
+    ip,
+  });
+  // Ensure under max (edge)
+  const after = listActiveSessionsForUser(user.id);
+  if (after.length > maxDevices) {
+    const sorted = [...after].filter((s) => s.id !== session.id).sort((a, b) => a.lastSeenAt.localeCompare(b.lastSeenAt));
+    for (const s of sorted) {
+      if (listActiveSessionsForUser(user.id).length <= maxDevices) break;
+      revokeSession(s.id, 'enforce_max');
+    }
+  }
+
+  user.sessionId = session.id;
+  const token = await createSessionToken(user);
+  await setSessionCookie(token);
+  return NextResponse.json({
+    user: {
+      id: user.id,
+      username: user.username,
+      fullName: user.fullName,
+      role: user.role,
+      companyId: user.companyId,
+      companyName: user.companyName,
+      companySlug: user.companySlug,
+      tenantSlugs: user.tenantSlugs,
+      tenantIds: user.tenantIds,
+      isSuperAdmin: user.isSuperAdmin,
+      sessionId: session.id,
+    },
+  });
+}
+
 
 export async function POST(req: NextRequest) {
   try {
@@ -105,21 +226,10 @@ export async function POST(req: NextRequest) {
         isSuperAdmin: role === 'super_admin',
       };
 
-      const token = await createSessionToken(user);
-      await setSessionCookie(token);
-      return NextResponse.json({
-        user: {
-          id: user.id,
-          username: user.username,
-          fullName: user.fullName,
-          role: user.role,
-          companyId: user.companyId,
-          companyName: user.companyName,
-          tenantSlugs: user.tenantSlugs,
-          tenantIds: user.tenantIds,
-          companySlug: user.companySlug,
-          isSuperAdmin: user.isSuperAdmin,
-        },
+      return issueSessionResponse(req, user, {
+        deviceId: parsed.data.deviceId,
+        deviceName: parsed.data.deviceName,
+        confirmReplace: parsed.data.confirmReplace,
       });
     }
 
@@ -141,21 +251,10 @@ export async function POST(req: NextRequest) {
           tenantIds: (local as any).tenantIds || (local.companyId ? [local.companyId] : []),
           isSuperAdmin: Boolean(local.isSuperAdmin || local.role === 'super_admin'),
         };
-        const token = await createSessionToken(user);
-        await setSessionCookie(token);
-        return NextResponse.json({
-          user: {
-            id: user.id,
-            username: user.username,
-            fullName: user.fullName,
-            role: user.role,
-            companyId: user.companyId,
-            companyName: user.companyName,
-            companySlug: user.companySlug,
-            tenantSlugs: user.tenantSlugs,
-            tenantIds: user.tenantIds,
-            isSuperAdmin: user.isSuperAdmin,
-          },
+        return issueSessionResponse(req, user, {
+          deviceId: parsed.data.deviceId,
+          deviceName: parsed.data.deviceName,
+          confirmReplace: parsed.data.confirmReplace,
         });
       }
     }

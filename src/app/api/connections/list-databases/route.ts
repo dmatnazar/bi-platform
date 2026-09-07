@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany, canAccessTenant } from '@/lib/auth';
+import { getSession, canManageConnections, canAccessTenant } from '@/lib/auth';
 import { checkGatewayHealth, listDatabasesOnGateway } from '@/lib/gateway';
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageConnections(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {
@@ -14,13 +14,11 @@ export async function POST(req: NextRequest) {
   if (!body?.tenantSlug) {
     return NextResponse.json({ error: 'tenantSlug gerek' }, { status: 400 });
   }
-  const tenantSlug = String(body.tenantSlug).trim();
-  // Admin/editor diňe öz firmasynyň DB sanawyny görüp bilýär
-  if (!canAccessTenant(user, tenantSlug)) {
+  if (!canAccessTenant(user, String(body.tenantSlug))) {
     return NextResponse.json({ error: 'Bu firma üçin rugsat ýok' }, { status: 403 });
   }
   const res = await listDatabasesOnGateway({
-    tenantSlug,
+    tenantSlug: String(body.tenantSlug),
     host: body.host ? String(body.host) : undefined,
     port: body.port != null ? Number(body.port) : undefined,
     username: body.username ? String(body.username) : undefined,

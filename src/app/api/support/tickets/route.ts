@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, isSuperAdmin } from '@/lib/auth';
+import { getSession, isSuperAdmin, canHandleSupport } from '@/lib/auth';
 import {
   listSupportTickets,
   upsertSupportTicket,
@@ -7,8 +7,8 @@ import {
 import type { SupportCategory, SupportTicket, SupportMessage } from '@/lib/types';
 import { z } from 'zod';
 
-function isAdminRole(role: string) {
-  return role === 'super_admin' || role === 'admin' || role === 'editor';
+function isSupportStaff(user: any) {
+  return canHandleSupport(user) || isSuperAdmin(user);
 }
 
 export async function GET(req: NextRequest) {
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
 
   const status = req.nextUrl.searchParams.get('status') || undefined;
-  const admin = isAdminRole(user.role) || isSuperAdmin(user);
+  const admin = isSupportStaff(user);
 
   let tickets;
   if (admin) {

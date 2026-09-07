@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { getSession, canEditDashboard } from '@/lib/auth';
+import { getSession, canEditDashboards } from '@/lib/auth';
 import { getDashboard, getCompanyById, getCompanyBySlug, userCanViewDashboard } from '@/lib/db';
 import { DashboardView } from '@/components/dashboard/DashboardView';
 
@@ -17,7 +17,7 @@ export default async function DashboardPage({ params }: Props) {
     notFound();
   }
 
-  const editable = canEditDashboard(user.role);
+  const editable = canEditDashboards(user);
 
   let companyName = '';
   let companySlug = '';

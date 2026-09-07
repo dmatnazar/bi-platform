@@ -94,8 +94,52 @@ export function canViewDashboards(user: SessionUser): boolean {
   return userHasPermission(user, 'view_dashboards');
 }
 
+export function canCreateDashboards(user: SessionUser): boolean {
+  return userHasPermission(user, 'create_dashboards');
+}
+
 export function canEditDashboards(user: SessionUser): boolean {
   return userHasPermission(user, 'edit_dashboards');
+}
+
+export function canDeleteDashboards(user: SessionUser): boolean {
+  return userHasPermission(user, 'delete_dashboards');
+}
+
+export function canExportDashboards(user: SessionUser): boolean {
+  return userHasPermission(user, 'export_dashboards');
+}
+
+export function canManageDashboardAccess(user: SessionUser): boolean {
+  return userHasPermission(user, 'manage_dashboard_access');
+}
+
+export function canDeleteStaff(user: SessionUser): boolean {
+  return userHasPermission(user, 'delete_staff');
+}
+
+export function canViewBillingLedger(user: SessionUser): boolean {
+  return userHasPermission(user, 'view_billing_ledger');
+}
+
+export function canDeleteDevices(user: SessionUser): boolean {
+  return userHasPermission(user, 'delete_devices');
+}
+
+export function canSendDeviceCommands(user: SessionUser): boolean {
+  return userHasPermission(user, 'device_commands');
+}
+
+export function canManageMailSettings(user: SessionUser): boolean {
+  return userHasPermission(user, 'manage_mail_settings');
+}
+
+export function canDeleteNews(user: SessionUser): boolean {
+  return userHasPermission(user, 'delete_news');
+}
+
+export function canManageSupportContacts(user: SessionUser): boolean {
+  return userHasPermission(user, 'manage_support_contacts');
 }
 
 export function canManageStaff(user: SessionUser): boolean {
@@ -197,7 +241,7 @@ export function canDeleteStaffMember(
   actor: SessionUser,
   target: { role?: string; id?: string }
 ): { ok: boolean; reason?: string } {
-  if (!canManageStaff(actor)) return { ok: false, reason: 'Rugsat ýok' };
+  if (!canManageStaff(actor) || !userHasPermission(actor, 'delete_staff')) return { ok: false, reason: 'Rugsat ýok' };
   const tr = String(target.role || '').toLowerCase();
   if (tr === 'super_admin') {
     return { ok: false, reason: 'Super admin işgäri pozup bolanok' };

@@ -770,6 +770,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                   <GlobalFiltersEditor
                     filters={filterDefs}
                     onChange={updateGlobalFilters}
+                    widgets={dashboard.widgets || []}
                   />
                 </div>
               )}

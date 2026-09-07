@@ -23,6 +23,64 @@ const DEMO_PIE = [
   { name: 'Beýleki', value: 15 },
 ];
 
+/** Category axis labels: ISO datetime → "YYYY-MM-DD HH:mm:ss" (no T/Z) */
+
+/** Zoom-aware label aggregation: ChartCanvas updates this on dataZoom */
+export const chartZoomState: Record<
+  string,
+  { start: number; end: number; dataLen: number }
+> = {};
+
+function formatCategoryLabel(raw: unknown): string {
+  if (raw == null) return '';
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${raw.getFullYear()}-${pad(raw.getMonth() + 1)}-${pad(raw.getDate())} ${pad(raw.getHours())}:${pad(raw.getMinutes())}:${pad(raw.getSeconds())}`;
+  }
+  const s = String(raw).trim();
+  const m = s.match(
+    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/i
+  );
+  if (m) {
+    return `${m[1]} ${m[2]}:${m[3]}:${m[4] ?? '00'}`;
+  }
+  return s;
+}
+
+/** Y/X value axis + data-label number format */
+function formatAxisNumberValue(
+  v: number,
+  axisNumFmt: 'compact' | 'full' | 'grouped' = 'compact'
+): string {
+  if (v == null || !Number.isFinite(v)) return '';
+  const abs = Math.abs(v);
+  if (axisNumFmt === 'full') {
+    return String(Math.round(v * 1000) / 1000);
+  }
+  if (axisNumFmt === 'grouped') {
+    return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  if (abs >= 1e9) return (v / 1e9).toFixed(abs >= 1e10 ? 0 : 1).replace(/\.0$/, '') + 'B';
+  if (abs >= 1e6) return (v / 1e6).toFixed(abs >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+  if (abs >= 1e3) return (v / 1e3).toFixed(abs >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
+  return String(Math.round(v * 100) / 100);
+}
+
+/** Deep clone that keeps functions (ECharts formatters) — JSON.stringify drops them */
+function cloneOptionPreserveFns<T>(obj: T): T {
+  if (obj == null || typeof obj !== 'object') return obj;
+  if (typeof (obj as unknown) === 'function') return obj;
+  if (Array.isArray(obj)) return obj.map((x) => cloneOptionPreserveFns(x)) as unknown as T;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(obj as object)) {
+    const v = (obj as Record<string, unknown>)[k];
+    out[k] = typeof v === 'function' ? v : cloneOptionPreserveFns(v);
+  }
+  return out as T;
+}
+
+
+
 interface Props {
   widget: DashboardWidget;
   data?: Record<string, unknown>[];
@@ -56,6 +114,16 @@ function compareValues(av: unknown, bv: unknown, dir: 'asc' | 'desc'): number {
   );
 }
 
+function cellWithSuffix(
+  col: string,
+  val: unknown,
+  suffixes?: Record<string, string> | null
+): string {
+  const base = formatCellValue(val);
+  const s = suffixes?.[col];
+  return s ? `${base} ${s}` : base;
+}
+
 function TableWidgetBody({
   widget,
   data,
@@ -79,6 +147,8 @@ function TableWidgetBody({
   ) as Record<string, unknown>[];
 
   const row0Key = rows[0] ? Object.keys(rows[0]).join('\0') : '';
+  const fieldSuffixes =
+    ((widget.config as any)?.valueFieldSuffix as Record<string, string> | undefined) || {};
   const allKeys = useMemo(() => {
     if (row0Key) return row0Key.split('\0');
     if (widget.dataSource?.columns?.length) return [...widget.dataSource.columns];
@@ -789,7 +859,7 @@ function TableWidgetBody({
                                       );
                                     }}
                                   />
-                                  <span className="truncate">{formatCellValue(val)}</span>
+                                  <span className="truncate">{cellWithSuffix(String(c ?? ""), val, fieldSuffixes)}</span>
                                 </label>
                               );
                             })
@@ -1068,7 +1138,7 @@ function TableWidgetBody({
                       key={c}
                       className="py-1.5 pr-2 whitespace-nowrap max-w-[220px] truncate border-b border-slate-800/60"
                     >
-                      {formatCellValue(row[c])}
+                      {cellWithSuffix(c, row[c], fieldSuffixes)}
                     </td>
                   ))}
                 </tr>
@@ -1114,7 +1184,7 @@ function TableWidgetBody({
                     >
                       <span className="text-slate-500">{c}: </span>
                       <span className="font-bold text-white">
-                        {formatCellValue(row[c])}
+                        {cellWithSuffix(c, row[c], fieldSuffixes)}
                       </span>
                     </div>
                   ))}
@@ -1125,7 +1195,7 @@ function TableWidgetBody({
                     {secondary.map((c) => (
                       <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
                         <span className="text-slate-500">{c}: </span>
-                        <span className="text-slate-300">{formatCellValue(row[c])}</span>
+                        <span className="text-slate-300">{cellWithSuffix(c, row[c], fieldSuffixes)}</span>
                       </div>
                     ))}
                   </div>
@@ -1437,7 +1507,7 @@ function TableWidgetBody({
                                         );
                                       }}
                                     />
-                                    <span className="truncate">{formatCellValue(val)}</span>
+                                    <span className="truncate">{cellWithSuffix(String(c ?? ""), val, fieldSuffixes)}</span>
                                   </label>
                                 );
                               })
@@ -1562,7 +1632,7 @@ function TableWidgetBody({
                               <div key={c} className="min-w-0 text-[10px] sm:text-[11px] leading-snug break-words">
                                 <span className="text-slate-500">{c}: </span>
                                 <span className="font-bold text-white">
-                                  {formatCellValue(r[c])}
+                                  {cellWithSuffix(c, r[c], fieldSuffixes)}
                                 </span>
                               </div>
                             ))}
@@ -1573,7 +1643,7 @@ function TableWidgetBody({
                               {secondary.map((c) => (
                                 <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
                                   <span className="text-slate-500">{c}: </span>
-                                  <span className="text-slate-300">{formatCellValue(r[c])}</span>
+                                  <span className="text-slate-300">{cellWithSuffix(c, r[c], fieldSuffixes)}</span>
                                 </div>
                               ))}
                             </div>
@@ -1678,8 +1748,27 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       const showLabels = !!widget.config?.showDataLabels;
       const horizontal = !!widget.config?.horizontal && widget.type === 'bar';
 
-      /** Clamp value labels inside the plot — shift in from top/side edges */
+      
+      
+      const labelInsideBar = widget.type === 'bar' && !!widget.config?.labelInside;
+      const useLabelBg = !!(widget.config as any)?.valueLabelBg;
+      const useLabelAggregate = !!(widget.config as any)?.valueLabelAggregate;
+      const fieldSuffixes =
+        ((widget.config as any)?.valueFieldSuffix as Record<string, string> | undefined) || {};
+
+      /**
+       * Label layout:
+       * - bar inside: center of bar
+       * - line/area: no shiftY (stays on point); optional hideOverlap only
+       */
       const barValueLabelLayout = (params: any) => {
+        if (widget.type === 'line' || widget.type === 'area') {
+          return { hideOverlap: true };
+        }
+        if (labelInsideBar) {
+          // Let ECharts place inside; only hide collisions
+          return { hideOverlap: true };
+        }
         const lw = Math.min(params?.labelRect?.width ?? 48, 100);
         const lh = params?.labelRect?.height ?? 28;
         const bar = params?.rect || { x: 0, y: 0, width: 20, height: 20 };
@@ -1690,77 +1779,140 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             y: bar.y + bar.height / 2,
             align: 'left' as const,
             verticalAlign: 'middle' as const,
-            width: Math.min(lw, 88),
-            overflow: 'truncate' as const,
             hideOverlap: true,
           };
         }
-        // Center above bar
         let x = bar.x + bar.width / 2;
         let y = bar.y - 2;
-        // Near top: shift down into the chart (label grows from the edge inward)
-        if (y - lh < pad) {
-          y = pad + lh;
-        }
-        // Near left/right of the host: shift label toward bar center / inward
-        // so text is not clipped by the widget border
+        if (y - lh < pad) y = pad + lh;
         const half = lw / 2;
-        if (x - half < pad) {
-          x = pad + half;
-        }
-        // Right edge: if bar sits far right, labelRect may overflow — nudge left
-        // (bar.x is in pixel space of the series; use bar right as hint)
-        const barRight = bar.x + bar.width;
-        if (x + half > barRight + 80) {
-          x = Math.max(pad + half, barRight - half);
-        }
+        if (x - half < pad) x = pad + half;
         return {
           x,
           y,
           align: 'center' as const,
           verticalAlign: 'bottom' as const,
-          width: Math.min(Math.max(lw, 36), 100),
-          overflow: 'truncate' as const,
           hideOverlap: true,
-          moveOverlap: 'shiftY' as const,
         };
       };
 
-      const makeBarLabel = (seriesColor: string, seriesNameFallback: string) => ({
-        show: !!showLabels,
-        position: (horizontal ? 'right' : 'top') as 'right' | 'top',
-        color:
-          (widget.config as any)?.valueLabelColor ||
-          widget.config?.labelColor ||
-          seriesColor,
-        fontSize: Math.max(11, (widget.config?.labelFontSize || 12) - (valueKeys.length > 2 ? 1 : 0)),
-        distance: horizontal ? 6 : 4,
-        overflow: 'truncate' as const,
-        width: horizontal ? 80 : 72,
-        ellipsis: '…',
-        hideOverlap: true,
-        formatter: (p: any) => {
-          const v = p.value;
-          if (v == null || v === '') return '';
-          const num = typeof v === 'number' ? v : Number(v);
-          let text = String(v);
-          if (Number.isFinite(num)) {
-            const abs = Math.abs(num);
-            if (abs >= 1e6) text = (num / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
-            else if (abs >= 1e3) text = (num / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
-            else text = String(Math.round(num * 100) / 100);
+      /** Optional dense aggregate (settings → valueLabelAggregate) */
+      const maxPointLabels = 14;
+      const labelBucket =
+        useLabelAggregate && rows.length > maxPointLabels
+          ? Math.ceil(rows.length / maxPointLabels)
+          : 1;
+
+      const resolveSuffix = (seriesName: string) => {
+        if (fieldSuffixes[seriesName]) return fieldSuffixes[seriesName];
+        // series name may be "group · field"
+        for (const [k, s] of Object.entries(fieldSuffixes)) {
+          if (s && (seriesName === k || seriesName.endsWith(' · ' + k) || seriesName.endsWith(k))) {
+            return s;
           }
-          // Column/series name only when explicitly enabled in widget settings
-          if ((widget.config as any)?.showValueFieldName) {
-            const nm = String(p.seriesName || seriesNameFallback || '');
-            if (nm) {
-              const short = nm.length > 14 ? nm.slice(0, 13) + '…' : nm;
+        }
+        return '';
+      };
+
+      const makeBarLabel = (
+        seriesColor: string,
+        seriesNameFallback: string,
+        seriesData?: number[]
+      ) => {
+        const pos: 'right' | 'top' | 'inside' | 'insideRight' = horizontal
+          ? labelInsideBar
+            ? 'inside'
+            : 'right'
+          : labelInsideBar
+            ? 'inside'
+            : 'top';
+        return {
+          show: !!showLabels,
+          position: pos,
+          color: labelInsideBar
+            ? '#f8fafc'
+            : (widget.config as any)?.valueLabelColor ||
+              widget.config?.labelColor ||
+              seriesColor,
+          fontSize: Math.max(
+            10,
+            (widget.config?.labelFontSize || 12) - (valueKeys.length > 2 ? 1 : 0)
+          ),
+          distance: horizontal ? 6 : 4,
+          // No fixed width — box follows text (especially with bg)
+          hideOverlap: true,
+          ...(useLabelBg
+            ? {
+                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                borderRadius: 2,
+                padding: [1, 3] as [number, number],
+                borderColor: 'rgba(148, 163, 184, 0.3)',
+                borderWidth: 1,
+              }
+            : {
+                backgroundColor: 'transparent',
+                padding: 0,
+                borderWidth: 0,
+              }),
+          formatter: (p: any) => {
+            const idx = typeof p.dataIndex === 'number' ? p.dataIndex : -1;
+            const v = p.value;
+            if (v == null || v === '') return '';
+            const num = typeof v === 'number' ? v : Number(v);
+            const fmt =
+              (widget.config?.axisNumberFormat as 'compact' | 'full' | 'grouped') || 'compact';
+            const seriesName = String(p.seriesName || seriesNameFallback || '');
+            const suffix = resolveSuffix(seriesName);
+            const withSuffix = (t: string) => (suffix ? `${t} ${suffix}` : t);
+
+            if (
+              (widget.type === 'line' || widget.type === 'area') &&
+              useLabelAggregate &&
+              idx >= 0 &&
+              seriesData &&
+              seriesData.length
+            ) {
+              const z = chartZoomState[widget.id];
+              const dataLen = seriesData.length;
+              const startPct = z?.start ?? 0;
+              const endPct = z?.end ?? 100;
+              const startIdx = Math.max(0, Math.floor((dataLen * startPct) / 100));
+              const endIdx = Math.min(dataLen, Math.ceil((dataLen * endPct) / 100));
+              const visible = Math.max(1, endIdx - startIdx);
+              const maxLabels = 14;
+              const bucket = visible > maxLabels ? Math.ceil(visible / maxLabels) : 1;
+              if (bucket > 1) {
+                if (idx < startIdx || idx >= endIdx) return '';
+                if ((idx - startIdx) % bucket !== 0) return '';
+                let sum = 0;
+                const bEnd = Math.min(endIdx, idx + bucket);
+                for (let i = idx; i < bEnd; i++) {
+                  const n = Number(seriesData[i]);
+                  if (Number.isFinite(n)) sum += n;
+                }
+                let text = withSuffix(formatAxisNumberValue(sum, fmt));
+                if ((widget.config as any)?.showValueFieldName && seriesName) {
+                  const short =
+                    seriesName.length > 14 ? seriesName.slice(0, 13) + '…' : seriesName;
+                  return short + '\n' + text;
+                }
+                return text;
+              }
+              // bucket===1 → fall through: show each point
+            }
+
+            let text = String(v);
+            if (Number.isFinite(num)) text = formatAxisNumberValue(num, fmt);
+            text = withSuffix(text);
+            if ((widget.config as any)?.showValueFieldName && seriesName) {
+              const short =
+                seriesName.length > 14 ? seriesName.slice(0, 13) + '…' : seriesName;
               return short + '\n' + text;
             }
-          }
-          return text;
-        },
-      });
+            return text;
+          },
+        };
+      };
 
       let cats: string[] = [];
       let series: any[] = [];
@@ -1771,7 +1923,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         const seriesSet: string[] = [];
         const matrix = new Map<string, Map<string, number>>();
         for (const r of rows) {
-          const cat = String(r[catKey] ?? '');
+          const cat = formatCategoryLabel(r[catKey]);
           if (!catSet.includes(cat)) catSet.push(cat);
           for (const vk of valueKeys) {
             const base = seriesKeyFn(r);
@@ -1788,40 +1940,46 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           !horizontal &&
           valueKeys.length > 1 &&
           (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar');
-        series = seriesSet.map((ser, i) => ({
-          name: ser,
-          type: seriesType,
-          stack: stacked ? 'total' : undefined,
-          yAxisIndex: multiScaleSF ? i % 2 : 0,
-          data: catSet.map((cat) => matrix.get(ser)?.get(cat) ?? 0),
-          smooth,
-          areaStyle: widget.type === 'area' ? { opacity: multiScaleSF ? 0.08 : 0.15 } : undefined,
-          itemStyle: {
-            color: palette[i % palette.length],
-            borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
-          },
-          lineStyle: { width: 2.5, color: palette[i % palette.length] },
-          label: makeBarLabel(palette[i % palette.length], ser),
-          labelLayout: barValueLabelLayout,
-        }));
+        series = seriesSet.map((ser, i) => {
+          const dataArr = catSet.map((cat) => matrix.get(ser)?.get(cat) ?? 0);
+          return {
+            name: ser,
+            type: seriesType,
+            stack: stacked ? 'total' : undefined,
+            // yAxisIndex applied later only when multiY (avoids yAxis "N" not found)
+            data: dataArr,
+            smooth,
+            areaStyle: widget.type === 'area' ? { opacity: multiScaleSF ? 0.08 : 0.15 } : undefined,
+            itemStyle: {
+              color: palette[i % palette.length],
+              borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
+            },
+            lineStyle: { width: 2.5, color: palette[i % palette.length] },
+            label: makeBarLabel(palette[i % palette.length], ser, dataArr),
+            labelLayout: barValueLabelLayout,
+          };
+        });
       } else {
         // Multi value fields → one series each (separate bars + own label)
-        cats = rows.map((r) => String(r[catKey] ?? ''));
+        cats = rows.map((r) => formatCategoryLabel(r[catKey]));
         const multiScale =
           !stacked &&
           valueKeys.length > 1 &&
           (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar');
+        const axisByField =
+          ((widget.config as any)?.valueAxisIndexByField as Record<string, 0 | 1> | undefined) ||
+          {};
         series = valueKeys.map((vk, i) => {
           const color = palette[i % palette.length];
+          const dataArr = rows.map((r) => Number(r[vk] ?? 0));
           return {
             name: vk,
             type: seriesType,
             stack: stacked ? 'total' : undefined,
-            // Each value field on alternating Y axis so 170k and 426 both visible
-            yAxisIndex: multiScale && !horizontal ? i % 2 : 0,
-            data: rows.map((r) => Number(r[vk] ?? 0)),
+            // yAxisIndex set later only when multiY is active
+            data: dataArr,
             smooth,
-            // Dense line/area: sample points so labels/markers don't stack
+            // Dense line/area: sample points so markers don't stack (labels use bucket-sum)
             ...(seriesType === 'line' && rows.length > 40
               ? { sampling: 'lttb', large: true, showSymbol: false }
               : {}),
@@ -1833,7 +1991,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               borderRadius: widget.type === 'bar' ? (horizontal ? [0, 4, 4, 0] : [4, 4, 0, 0]) : 0,
             },
             lineStyle: { width: 2.5, color },
-            label: makeBarLabel(color, vk),
+            label: makeBarLabel(color, vk, dataArr),
             labelLayout: barValueLabelLayout,
           };
         });
@@ -1844,22 +2002,38 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       const axisLabelColor = widget.config?.axisLabelColor || '#94a3b8';
       const baseLabelFs = Math.min(14, Math.max(9, widget.config?.labelFontSize || 11));
 
-      // Task 16: multi value fields → independent Y scales (else small series looks flat / overlapped)
+      // Task 16: dual Y only when multiple value series on a vertical value axis
+      const axisByFieldCfg =
+        ((widget.config as any)?.valueAxisIndexByField as Record<string, 0 | 1> | undefined) ||
+        {};
+      const anyExplicitAxis = Object.values(axisByFieldCfg).some((v) => v === 0 || v === 1);
       const multiY =
         !stacked &&
         !horizontal &&
         series.length > 1 &&
-        valueKeys.length > 1 &&
-        (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar');
+        (widget.type === 'line' || widget.type === 'area' || widget.type === 'bar') &&
+        (valueKeys.length > 1 || anyExplicitAxis);
 
-      // Ensure every series has correct yAxisIndex when multiY
+      // yAxisIndex ONLY when dual axes exist — else ECharts throws yAxis "N" not found
       if (multiY) {
-        series = series.map((s: any, i: number) => ({
-          ...s,
-          yAxisIndex: i % 2,
-          // slight z so lines stay readable
-          z: 2 + (i % 2),
-        }));
+        series = series.map((s: any, i: number) => {
+          const name = String(s.name || '');
+          const explicit =
+            axisByFieldCfg[name] === 0 || axisByFieldCfg[name] === 1
+              ? axisByFieldCfg[name]
+              : undefined;
+          const yAxisIndex = explicit !== undefined ? explicit : ((i % 2) as 0 | 1);
+          return {
+            ...s,
+            yAxisIndex,
+            z: 2 + yAxisIndex,
+          };
+        });
+      } else {
+        series = series.map((s: any) => {
+          const { yAxisIndex: _drop, ...rest } = s;
+          return rest;
+        });
       }
 
       const categoryAxis = {
@@ -1883,21 +2057,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       };
       // Axis number format: compact (400k) | full (400000) | grouped (400,000)
       const axisNumFmt = (widget.config?.axisNumberFormat as 'compact' | 'full' | 'grouped') || 'compact';
-      const formatAxisNumber = (v: number) => {
-        if (v == null || !Number.isFinite(v)) return '';
-        const abs = Math.abs(v);
-        if (axisNumFmt === 'full') {
-          return String(Math.round(v * 1000) / 1000);
-        }
-        if (axisNumFmt === 'grouped') {
-          return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
-        }
-        // compact default — fewer digits, less left padding
-        if (abs >= 1e9) return (v / 1e9).toFixed(abs >= 1e10 ? 0 : 1).replace(/\.0$/, '') + 'B';
-        if (abs >= 1e6) return (v / 1e6).toFixed(abs >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
-        if (abs >= 1e3) return (v / 1e3).toFixed(abs >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'k';
-        return String(Math.round(v * 100) / 100);
-      };
+      const formatAxisNumber = (v: number) => formatAxisNumberValue(v, axisNumFmt);
       const valueAxisLeft = {
         type: 'value' as const,
         name: multiY ? String(series[0]?.name || '') : undefined,
@@ -2053,7 +2213,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             ? r[pieSourceField]
             : r['fich_id'] ?? r['fish_id'] ?? r['id'] ?? r['Id'];
         return {
-          name: String(r[catKey] ?? ''),
+          name: formatCategoryLabel(r[catKey]),
           value,
           _drillId: drillId,
           _row: r,
@@ -2508,6 +2668,15 @@ function ChartCanvas({
 }) {
   const chartRef = useRef<any>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  // Init zoom state so first paint can aggregate when enabled
+  useEffect(() => {
+    const dataLen = Array.isArray(data) ? data.length : 0;
+    if (!chartZoomState[widgetId]) {
+      chartZoomState[widgetId] = { start: 0, end: 100, dataLen };
+    } else {
+      chartZoomState[widgetId].dataLen = dataLen;
+    }
+  }, [widgetId, data]);
   const [boxMin, setBoxMin] = useState(200);
   const dd = widget.dataSource?.drillDown;
 
@@ -2567,7 +2736,8 @@ function ChartCanvas({
       return Math.min(14, Math.max(9, Math.round(base * factor)));
     };
 
-    const opt = JSON.parse(JSON.stringify(option));
+    // Must preserve formatter functions — JSON.stringify strips them (axisNumberFormat broke)
+    const opt = cloneOptionPreserveFns(option);
     const walk = (node: any) => {
       if (!node || typeof node !== 'object') return;
       if (Array.isArray(node)) {
@@ -2856,7 +3026,7 @@ function ChartCanvas({
     // Prefer embedded row from pie data (keeps hidden hierarchy id columns)
     let row: Record<string, unknown> | undefined = params.data._row;
     if (!row) {
-      row = (data || []).find((r) => String(r[catKey] ?? '') === name);
+      row = (data || []).find((r) => formatCategoryLabel(r[catKey]) === name || String(r[catKey] ?? '') === name);
     }
     if (row && params.data._drillId != null && dd.sourceField) {
       row = { ...row, [dd.sourceField]: params.data._drillId };
@@ -2896,7 +3066,7 @@ function ChartCanvas({
       ? widget.config.colors
       : ['#6366f1', '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
     const pieData = levelRows.map((r, i) => ({
-      name: String(r[catKey] ?? ''),
+      name: formatCategoryLabel(r[catKey]),
       value: Number(r[valKey] ?? 0),
       itemStyle: { color: palette[i % palette.length] },
       _row: r,
@@ -2952,6 +3122,29 @@ function ChartCanvas({
         style={{ height: '100%', width: '100%' }}
         opts={{ renderer: 'canvas' }}
         notMerge
+        onEvents={{
+          dataZoom: () => {
+            try {
+              const inst = chartRef.current?.getEchartsInstance?.();
+              if (!inst) return;
+              const opt = inst.getOption?.() as any;
+              const dzList = opt?.dataZoom || [];
+              let start = 0;
+              let end = 100;
+              for (const dz of dzList) {
+                if (dz && typeof dz.start === 'number') start = dz.start;
+                if (dz && typeof dz.end === 'number') end = dz.end;
+              }
+              const series0 = opt?.series?.[0];
+              const dataLen = Array.isArray(series0?.data) ? series0.data.length : 0;
+              chartZoomState[widgetId] = { start, end, dataLen };
+              // Force label re-render without full option rebuild
+              inst.setOption({ series: (opt.series || []).map((s: any) => ({ label: s.label })) }, false);
+            } catch {
+              /* */
+            }
+          },
+        }}
       />
 
       {/* Fix: full-text popup for a clicked (possibly truncated) label —

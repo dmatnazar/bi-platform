@@ -37,6 +37,10 @@ interface CompanyBrief {
 interface Props {
   initial: Dashboard[];
   canEdit: boolean;
+  canCreate?: boolean;
+  canDelete?: boolean;
+  canExport?: boolean;
+  canManageAccess?: boolean;
   companies?: CompanyBrief[];
   userRole?: string;
   isSuperAdmin?: boolean;
@@ -63,6 +67,10 @@ function remapWidgetIds(widgets: DashboardWidget[]): DashboardWidget[] {
 export function DashboardListClient({
   initial,
   canEdit,
+  canCreate = false,
+  canDelete = false,
+  canExport = false,
+  canManageAccess = false,
   companies = [],
   userRole = 'viewer',
   isSuperAdmin = false,
@@ -70,6 +78,7 @@ export function DashboardListClient({
   companyIdBySlug = {},
   userTenantSlugs = [],
 }: Props) {
+  const showAnyAction = canEdit || canCreate || canDelete || canExport || canManageAccess;
   const router = useRouter();
   const searchParams = useSearchParams();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -923,7 +932,7 @@ export function DashboardListClient({
               : 'Hasabatlar we analitika'}
           </p>
         </div>
-        {canEdit && effectiveCompanyId && (
+        {canCreate && effectiveCompanyId && (
           <div className="flex flex-wrap items-center gap-2">
             <input
               ref={fileRef}
@@ -1009,7 +1018,7 @@ export function DashboardListClient({
                   </div>
                 </div>
               </button>
-              {canEdit && (
+              {canManageAccess && (
                 <button
                   type="button"
                   title="Firma dashboardlary üçin ulanyjy dostupy"
@@ -1058,7 +1067,7 @@ export function DashboardListClient({
           <p className="text-slate-400">
             {items.length === 0 ? 'Heniz dashboard ýok' : 'Gözleg boýunça netije ýok'}
           </p>
-          {canEdit && items.length === 0 && (
+          {canCreate && items.length === 0 && (
             <Link href={`/dashboards/new${effectiveCompanyId ? `?companyId=${encodeURIComponent(effectiveCompanyId)}` : ''}`} className="inline-block mt-4">
               <Button variant="secondary" size="sm">
                 Ilkinji dashboardy döret
@@ -1108,7 +1117,7 @@ export function DashboardListClient({
                 </div>
               </Link>
 
-              {canEdit && (
+              {showAnyAction && (
                 <div className="absolute top-3 right-3 z-20">
                   <button
                     type="button"
@@ -1129,6 +1138,7 @@ export function DashboardListClient({
                         onClick={() => setMenuId(null)}
                       />
                       <div className="absolute right-0 top-full mt-1 z-40 w-48 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-1 text-sm">
+                        {canEdit && (
                         <button
                           type="button"
                           className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
@@ -1137,6 +1147,8 @@ export function DashboardListClient({
                           <Pencil className="h-3.5 w-3.5 text-slate-400" />
                           Üýtget (ady)
                         </button>
+                        )}
+                        {canCreate && (
                         <button
                           type="button"
                           className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
@@ -1146,7 +1158,8 @@ export function DashboardListClient({
                           <Copy className="h-3.5 w-3.5 text-slate-400" />
                           Nusga al (şol firma)
                         </button>
-                        {isSuperAdmin && companies.length > 1 && (
+                        )}
+                        {canCreate && isSuperAdmin && companies.length > 1 && (
                           <>
                             <button
                               type="button"
@@ -1168,6 +1181,7 @@ export function DashboardListClient({
                             </button>
                           </>
                         )}
+                        {canExport && (
                         <button
                           type="button"
                           className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
@@ -1176,6 +1190,8 @@ export function DashboardListClient({
                           <Download className="h-3.5 w-3.5 text-slate-400" />
                           Export (.json)
                         </button>
+                        )}
+                        {canManageAccess && (
                         <button
                           type="button"
                           className="w-full flex items-center gap-2 px-3 py-2.5 text-left text-slate-200 hover:bg-slate-800"
@@ -1184,6 +1200,9 @@ export function DashboardListClient({
                           <Users className="h-3.5 w-3.5 text-slate-400" />
                           Ulanyjy bagla
                         </button>
+                        )}
+                        {canDelete && (
+                        <>
                         <div className="my-1 border-t border-slate-800" />
                         <button
                           type="button"
@@ -1194,6 +1213,8 @@ export function DashboardListClient({
                           <Trash2 className="h-3.5 w-3.5" />
                           Poz
                         </button>
+                        </>
+                        )}
                       </div>
                     </>
                   )}

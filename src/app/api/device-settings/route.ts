@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageDevices } from '@/lib/auth';
 import {
   checkGatewayHealth,
   getDeviceSettingsOnGateway,
@@ -8,7 +8,7 @@ import {
 
 export async function GET(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageDevices(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageDevices(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {

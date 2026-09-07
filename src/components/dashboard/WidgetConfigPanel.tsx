@@ -715,13 +715,13 @@ export function WidgetConfigPanel({
         )}
       </div>
 
-      {/* Multi-select Value fields */}
+      {/* Multi-select Value fields + per-column Y axis index */}
       <div className="space-y-1.5">
         <label className="text-[11px] font-medium text-slate-400">
           Value field (birnäçe saýlap bolýar)
         </label>
         {sampleColumns.length > 0 ? (
-          <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
+          <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
             {sampleColumns.map((c) => {
               const selected = (ds?.valueFields?.length
                 ? ds.valueFields
@@ -729,30 +729,93 @@ export function WidgetConfigPanel({
                   ? [ds.valueField]
                   : []
               ).includes(c);
+              const axisMap =
+                ((widget.config as any)?.valueAxisIndexByField as Record<string, 0 | 1>) || {};
+              const axisIdx = axisMap[c] === 1 ? 1 : 0;
               return (
-                <label
+                <div
                   key={`vf-${c}`}
-                  className="flex items-center gap-2 text-sm text-slate-200 py-0.5 cursor-pointer hover:bg-slate-900/80 rounded px-1"
+                  className="flex items-center gap-2 text-sm text-slate-200 py-0.5 hover:bg-slate-900/80 rounded px-1"
                 >
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 rounded border-slate-600 accent-indigo-500"
-                    checked={selected}
-                    onChange={() => {
-                      const prev = ds?.valueFields?.length
-                        ? [...ds.valueFields]
-                        : ds?.valueField
-                          ? [ds.valueField]
-                          : [];
-                      const next = selected ? prev.filter((x) => x !== c) : [...prev, c];
-                      patchDs({
-                        valueFields: next.length ? next : undefined,
-                        valueField: next[0] || undefined,
-                      });
-                    }}
-                  />
-                  <span className="truncate">{c}</span>
-                </label>
+                  <label className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-slate-600 accent-indigo-500 shrink-0"
+                      checked={selected}
+                      onChange={() => {
+                        const prev = ds?.valueFields?.length
+                          ? [...ds.valueFields]
+                          : ds?.valueField
+                            ? [ds.valueField]
+                            : [];
+                        const next = selected ? prev.filter((x) => x !== c) : [...prev, c];
+                        patchDs({
+                          valueFields: next.length ? next : undefined,
+                          valueField: next[0] || undefined,
+                        });
+                      }}
+                    />
+                    <span className="truncate">{c}</span>
+                  </label>
+                  {selected && (
+                      <>
+                        {(widget.type === 'line' ||
+                          widget.type === 'area' ||
+                          widget.type === 'bar') && (
+                        <select
+                          className="h-7 shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-1.5 text-[11px] text-slate-200"
+                          title="Y oks (index)"
+                          value={axisIdx}
+                          onChange={(e) => {
+                            const v = Number(e.target.value) === 1 ? 1 : 0;
+                            const prev =
+                              ((widget.config as any)?.valueAxisIndexByField as Record<
+                                string,
+                                0 | 1
+                              >) || {};
+                            onChange({
+                              ...widget,
+                              config: {
+                                ...widget.config,
+                                valueAxisIndexByField: { ...prev, [c]: v },
+                              } as any,
+                            });
+                          }}
+                        >
+                          <option value={0}>Oks L (0)</option>
+                          <option value={1}>Oks R (1)</option>
+                        </select>
+                        )}
+                        <input
+                          className="h-7 w-16 shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-1.5 text-[11px] text-slate-200"
+                          placeholder="TMT"
+                          title="Value suffix (TMT, sany, …)"
+                          value={
+                            (((widget.config as any)?.valueFieldSuffix as Record<string, string>) ||
+                              {})[c] || ''
+                          }
+                          onChange={(e) => {
+                            const prev =
+                              ((widget.config as any)?.valueFieldSuffix as Record<
+                                string,
+                                string
+                              >) || {};
+                            const next = { ...prev };
+                            const val = e.target.value;
+                            if (val) next[c] = val;
+                            else delete next[c];
+                            onChange({
+                              ...widget,
+                              config: {
+                                ...widget.config,
+                                valueFieldSuffix: Object.keys(next).length ? next : undefined,
+                              } as any,
+                            });
+                          }}
+                        />
+                      </>
+                    )}
+                </div>
               );
             })}
           </div>
@@ -773,7 +836,50 @@ export function WidgetConfigPanel({
             placeholder="total, amount (el bilen, comma)"
           />
         )}
+        {(widget.type === 'line' || widget.type === 'area' || widget.type === 'bar') && (
+          <p className="text-[10px] text-slate-500">
+            Oks L/R — Y oksy. Gapdal kiçi meýdan — suffix (TMT, sany, …).
+          </p>
+        )}
       </div>
+
+
+      {widget.type === 'table' && sampleColumns.length > 0 && (
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-medium text-slate-400">
+            Sütün suffix (TMT, sany, …)
+          </label>
+          <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-2 space-y-1">
+            {sampleColumns.map((c) => (
+              <div key={`sfx-${c}`} className="flex items-center gap-2 text-sm text-slate-200">
+                <span className="truncate flex-1 font-mono text-xs">{c}</span>
+                <input
+                  className="h-7 w-20 shrink-0 rounded-lg border border-slate-700 bg-slate-900 px-1.5 text-[11px] text-slate-200"
+                  placeholder="TMT"
+                  value={
+                    (((widget.config as any)?.valueFieldSuffix as Record<string, string>) || {})[c] ||
+                    ''
+                  }
+                  onChange={(e) => {
+                    const prev =
+                      ((widget.config as any)?.valueFieldSuffix as Record<string, string>) || {};
+                    const next = { ...prev };
+                    if (e.target.value) next[c] = e.target.value;
+                    else delete next[c];
+                    onChange({
+                      ...widget,
+                      config: {
+                        ...widget.config,
+                        valueFieldSuffix: Object.keys(next).length ? next : undefined,
+                      } as any,
+                    });
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Input
         label="Auto-refresh (sekunt, 0=öçür)"
@@ -880,20 +986,7 @@ export function WidgetConfigPanel({
               widget.type === 'area' ||
               widget.type === 'pie') && (
                 <>
-                  {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
-                    <Input
-                      label="Goşmaça value sütünler (csv) — köp series"
-                      value={(ds?.columns || []).join(', ')}
-                      onChange={(e) => {
-                        const cols = e.target.value
-                          .split(',')
-                          .map((s) => s.trim())
-                          .filter(Boolean);
-                        patchDs({ columns: cols.length ? cols : undefined });
-                      }}
-                      placeholder="sales, profit, qty"
-                    />
-                  )}
+
                   <div className="flex flex-wrap gap-3 text-xs text-slate-300">
                     {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
                       <>
@@ -938,22 +1031,60 @@ export function WidgetConfigPanel({
                       />
                       Data labels
                     </label>
-                    {(widget.type === 'bar' || widget.type === 'line' || widget.type === 'area') && (
+                    {(widget.type === 'bar' ||
+                      widget.type === 'line' ||
+                      widget.type === 'area') && (
+                      <>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!(widget.config as any)?.valueLabelBg}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: {
+                                  ...widget.config,
+                                  valueLabelBg: e.target.checked,
+                                } as any,
+                              })
+                            }
+                          />
+                          Label fon (bg)
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!(widget.config as any)?.showValueFieldName}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: {
+                                  ...widget.config,
+                                  showValueFieldName: e.target.checked,
+                                } as any,
+                              })
+                            }
+                          />
+                          Value-da column ady
+                        </label>
+                      </>
+                    )}
+                    {(widget.type === 'line' || widget.type === 'area') && (
                       <label className="flex items-center gap-1.5 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={!!(widget.config as any)?.showValueFieldName}
+                          checked={!!(widget.config as any)?.valueLabelAggregate}
                           onChange={(e) =>
                             onChange({
                               ...widget,
                               config: {
                                 ...widget.config,
-                                showValueFieldName: e.target.checked,
+                                valueLabelAggregate: e.target.checked,
                               } as any,
                             })
                           }
                         />
-                        Value-da column ady
+                        Label birleşdir (sum)
                       </label>
                     )}
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -1013,19 +1144,34 @@ export function WidgetConfigPanel({
                       </>
                     )}
                     {widget.type === 'bar' && (
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={!!widget.config?.horizontal}
-                          onChange={(e) =>
-                            onChange({
-                              ...widget,
-                              config: { ...widget.config, horizontal: e.target.checked },
-                            })
-                          }
-                        />
-                        Horizontal
-                      </label>
+                      <>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!widget.config?.horizontal}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, horizontal: e.target.checked },
+                              })
+                            }
+                          />
+                          Horizontal
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!widget.config?.labelInside}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: { ...widget.config, labelInside: e.target.checked },
+                              })
+                            }
+                          />
+                          Label içerde
+                        </label>
+                      </>
                     )}
                   </div>
                   {widget.type === 'pie' && (

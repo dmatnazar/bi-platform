@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, clearSessionCookie } from '@/lib/auth';
+import { getSession, logoutCurrentSession } from '@/lib/auth';
 import { getStaffById, getStaffByUsername } from '@/lib/db';
 import { checkGatewayHealth, fetchCatalog, decryptPasswordPlain } from '@/lib/gateway';
 import path from 'node:path';
@@ -88,6 +88,6 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  await clearSessionCookie();
+  await logoutCurrentSession();
   return NextResponse.json({ ok: true });
 }

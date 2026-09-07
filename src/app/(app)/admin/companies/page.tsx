@@ -105,17 +105,22 @@ export default function CompaniesPage() {
   const isEditorOnly = meRole === 'editor' && !isSuper;
   const isAdminOnly = meRole === 'admin' && !isSuper;
   const scopedUser = isEditorOnly || isAdminOnly; // not super — only own firms
-  const canDeleteFirm = isSuper || isAdminOnly; // editor cannot delete
-  const canToggleActive = isSuper || isAdminOnly; // editor cannot
-  const canEditSlug = isSuper; // only super
+  // Matrix-driven (loaded from /api/permissions); defaults until loaded
+  const [canDeleteFirm, setCanDeleteFirm] = useState(false);
+  const [canToggleActive, setCanToggleActive] = useState(false);
+  const [canEditSlug, setCanEditSlug] = useState(false);
+  const [canManageFirms, setCanManageFirms] = useState(false);
 
   useEffect(() => {
-    fetch('/api/auth/me')
-      .then((r) => r.json())
-      .then((d) => {
+    (async () => {
+      try {
+        const meRes = await fetch('/api/auth/me');
+        const d = await meRes.json();
         const u = d.user;
-        setIsSuper(!!(u?.isSuperAdmin || u?.role === 'super_admin'));
-        if (u?.role) setMeRole(String(u.role));
+        const superA = !!(u?.isSuperAdmin || u?.role === 'super_admin');
+        setIsSuper(superA);
+        const role = u?.role ? String(u.role) : 'viewer';
+        if (u?.role) setMeRole(role);
         const slugs = [
           ...(Array.isArray(u?.tenantSlugs) ? u.tenantSlugs : []),
           u?.companySlug || '',
@@ -123,8 +128,19 @@ export default function CompaniesPage() {
           .map((s: string) => String(s || '').trim())
           .filter(Boolean);
         setMeTenantSlugs(Array.from(new Set(slugs)));
-      })
-      .catch(() => {});
+        const pres = await fetch('/api/permissions');
+        const pdata = await pres.json().catch(() => ({}));
+        const row = (pdata.matrix && pdata.matrix[role]) || {};
+        const flag = (k: string, fallback: boolean) =>
+          superA ? true : typeof row[k] === 'boolean' ? row[k] : fallback;
+        setCanDeleteFirm(flag('delete_company', role === 'admin'));
+        setCanToggleActive(flag('toggle_company_active', role === 'admin'));
+        setCanEditSlug(flag('change_company_slug', false));
+        setCanManageFirms(flag('manage_companies', role === 'admin' || role === 'editor'));
+      } catch {
+        /* */
+      }
+    })();
   }, []);
 
   const load = useCallback(async () => {

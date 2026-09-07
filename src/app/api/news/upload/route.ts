@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany, isSuperAdmin } from '@/lib/auth';
+import { getSession, rbacCanEditNews } from '@/lib/auth';
 import { saveNewsMedia } from '@/lib/news-store';
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
-  if (!(isSuperAdmin(user) || canManageCompany(user.role))) {
+  if (!rbacCanEditNews(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   const form = await req.formData();

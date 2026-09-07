@@ -293,6 +293,14 @@ export interface DashboardWidget {
     decimals?: number;
     /** Chart Y/X value axis: compact (400k) | grouped (400,000) | full (400000) */
     axisNumberFormat?: 'compact' | 'grouped' | 'full';
+    /** Per value-field Y axis index (0=left, 1=right) for line/area/bar multi-series */
+    valueAxisIndexByField?: Record<string, 0 | 1>;
+    /** Per value-field suffix shown after numbers, e.g. { sales: 'TMT', qty: 'sany' } */
+    valueFieldSuffix?: Record<string, string>;
+    /** Show opaque background behind chart value labels */
+    valueLabelBg?: boolean;
+    /** Line/area: when many points, bucket-sum neighboring labels (default off) */
+    valueLabelAggregate?: boolean;
     /** KPI prefix/suffix e.g. currency */
     prefix?: string;
     suffix?: string;
@@ -436,6 +444,8 @@ export interface SessionUser {
   tenantSlugs?: string[];
   tenantIds?: string[];
   isSuperAdmin: boolean;
+  /** Server session registry id (multi-device control) */
+  sessionId?: string;
 }
 
 export interface DbSchema {
@@ -477,6 +487,14 @@ export interface DbSchema {
       editor?: Record<string, boolean>;
       viewer?: Record<string, boolean>;
     };
+    /**
+     * Max concurrent active devices/sessions per user (default 1).
+     */
+    maxConcurrentDevices?: number;
+    /**
+     * warn = 409 + confirm; strict = block second; kick_oldest = auto drop oldest.
+     */
+    sessionLoginPolicy?: 'warn' | 'strict' | 'kick_oldest';
     /** Gmail / SMTP for forgot-password */
     mail?: {
       enabled?: boolean;

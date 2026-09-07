@@ -20,7 +20,20 @@ import {
   canTopupBilling,
 } from './rbac';
 
+/** Client-side role check — mirrors server matrix defaults; live overrides need server. */
 export function canEditDashboard(role: StaffRole): boolean {
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
+}
+
+export function canCreateDashboard(role: StaffRole): boolean {
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
+}
+
+export function canDeleteDashboard(role: StaffRole): boolean {
+  return role === 'super_admin' || role === 'admin' || role === 'editor';
+}
+
+export function canExportDashboard(role: StaffRole): boolean {
   return role === 'super_admin' || role === 'admin' || role === 'editor';
 }
 

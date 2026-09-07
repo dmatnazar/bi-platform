@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDashboard, upsertDashboard, deleteDashboard } from '@/lib/db';
-import { getSession, canEditDashboard, isSuperAdmin } from '@/lib/auth';
+import { getSession, canEditDashboards, canDeleteDashboards, isSuperAdmin } from '@/lib/auth';
 import type { DashboardWidget, GlobalFilterDef } from '@/lib/types';
 import { z } from 'zod';
 import { fetchCatalog } from '@/lib/gateway';
@@ -48,7 +48,7 @@ const updateSchema = z.object({
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
   const user = await getSession();
-  if (!user || !canEditDashboard(user.role)) {
+  if (!user || !canEditDashboards(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
@@ -107,7 +107,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const user = await getSession();
-  if (!user || !canEditDashboard(user.role)) {
+  if (!user || !canDeleteDashboards(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 

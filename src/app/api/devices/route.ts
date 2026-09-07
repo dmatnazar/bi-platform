@@ -3,6 +3,7 @@ import {
   getSession,
   isSuperAdmin,
   canManageDevices as canDev,
+  canDeleteDevices,
   canApproveDevices,
   actorTenantSlugs,
   canAccessAnyTenant,
@@ -89,6 +90,9 @@ export async function POST(req: NextRequest) {
 
   if (action === 'approve') {
     if (!canApproveDevices(user)) {
+      return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+    }
+    if (!canApproveDevices(user)) {
       return NextResponse.json(
         { error: 'Enjam tassyklamak diňe super admin üçin' },
         { status: 403 }
@@ -145,6 +149,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'delete') {
+    if (!canDeleteDevices(user)) {
+      return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+    }
     const res = await deleteDeviceOnGateway(id);
     if (!res.ok) {
       return NextResponse.json(

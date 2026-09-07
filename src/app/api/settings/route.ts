@@ -71,6 +71,8 @@ const patchSchema = z.object({
   appAnimations: z.boolean().optional(),
   modalAnimations: z.boolean().optional(),
   registrationEnabled: z.boolean().optional(),
+  maxConcurrentDevices: z.number().int().min(1).max(20).optional(),
+  sessionLoginPolicy: z.enum(['warn', 'strict', 'kick_oldest']).optional(),
 });
 
 function normalizeGatewayUrl(raw: string): string | null {
@@ -124,6 +126,12 @@ export async function PUT(req: NextRequest) {
   }
   if (parsed.data.registrationEnabled !== undefined) {
     patch.registrationEnabled = parsed.data.registrationEnabled;
+  }
+  if (parsed.data.maxConcurrentDevices !== undefined) {
+    patch.maxConcurrentDevices = parsed.data.maxConcurrentDevices;
+  }
+  if (parsed.data.sessionLoginPolicy !== undefined) {
+    patch.sessionLoginPolicy = parsed.data.sessionLoginPolicy;
   }
   if (parsed.data.clearSecret) patch.gatewayAdminSecret = '';
   else if (parsed.data.gatewayAdminSecret && parsed.data.gatewayAdminSecret !== '••••••••') {

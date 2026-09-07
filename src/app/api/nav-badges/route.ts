@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSession, isSuperAdmin, canManageCompany, canManageStaff } from '@/lib/auth';
+import { getSession, isSuperAdmin, canManageCompanies, canManageStaffUser } from '@/lib/auth';
 import { checkGatewayHealth, gatewayFetch, fetchCatalog } from '@/lib/gateway';
 import { unreadCount } from '@/lib/news-store';
 
@@ -25,7 +25,7 @@ export async function GET() {
       return NextResponse.json(out);
     }
 
-    if (isSuperAdmin(user) || canManageCompany(user.role)) {
+    if (isSuperAdmin(user) || canManageCompanies(user)) {
       try {
         const cat = await fetchCatalog(false);
         const devices = (cat as any).devices || [];
@@ -49,7 +49,7 @@ export async function GET() {
       }
     }
 
-    if (canManageStaff(user.role) || isSuperAdmin(user)) {
+    if (canManageStaffUser(user) || isSuperAdmin(user)) {
       try {
         const cat = await fetchCatalog(false);
         const staff = (cat as any).staff || [];

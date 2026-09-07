@@ -32,6 +32,7 @@ export async function createSessionToken(user: SessionUser): Promise<string> {
     tenantSlugs: user.tenantSlugs,
     tenantIds: user.tenantIds,
     isSuperAdmin: user.isSuperAdmin,
+    sessionId: user.sessionId,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -54,6 +55,7 @@ export async function verifySessionToken(token: string): Promise<SessionUser | n
       tenantSlugs: Array.isArray(payload.tenantSlugs) ? payload.tenantSlugs.map(String) : undefined,
       tenantIds: Array.isArray(payload.tenantIds) ? payload.tenantIds.map(String) : undefined,
       isSuperAdmin: Boolean(payload.isSuperAdmin),
+      sessionId: payload.sessionId ? String(payload.sessionId) : undefined,
     };
   } catch {
     return null;
@@ -77,6 +79,24 @@ export async function clearSessionCookie() {
   jar.delete(COOKIE_NAME);
 }
 
+/** Logout: revoke server session then clear cookie */
+export async function logoutCurrentSession() {
+  try {
+    const jar = await cookies();
+    const token = jar.get(COOKIE_NAME)?.value;
+    if (token) {
+      const user = await verifySessionToken(token);
+      if (user?.sessionId) {
+        const { revokeSession } = await import('./session-store');
+        revokeSession(user.sessionId, 'logout');
+      }
+    }
+  } catch {
+    /* */
+  }
+  await clearSessionCookie();
+}
+
 let permissionsHydrated = false;
 
 export async function getSession(): Promise<SessionUser | null> {
@@ -93,7 +113,25 @@ export async function getSession(): Promise<SessionUser | null> {
   const jar = await cookies();
   const token = jar.get(COOKIE_NAME)?.value;
   if (!token) return null;
-  return verifySessionToken(token);
+  const user = await verifySessionToken(token);
+  if (!user) return null;
+
+  // Server session registry: revoked / missing session => logged out
+  if (user.sessionId) {
+    try {
+      const { getSessionById, touchSession } = await import('./session-store');
+      const s = getSessionById(user.sessionId);
+      if (!s || !s.active) {
+        await clearSessionCookie();
+        return null;
+      }
+      // light touch (throttle inside would be ideal; ok for small installs)
+      touchSession(user.sessionId);
+    } catch {
+      /* store offline — allow JWT-only fallback */
+    }
+  }
+  return user;
 }
 
 export async function loginWithCredentials(
@@ -177,6 +215,10 @@ export {
   canManagePermissions,
   canHandleSupport,
   canEditDashboards,
+  canCreateDashboards,
+  canDeleteDashboards,
+  canExportDashboards,
+  canManageDashboardAccess,
   canViewDashboards,
   assignableRoles,
   visibleStaffRoles,

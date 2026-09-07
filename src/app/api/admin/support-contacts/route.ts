@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageSupportContacts } from '@/lib/auth';
 import {
   readSupportContacts,
   writeSupportContacts,
@@ -8,7 +8,7 @@ import {
 
 export async function GET() {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageSupportContacts(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   return NextResponse.json(readSupportContacts());
@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canManageCompany(user.role)) {
+  if (!user || !canManageSupportContacts(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   const body = await req.json();

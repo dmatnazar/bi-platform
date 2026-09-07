@@ -33,6 +33,11 @@ export default function LoginPage() {
   const [authAnim, setAuthAnim] = useState(true);
   const [supportOpen, setSupportOpen] = useState(false);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [sessionConflict, setSessionConflict] = useState<{
+    sessions: { deviceName: string; ip: string; lastSeenAt: string }[];
+    maxDevices: number;
+    code: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,16 +88,30 @@ export default function LoginPage() {
     setNotifs([]);
   }
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    // Only auto-fullscreen when Settings → "Awto doly ekran" is enabled.
-    // Otherwise fullscreen happens solely via the top-right icon.
+  function getDeviceId(): string {
     try {
-      const auto = localStorage.getItem('bi-fullscreen-auto') === '1';
-      if (auto && !fullscreenPrefDisabled()) requestFullscreenSafe();
+      let id = localStorage.getItem('bi-device-id');
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem('bi-device-id', id);
+      }
+      return id;
     } catch {
-      /* ignore */
+      return 'web-unknown';
     }
+  }
+
+  function deviceName(): string {
+    try {
+      const ua = navigator.userAgent || '';
+      if (/Mobile|Android|iPhone/i.test(ua)) return 'Mobil brauzer';
+      return 'Web brauzer';
+    } catch {
+      return 'Web';
+    }
+  }
+
+  async function doLogin(confirmReplace = false) {
     setError('');
     setWarning('');
     setLoading(true);
@@ -100,10 +119,33 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({
+          username,
+          password,
+          deviceId: getDeviceId(),
+          deviceName: deviceName(),
+          confirmReplace,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (data.code === 'session_limit' || res.status === 409) {
+          setSessionConflict({
+            sessions: data.sessions || [],
+            maxDevices: data.maxDevices || 1,
+            code: data.code || 'session_limit',
+          });
+          setLoading(false);
+          return;
+        }
+        if (data.code === 'session_limit_strict') {
+          setError(
+            data.error ||
+              'Bu hasap başga enjamda açyk. Iň köp enjam çägine ýetdi (strict).'
+          );
+          setLoading(false);
+          return;
+        }
         if (data.code === 'registration_pending' || data.error?.includes?.('tassyklan')) {
           setWarning(
             data.error ||
@@ -117,7 +159,7 @@ export default function LoginPage() {
         setLoading(false);
         return;
       }
-      // Keep "Garaşyň..." until navigation completes (do not clear loading on success)
+      setSessionConflict(null);
       try {
         const nr = await fetch('/api/news', { cache: 'no-store' });
         const nd = await nr.json().catch(() => ({}));
@@ -135,6 +177,20 @@ export default function LoginPage() {
       setLoading(false);
     }
   }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    // Only auto-fullscreen when Settings → "Awto doly ekran" is enabled.
+    try {
+      const auto = localStorage.getItem('bi-fullscreen-auto') === '1';
+      if (auto && !fullscreenPrefDisabled()) requestFullscreenSafe();
+    } catch {
+      /* ignore */
+    }
+    setSessionConflict(null);
+    await doLogin(false);
+  }
+
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-10 relative overflow-hidden">
@@ -195,6 +251,45 @@ export default function LoginPage() {
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        
+        {sessionConflict && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/70">
+            <div className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-slate-900 p-5 shadow-2xl space-y-4">
+              <h3 className="text-lg font-semibold text-white">Başga enjamda seans açyk</h3>
+              <p className="text-sm text-slate-300 leading-relaxed">
+                Bu hasap eýýäm giren. Max enjam: <b>{sessionConflict.maxDevices}</b>.
+                Dowam etseňiz beýleki seans(lar) ýapylar.
+              </p>
+              <ul className="text-xs text-slate-400 space-y-1 max-h-32 overflow-y-auto">
+                {(sessionConflict.sessions || []).map((s, i) => (
+                  <li key={i}>
+                    · {s.deviceName || 'Enjam'} — {s.ip || 'IP ýok'} —{' '}
+                    {s.lastSeenAt ? new Date(s.lastSeenAt).toLocaleString() : ''}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2 justify-end">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSessionConflict(null)}
+                >
+                  Ýatyr
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  loading={loading}
+                  onClick={() => void doLogin(true)}
+                >
+                  Dowam et we beýlekini ýap
+                </Button>
+              </div>
+            </div>
           </div>
         )}
 

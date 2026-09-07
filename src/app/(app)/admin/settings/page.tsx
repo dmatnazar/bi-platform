@@ -72,6 +72,8 @@ export default function SettingsPage() {
   const [modalAnimations, setModalAnimations] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [fullscreenAuto, setFullscreenAuto] = useState(false);
+  const [maxConcurrentDevices, setMaxConcurrentDevices] = useState(1);
+  const [sessionLoginPolicy, setSessionLoginPolicy] = useState<'warn' | 'strict' | 'kick_oldest'>('warn');
 
   const loadGateway = useCallback(async () => {
     const res = await fetch('/api/settings');
@@ -86,6 +88,11 @@ export default function SettingsPage() {
       setAppAnimations(data.settings?.appAnimations !== false);
       setModalAnimations(data.settings?.modalAnimations !== false);
       setRegistrationEnabled(data.settings?.registrationEnabled !== false);
+      setMaxConcurrentDevices(Math.max(1, Number(data.settings?.maxConcurrentDevices) || 1));
+      const pol = String(data.settings?.sessionLoginPolicy || 'warn');
+      setSessionLoginPolicy(
+        pol === 'strict' || pol === 'kick_oldest' ? pol : 'warn'
+      );
       try {
         setFullscreenAuto(localStorage.getItem('bi-fullscreen-auto') === '1');
       } catch {
@@ -189,6 +196,28 @@ export default function SettingsPage() {
       await loadGateway();
     } catch (e) {
       toastError('Sync', e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function saveSessions() {
+    setSaving('sessions');
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          maxConcurrentDevices: Math.max(1, Number(maxConcurrentDevices) || 1),
+          sessionLoginPolicy,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      toastSuccess('Seans sazlamalary saklandy');
+      await loadGateway();
+    } catch (e) {
+      toastError('Seanslar', e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(null);
     }
@@ -547,6 +576,44 @@ export default function SettingsPage() {
           </Button>
         </section>
 
+        <section className="rounded-2xl border border-amber-500/30 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">
+          <h2 className="text-sm font-semibold text-white">Seanslar / enjam çägi</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Bir hasap näçe enjamdan bir wagtda girip bilýär. Default: <b className="text-slate-300">1</b>.
+            Warning — ikinji girişde tassyklama soň beýleki seanslar ýapylar; Strict — blok;
+            Kick oldest — iň köne seansy awto ýapýar.
+          </p>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="block text-sm text-slate-300">
+              Max enjam sany
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={maxConcurrentDevices}
+                onChange={(e) => setMaxConcurrentDevices(Math.max(1, Number(e.target.value) || 1))}
+                className="mt-1.5 w-full h-10 rounded-xl bg-slate-950 border border-slate-700 px-3 text-sm text-white"
+              />
+            </label>
+            <label className="block text-sm text-slate-300">
+              Login syýasaty
+              <select
+                value={sessionLoginPolicy}
+                onChange={(e) =>
+                  setSessionLoginPolicy(e.target.value as 'warn' | 'strict' | 'kick_oldest')
+                }
+                className="mt-1.5 w-full h-10 rounded-xl bg-slate-950 border border-slate-700 px-3 text-sm text-white"
+              >
+                <option value="warn">Warning (tassyklama soň beýlekini ýap)</option>
+                <option value="strict">Strict (ikinji enjamy blokla)</option>
+                <option value="kick_oldest">Kick oldest (iň köne seansy awto ýap)</option>
+              </select>
+            </label>
+          </div>
+          <Button type="button" size="sm" loading={saving === 'sessions'} onClick={() => void saveSessions()}>
+            Seans sazlamalaryny sakla
+          </Button>
+        </section>
 
         {/* Update feed */}
         <section className="rounded-2xl border border-indigo-500/30 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">

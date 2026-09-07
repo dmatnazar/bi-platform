@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { listDashboardsVisibleTo, upsertDashboard, getSettings } from '@/lib/db';
-import { getSession, canEditDashboard, isSuperAdmin } from '@/lib/auth';
+import { getSession, canCreateDashboards, isSuperAdmin } from '@/lib/auth';
 import type { Dashboard, DashboardWidget } from '@/lib/types';
 import { z } from 'zod';
 
@@ -24,7 +24,7 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
-  if (!user || !canEditDashboard(user.role)) {
+  if (!user || !canCreateDashboards(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 

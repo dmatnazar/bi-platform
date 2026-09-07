@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { getSession, canManageCompany, isSuperAdmin } from '@/lib/auth';
+import { getSession, canManageMailSettings, isSuperAdmin } from '@/lib/auth';
 import { getSettings, updateSettings } from '@/lib/db';
 import { getMailConfig, isMailConfigured, sendMail } from '@/lib/mail';
 
 export async function GET() {
   const user = await getSession();
-  if (!user || (!canManageCompany(user.role) && !isSuperAdmin(user))) {
+  if (!user || !canManageMailSettings(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   const cfg = await getMailConfig();
@@ -60,7 +60,7 @@ const schema = z.object({
 
 export async function PUT(req: NextRequest) {
   const user = await getSession();
-  if (!user || (!canManageCompany(user.role) && !isSuperAdmin(user))) {
+  if (!user || !canManageMailSettings(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany, isSuperAdmin } from '@/lib/auth';
+import { getSession, canSendDeviceCommands, isSuperAdmin } from '@/lib/auth';
 import { checkGatewayHealth, deviceCommandOnGateway } from '@/lib/gateway';
 import { z } from 'zod';
 
@@ -10,7 +10,7 @@ const schema = z.object({
 
 export async function POST(req: NextRequest) {
   const user = await getSession();
-  if (!user || (!canManageCompany(user.role) && !isSuperAdmin(user))) {
+  if (!user || !canSendDeviceCommands(user)) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
   if (!(await checkGatewayHealth())) {

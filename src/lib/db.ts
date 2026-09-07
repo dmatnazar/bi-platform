@@ -25,6 +25,8 @@ const defaultData = (): DbSchema => ({
     authAnimations: true,
     appAnimations: true,
     modalAnimations: true,
+    maxConcurrentDevices: 1,
+    sessionLoginPolicy: 'warn',
   },
 });
 

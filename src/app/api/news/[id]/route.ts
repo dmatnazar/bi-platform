@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany, isSuperAdmin } from '@/lib/auth';
+import { getSession, rbacCanEditNews, canDeleteNews, isSuperAdmin } from '@/lib/auth';
 import { getNews, updateNews, deleteNews, markRead, getReadIds } from '@/lib/news-store';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-function canEdit(user: { role: string; isSuperAdmin?: boolean }) {
-  return isSuperAdmin(user as any) || canManageCompany(user.role as any);
+function canEdit(user: any) {
+  return rbacCanEditNews(user);
+}
+function canDel(user: any) {
+  return canDeleteNews(user);
 }
 
 export async function GET(_req: NextRequest, ctx: Ctx) {
@@ -42,7 +45,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   const user = await getSession();
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
-  if (!canEdit(user)) return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
+  if (!canDel(user)) return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   const { id } = await ctx.params;
   if (!deleteNews(id)) return NextResponse.json({ error: 'Habar ýok' }, { status: 404 });
   return NextResponse.json({ ok: true });

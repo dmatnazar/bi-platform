@@ -5,7 +5,7 @@ import type { GlobalFilterDef, GlobalFilterValues } from '@/lib/types';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
-import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn, formatCellValue } from '@/lib/utils';
 import { ApiPickerModal } from '@/components/ApiPickerModal';
 
@@ -542,6 +542,8 @@ export function DashboardFilterBar({
 interface EditorProps {
   filters: GlobalFilterDef[];
   onChange: (filters: GlobalFilterDef[]) => void;
+  /** Dashboard widgets — for "widget column" custom filters */
+  widgets?: import('@/lib/types').DashboardWidget[];
 }
 
 interface EndpointOpt {
@@ -553,7 +555,7 @@ interface EndpointOpt {
   dbKey?: string;
 }
 
-export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
+export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorProps) {
   const [customOpen, setCustomOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
@@ -568,6 +570,11 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [apiPickerOpen, setApiPickerOpen] = useState(false);
+  /** 'api' | 'widget' */
+  const [sourceMode, setSourceMode] = useState<'api' | 'widget'>('api');
+  const [widgetId, setWidgetId] = useState('');
+  const [widgetParamValues, setWidgetParamValues] = useState<Record<string, string>>({});
+  const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([]);
 
   useEffect(() => {
     if (!customOpen) return;
@@ -628,6 +635,7 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
       }
       const cols = Object.keys(rows[0] || {});
       setColumns(cols);
+      setRawRows(rows as Record<string, unknown>[]);
       // Heuristic: *name* / *title* for label, *id* for value
       const guessLabel =
         cols.find((c) => /name|title|ady|label/i.test(c)) || cols[0] || '';
@@ -664,8 +672,94 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
     setValueCol(vCol);
     if (!vCol) return;
     setParamKey((k) => k || vCol);
-    // re-query not needed if we stored rows — for simplicity keep preview from last load
-    // user can re-select API to refresh
+    const seen = new Set<string>();
+    const prev: { label: string; value: string }[] = [];
+    for (const r of rawRows) {
+      const v = String(r[vCol] ?? '').trim();
+      if (!v || seen.has(v)) continue;
+      seen.add(v);
+      prev.push({ value: v, label: String(r[lCol || vCol] ?? v) });
+      if (prev.length >= 80) break;
+    }
+    setPreview(prev);
+  }
+
+
+  async function loadFromWidget(id: string, paramOverrides?: Record<string, string>) {
+    const w = widgets.find((x) => x.id === id);
+    if (!w?.dataSource?.path) {
+      setError('Widget-de data source ýok');
+      return;
+    }
+    setWidgetId(id);
+    setLoadingCols(true);
+    setError('');
+    setColumns([]);
+    setPreview([]);
+    setRawRows([]);
+    const ds = w.dataSource;
+    let path = ds.path || '';
+    path = path.replace(/\{[^}]+\}/g, '');
+    if (!path.startsWith('/')) path = '/' + path;
+    const params: Record<string, string | number | boolean> = { ...(ds.params || {}) };
+    const overrides = paramOverrides || widgetParamValues;
+    for (const [k, v] of Object.entries(overrides)) {
+      if (v !== '' && v != null) params[k] = v;
+    }
+    // defaults from paramBindings
+    if (ds.paramBindings?.length) {
+      for (const b of ds.paramBindings) {
+        if (params[b.paramName] == null && b.value != null) {
+          params[b.paramName] = b.value as string | number | boolean;
+        }
+      }
+    }
+    setLabel((prev) => prev.trim() || w.title || w.id);
+    try {
+      const res = await fetch('/api/gateway/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: ds.tenantSlug,
+          path,
+          method: ds.method || 'GET',
+          dbKey: ds.dbKey || 'primary',
+          params,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Query failed');
+      const rows: Record<string, unknown>[] = Array.isArray(data.rows)
+        ? data.rows
+        : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data)
+            ? data
+            : [];
+      const cols = rows[0] ? Object.keys(rows[0]) : [];
+      setColumns(cols);
+      setRawRows(rows);
+      const guess =
+        cols.find((c) => /name|title|ady|label/i.test(c)) || cols[0] || '';
+      setLabelCol(guess);
+      setValueCol(guess);
+      setParamKey(guess);
+      // distinct
+      const seen = new Set<string>();
+      const prev: { label: string; value: string }[] = [];
+      for (const r of rows) {
+        const v = String(r[guess] ?? '').trim();
+        if (!v || seen.has(v)) continue;
+        seen.add(v);
+        prev.push({ value: v, label: v });
+        if (prev.length >= 80) break;
+      }
+      setPreview(prev);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setLoadingCols(false);
+    }
   }
 
   function addDateRange() {
@@ -757,11 +851,15 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
     setValueCol('');
     setPreview([]);
     setError('');
+    setSourceMode('api');
+    setWidgetId('');
+    setWidgetParamValues({});
+    setRawRows([]);
   }
 
   function saveCustom() {
-    if (!selectedEp || !labelCol || !valueCol || !paramKey.trim()) {
-      setError('API, UI column, key column we filtr adyny dolduryň');
+    if (!labelCol || !valueCol || !paramKey.trim()) {
+      setError('UI column, key column we filtr adyny dolduryň');
       return;
     }
     const key = paramKey.trim();
@@ -773,25 +871,65 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
       setError('Filter adyny ýazyň (UI-da görkezilýän at)');
       return;
     }
-    setSaving(true);
-    let path = selectedEp.pathTemplate || '';
-    path = path.replace(/\{[^}]+\}/g, '');
-    if (!path.startsWith('/')) path = '/' + path;
 
-    const def: GlobalFilterDef = {
-      key,
-      label: label.trim(),
-      type: 'multiselect',
-      placeholder: 'Saýla…',
-      optionsSource: {
+    let optionsSource: GlobalFilterDef['optionsSource'];
+    let staticOptions: GlobalFilterDef['options'];
+
+    if (sourceMode === 'widget') {
+      const w = widgets.find((x) => x.id === widgetId);
+      if (!w?.dataSource?.path) {
+        setError('Widget saýlaň');
+        return;
+      }
+      const ds = w.dataSource;
+      let path = ds.path || '';
+      path = path.replace(/\{[^}]+\}/g, '');
+      if (!path.startsWith('/')) path = '/' + path;
+      const params: Record<string, string | number | boolean> = { ...(ds.params || {}) };
+      for (const [k, v] of Object.entries(widgetParamValues)) {
+        if (v !== '' && v != null) params[k] = v;
+      }
+      optionsSource = {
+        tenantSlug: ds.tenantSlug,
+        path,
+        method: (ds.method as 'GET' | 'POST') || 'GET',
+        dbKey: ds.dbKey || 'primary',
+        valueField: valueCol,
+        labelField: labelCol,
+        params: Object.keys(params).length ? params : undefined,
+      };
+      // also embed distinct snapshot so filter works offline-ish
+      if (preview.length) {
+        staticOptions = preview.map((p) => ({ value: p.value, label: p.label }));
+      }
+    } else {
+      if (!selectedEp) {
+        setError('API saýlaň');
+        return;
+      }
+      let path = selectedEp.pathTemplate || '';
+      path = path.replace(/\{[^}]+\}/g, '');
+      if (!path.startsWith('/')) path = '/' + path;
+      optionsSource = {
         tenantSlug: selectedEp.tenantSlug,
         path,
         method: (selectedEp.method as 'GET' | 'POST') || 'GET',
         dbKey: selectedEp.dbKey || 'primary',
         valueField: valueCol,
         labelField: labelCol,
-      },
+      };
+    }
+
+    setSaving(true);
+    const def: GlobalFilterDef = {
+      key,
+      label: label.trim(),
+      type: 'multiselect',
+      placeholder: 'Saýla…',
+      optionsSource,
+      options: staticOptions,
     };
+
     if (editingKey) {
       onChange(filters.map((f) => (f.key === editingKey ? def : f)));
     } else {
@@ -859,7 +997,8 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
               }}
               className="flex items-center justify-between gap-2 rounded-lg bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-300 cursor-grab active:cursor-grabbing"
             >
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 truncate flex items-center gap-1.5">
+                <GripVertical className="h-3.5 w-3.5 text-slate-600 shrink-0" />
                 <span className="font-mono text-indigo-300">{f.key}</span>
                 {f.endKey && (
                   <>
@@ -891,7 +1030,7 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
                 >
                   ↓
                 </button>
-                {(f.type === 'multiselect' || f.optionsSource) && (
+                {(f.type === 'multiselect' || f.optionsSource || f.type === 'select') && (
                   <button
                     type="button"
                     onClick={() => openEdit(f)}
@@ -952,6 +1091,41 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
                 </div>
               )}
 
+              <div className="flex gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSourceMode('api');
+                    setWidgetId('');
+                    setColumns([]);
+                    setPreview([]);
+                  }}
+                  className={
+                    sourceMode === 'api'
+                      ? 'px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                      : 'px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700'
+                  }
+                >
+                  API
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSourceMode('widget');
+                    setEpId('');
+                    setColumns([]);
+                    setPreview([]);
+                  }}
+                  className={
+                    sourceMode === 'widget'
+                      ? 'px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-200 border border-violet-500/40'
+                      : 'px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 border border-slate-700'
+                  }
+                >
+                  Widget (şu dashboard)
+                </button>
+              </div>
+
               <div className="space-y-1">
                 <label className="text-[11px] font-medium text-violet-300">Filter ady (UI-da görkezilýän)</label>
                 <input
@@ -962,6 +1136,7 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
                 />
               </div>
 
+              {sourceMode === 'api' ? (
               <div className="space-y-1.5">
                 <label className="text-[11px] font-medium text-slate-400">1. API saýla</label>
                 <button
@@ -993,6 +1168,89 @@ export function GlobalFiltersEditor({ filters, onChange }: EditorProps) {
                   }}
                 />
               </div>
+              ) : (
+              <div className="space-y-2">
+                <label className="text-[11px] font-medium text-slate-400">
+                  1. Widget saýla (diňe şu dashboard)
+                </label>
+                <select
+                  className="w-full h-11 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                  value={widgetId}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setWidgetId(id);
+                    setWidgetParamValues({});
+                    if (id) void loadFromWidget(id, {});
+                  }}
+                >
+                  <option value="">— widget saýlaň —</option>
+                  {widgets.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {(w.title || w.type || w.id).toString()} ({w.type})
+                    </option>
+                  ))}
+                </select>
+                {widgets.length === 0 && (
+                  <p className="text-[10px] text-amber-400">Bu dashboard-da widget ýok.</p>
+                )}
+                {widgetId && (() => {
+                  const w = widgets.find((x) => x.id === widgetId);
+                  const schema = w?.dataSource?.paramsSchema;
+                  const params: { name: string; required?: boolean }[] = [];
+                  if (schema && typeof schema === 'object') {
+                    const list = Array.isArray((schema as any).params)
+                      ? (schema as any).params
+                      : Array.isArray(schema)
+                        ? schema
+                        : [];
+                    for (const p of list) {
+                      if (p && p.name) params.push({ name: String(p.name), required: !!p.required });
+                    }
+                  }
+                  // also from paramBindings
+                  for (const b of w?.dataSource?.paramBindings || []) {
+                    if (b.paramName && !params.some((p) => p.name === b.paramName)) {
+                      params.push({ name: b.paramName });
+                    }
+                  }
+                  if (!params.length) return null;
+                  return (
+                    <div className="space-y-1.5 rounded-xl border border-slate-800 p-2 bg-slate-950/50">
+                      <p className="text-[10px] text-slate-400">
+                        Widget params (column almak üçin dolduryň)
+                      </p>
+                      {params.map((p) => (
+                        <div key={p.name} className="flex items-center gap-2">
+                          <span className="text-[11px] font-mono text-slate-400 w-28 truncate">
+                            {p.name}
+                            {p.required ? '*' : ''}
+                          </span>
+                          <input
+                            className="flex-1 h-8 rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs text-white"
+                            value={widgetParamValues[p.name] || ''}
+                            onChange={(e) =>
+                              setWidgetParamValues((prev) => ({
+                                ...prev,
+                                [p.name]: e.target.value,
+                              }))
+                            }
+                            placeholder={p.name}
+                          />
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={loadingCols}
+                        onClick={() => void loadFromWidget(widgetId, widgetParamValues)}
+                        className="w-full h-8 rounded-lg bg-violet-600/80 hover:bg-violet-500 text-xs text-white"
+                      >
+                        Columnlary al
+                      </button>
+                    </div>
+                  );
+                })()}
+              </div>
+              )}
 
               {loadingCols && (
                 <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
