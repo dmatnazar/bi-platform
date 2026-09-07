@@ -412,6 +412,113 @@ export async function markPasswordResetUsed(token: string): Promise<void> {
   writeDb(data);
 }
 
+
+// ── Staff invite tokens ──────────────────────────────────────
+
+export async function createStaffInvite(input: {
+  token: string;
+  tenantSlugs: string[];
+  role: import('./types').StaffRole;
+  seats: number;
+  expiresAt: string;
+  createdBy: string;
+  createdByUsername?: string;
+}): Promise<void> {
+  const data = await getData();
+  if (!data.staffInvites) data.staffInvites = [];
+  data.staffInvites.push({
+    token: input.token,
+    tenantSlugs: input.tenantSlugs,
+    role: input.role,
+    seats: input.seats,
+    usedSeats: 0,
+    expiresAt: input.expiresAt,
+    createdAt: new Date().toISOString(),
+    createdBy: input.createdBy,
+    createdByUsername: input.createdByUsername,
+  });
+  const now = Date.now();
+  data.staffInvites = data.staffInvites.filter(
+    (t) => !t.usedAt && Date.parse(t.expiresAt) > now - 86400000
+  );
+  writeDb(data);
+}
+
+export async function getStaffInvite(token: string) {
+  const data = await getData();
+  return (data.staffInvites || []).find((t) => t.token === token) || null;
+}
+
+export async function markStaffInviteSeatsUsed(token: string, count: number): Promise<void> {
+  const data = await getData();
+  if (!data.staffInvites) return;
+  const idx = data.staffInvites.findIndex((t) => t.token === token);
+  if (idx < 0) return;
+  const row = data.staffInvites[idx];
+  row.usedSeats = (row.usedSeats || 0) + count;
+  if (row.usedSeats >= row.seats) {
+    row.usedAt = new Date().toISOString();
+  }
+  writeDb(data);
+}
+
+/** Active (not fully used) invites — optionally filter by creator */
+export async function listStaffInvites(opts?: { createdBy?: string; includeExpired?: boolean }) {
+  const data = await getData();
+  const now = Date.now();
+  let list = [...(data.staffInvites || [])];
+  if (opts?.createdBy) {
+    list = list.filter((t) => t.createdBy === opts.createdBy);
+  }
+  // drop fully consumed
+  list = list.filter((t) => !t.usedAt && (t.usedSeats || 0) < t.seats);
+  if (!opts?.includeExpired) {
+    list = list.filter((t) => Date.parse(t.expiresAt) > now);
+  }
+  list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return list;
+}
+
+export async function deleteStaffInvite(token: string): Promise<boolean> {
+  const data = await getData();
+  if (!data.staffInvites) return false;
+  const before = data.staffInvites.length;
+  data.staffInvites = data.staffInvites.filter((t) => t.token !== token);
+  if (data.staffInvites.length === before) return false;
+  writeDb(data);
+  return true;
+}
+
+/** Add minutes from max(now, current expires). Clears usedAt if was only expired. */
+export async function extendStaffInvite(
+  token: string,
+  addMinutes: number
+): Promise<{ ok: true; expiresAt: string; expiresInSec: number } | { ok: false; error: string }> {
+  const data = await getData();
+  if (!data.staffInvites) return { ok: false, error: 'Invite ýok' };
+  const idx = data.staffInvites.findIndex((t) => t.token === token);
+  if (idx < 0) return { ok: false, error: 'Invite tapylmady' };
+  const row = data.staffInvites[idx];
+  if ((row.usedSeats || 0) >= row.seats) {
+    return { ok: false, error: 'Invite eýýäm doly ulanyldy' };
+  }
+  const mins = Math.max(1, Math.min(180, Math.floor(addMinutes || 0)));
+  const now = Date.now();
+  const base = Math.max(now, Date.parse(row.expiresAt) || now);
+  const expiresAt = new Date(base + mins * 60 * 1000).toISOString();
+  row.expiresAt = expiresAt;
+  // reopen if previously marked used only due to full seats — not the case here
+  if (row.usedAt && (row.usedSeats || 0) < row.seats) {
+    delete row.usedAt;
+  }
+  writeDb(data);
+  return {
+    ok: true,
+    expiresAt,
+    expiresInSec: Math.max(0, Math.floor((Date.parse(expiresAt) - now) / 1000)),
+  };
+}
+
 export async function getStaffByEmail(email: string) {
   const data = await getData();
   const e = email.toLowerCase().trim();

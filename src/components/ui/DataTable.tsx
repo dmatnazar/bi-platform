@@ -74,39 +74,49 @@ export function DataTable<T>({
   onRowClick,
   selectedKey,
 }: Props<T>) {
-  const prefs = loadPrefs(storageKey);
+  // SSR-safe defaults only — localStorage applied after mount (avoids hydration mismatch)
   const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [showColFilters, setShowColFilters] = useState(false);
-  const [sortId, setSortId] = useState<string | null>(() => prefs?.sortId ?? null);
-  const [sortDir, setSortDir] = useState<SortDir>(() => prefs?.sortDir ?? null);
+  const [sortId, setSortId] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>(null);
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(() => prefs?.pageSize ?? pageSizeOptions[0] ?? 10);
-  const [colOrder, setColOrder] = useState<string[]>(() => {
-    const ids = columnsProp.map((c) => c.id);
-    const saved: string[] = Array.isArray(prefs?.colOrder) ? prefs.colOrder : [];
-    const kept = saved.filter((id: string) => ids.includes(id));
-    const missing = ids.filter((id) => !kept.includes(id));
-    return kept.length ? [...kept, ...missing] : ids;
-  });
+  const [pageSize, setPageSize] = useState(() => pageSizeOptions[0] ?? 10);
+  const [colOrder, setColOrder] = useState<string[]>(() => columnsProp.map((c) => c.id));
   const [visibility, setVisibility] = useState<Record<string, boolean>>(() => {
     const base: Record<string, boolean> = {};
     for (const c of columnsProp) base[c.id] = c.visible !== false;
-    const saved = (prefs?.visibility && typeof prefs.visibility === 'object') ? prefs.visibility : {};
-    return { ...base, ...saved };
+    return base;
   });
   const [colsOpen, setColsOpen] = useState(false);
   const dragCol = useRef<string | null>(null);
-  const prefsReady = useRef(false);
+  /** false until localStorage prefs hydrated */
+  const prefsHydrated = useRef(false);
 
-  // persist prefs (skip first paint to avoid overwriting with defaults before merge)
+  // Hydrate column order / sort / visibility from localStorage once on client
   useEffect(() => {
-    if (!prefsReady.current) {
-      prefsReady.current = true;
-      // still save merged state once so key exists
-      savePrefs(storageKey, { sortId, sortDir, pageSize, colOrder, visibility });
-      return;
+    const prefs = loadPrefs(storageKey);
+    if (prefs) {
+      const ids = columnsProp.map((c) => c.id);
+      if (Array.isArray(prefs.colOrder)) {
+        const kept = prefs.colOrder.filter((id: string) => ids.includes(id));
+        const missing = ids.filter((id) => !kept.includes(id));
+        if (kept.length) setColOrder([...kept, ...missing]);
+      }
+      if (prefs.sortId !== undefined) setSortId(prefs.sortId ?? null);
+      if (prefs.sortDir !== undefined) setSortDir(prefs.sortDir ?? null);
+      if (typeof prefs.pageSize === 'number' && prefs.pageSize > 0) setPageSize(prefs.pageSize);
+      if (prefs.visibility && typeof prefs.visibility === 'object') {
+        setVisibility((prev) => ({ ...prev, ...prefs.visibility }));
+      }
     }
+    prefsHydrated.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  // Persist prefs only after hydration (do not overwrite storage with SSR defaults)
+  useEffect(() => {
+    if (!prefsHydrated.current) return;
     savePrefs(storageKey, { sortId, sortDir, pageSize, colOrder, visibility });
   }, [storageKey, sortId, sortDir, pageSize, colOrder, visibility]);
 

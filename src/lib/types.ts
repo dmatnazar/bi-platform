@@ -509,6 +509,8 @@ export interface DbSchema {
   };
   /** One-time password reset tokens */
   passwordResetTokens?: PasswordResetToken[];
+  /** Staff invite links (QR) */
+  staffInvites?: StaffInviteToken[];
 }
 
 export interface PasswordResetToken {
@@ -519,6 +521,22 @@ export interface PasswordResetToken {
   expiresAt: string;
   usedAt?: string;
   createdAt: string;
+}
+
+export interface StaffInviteToken {
+  token: string;
+  /** Firms the new staff will be assigned to */
+  tenantSlugs: string[];
+  role: StaffRole;
+  /** How many staff can be registered with this invite */
+  seats: number;
+  /** How many already registered */
+  usedSeats: number;
+  expiresAt: string;
+  usedAt?: string;
+  createdAt: string;
+  createdBy: string;
+  createdByUsername?: string;
 }
 
 /** Resolve final API params from widget + global filters */

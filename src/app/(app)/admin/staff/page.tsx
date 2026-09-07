@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, RefreshCw, Check, X, Eye, EyeOff, CloudUpload, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, RefreshCw, Check, X, Eye, EyeOff, CloudUpload, Users, UserPlus, Share2, Copy, QrCode, List, Clock, Download } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Input } from '@/components/ui/Input';
@@ -83,6 +83,43 @@ export default function StaffPage() {
   const [meRole, setMeRole] = useState<string>('viewer');
   const [meTenantSlugs, setMeTenantSlugs] = useState<string[]>([]);
   const [meIsSuper, setMeIsSuper] = useState(false);
+  const [canInvite, setCanInvite] = useState(false);
+
+  // Invite modal
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteRole, setInviteRole] = useState('viewer');
+  const [inviteSlugs, setInviteSlugs] = useState<string[]>([]);
+  const [inviteSeats, setInviteSeats] = useState('1');
+  const [inviteTtlMinutes, setInviteTtlMinutes] = useState('3');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{
+    token: string;
+    url: string;
+    expiresInSec: number;
+    seats: number;
+    role: string;
+    tenantSlugs: string[];
+  } | null>(null);
+  const [inviteLeft, setInviteLeft] = useState(0);
+  const [invitesListOpen, setInvitesListOpen] = useState(false);
+  type InviteRow = {
+    token: string;
+    url: string;
+    role: string;
+    tenantSlugs: string[];
+    seats: number;
+    usedSeats: number;
+    remainingSeats: number;
+    expiresAt: string;
+    expiresInSec: number;
+    expired: boolean;
+    active: boolean;
+    createdAt: string;
+  };
+  const [invitesList, setInvitesList] = useState<InviteRow[]>([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+  const [inviteActionToken, setInviteActionToken] = useState<string | null>(null);
+  const [topUpMinutes, setTopUpMinutes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -101,9 +138,20 @@ export default function StaffPage() {
           .map((s: string) => String(s || '').trim())
           .filter(Boolean);
         setMeTenantSlugs(Array.from(new Set(slugs)));
+        // invite_staff: super always; admin/editor default true (server still enforces)
+        const role = String(u.role || '');
+        setCanInvite(
+          Boolean(u.isSuperAdmin || role === 'super_admin' || role === 'admin' || role === 'editor')
+        );
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!inviteResult || inviteLeft <= 0) return;
+    const tmr = setInterval(() => setInviteLeft((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(tmr);
+  }, [inviteResult, inviteLeft > 0]);
 
   const roleOptions = useMemo(() => {
     if (meIsSuper) {
@@ -131,6 +179,212 @@ export default function StaffPage() {
     if (!meTenantSlugs.length) return [];
     return companies.filter((c) => meTenantSlugs.includes(c.slug));
   }, [companies, meIsSuper, meTenantSlugs]);
+
+
+  function openInvite() {
+    setInviteRole(roleOptions[0]?.value || 'viewer');
+    setInviteSlugs(visibleCompanies[0]?.slug ? [visibleCompanies[0].slug] : []);
+    setInviteSeats('1');
+    setInviteTtlMinutes('3');
+    setInviteResult(null);
+    setInviteLeft(0);
+    setInviteOpen(true);
+  }
+
+  async function createInvite() {
+    const seats = Math.max(1, Math.min(50, parseInt(inviteSeats, 10) || 1));
+    const ttlMinutes = Math.max(1, Math.min(180, parseInt(inviteTtlMinutes, 10) || seats * 3));
+    if (!inviteSlugs.length) {
+      toastError('Firma saýlaň');
+      return;
+    }
+    setInviteBusy(true);
+    try {
+      const res = await fetch('/api/staff/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlugs: inviteSlugs,
+          role: inviteRole,
+          seats,
+          ttlMinutes,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Invite şowsuz', data.error);
+        return;
+      }
+      setInviteResult({
+        token: data.token,
+        url: data.url,
+        expiresInSec: data.expiresInSec,
+        seats: data.seats,
+        role: data.role,
+        tenantSlugs: data.tenantSlugs,
+      });
+      setInviteLeft(data.expiresInSec || ttlMinutes * 60);
+      toastSuccess('Invite döredildi', `${seats} işgär · ${Math.floor((data.expiresInSec || 0) / 60)} min möhlet`);
+    } catch (e: any) {
+      toastError('Invite şowsuz', String(e));
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function shareInvite() {
+    if (!inviteResult?.url) return;
+    const text = `BI Platform — işgär invite\n${inviteResult.url}\nMöhlet: ${Math.floor(inviteLeft / 60)}:${String(inviteLeft % 60).padStart(2, '0')}`;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: 'BI Platform invite',
+          text,
+          url: inviteResult.url,
+        });
+        return;
+      }
+    } catch {
+      /* user cancelled or unsupported */
+    }
+    try {
+      await navigator.clipboard.writeText(inviteResult.url);
+      toastInfo('Link göçürildi', 'Clipboard — islän messengeriňize goýuň');
+    } catch {
+      toastInfo('Link', inviteResult.url);
+    }
+  }
+
+  async function copyInviteLink() {
+    if (!inviteResult?.url) return;
+    try {
+      await navigator.clipboard.writeText(inviteResult.url);
+      toastSuccess('Göçürildi', 'Invite link clipboard-da');
+    } catch {
+      toastError('Göçürip bolmady');
+    }
+  }
+
+  function fmtInviteLeft(sec: number) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  }
+
+  async function loadInvitesList() {
+    setInvitesLoading(true);
+    try {
+      const res = await fetch('/api/staff/invite');
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Invite sanawy', data.error);
+        return;
+      }
+      setInvitesList(Array.isArray(data.invites) ? data.invites : []);
+    } catch (e: any) {
+      toastError('Invite sanawy', String(e));
+    } finally {
+      setInvitesLoading(false);
+    }
+  }
+
+  function openInvitesList() {
+    setInvitesListOpen(true);
+    void loadInvitesList();
+  }
+
+  async function downloadInviteQr(url: string, token: string) {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&margin=12&format=png&data=${encodeURIComponent(url)}`;
+    try {
+      const res = await fetch(qrUrl);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      const obj = URL.createObjectURL(blob);
+      a.href = obj;
+      a.download = `invite-qr-${token.slice(0, 8)}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(obj);
+      toastSuccess('QR ýüklendi', 'PNG faýl');
+    } catch (e: any) {
+      // fallback: open in new tab
+      window.open(qrUrl, '_blank');
+      toastInfo('QR', 'Täze tab-da açyldy — saklaň');
+    }
+  }
+
+  async function deleteInvite(token: string) {
+    const ok = await confirmDialog({
+      title: 'Invite pozulsynmy?',
+      message: 'Link we QR indi işlemeginden galýar.',
+      confirmLabel: 'Poz',
+      danger: true,
+    });
+    if (!ok) return;
+    setInviteActionToken(token);
+    try {
+      const res = await fetch(`/api/staff/invite?token=${encodeURIComponent(token)}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toastError('Pozup bolmady', data.error);
+        return;
+      }
+      toastSuccess('Invite pozuldy');
+      if (inviteResult?.token === token) {
+        setInviteResult(null);
+        setInviteLeft(0);
+      }
+      await loadInvitesList();
+    } finally {
+      setInviteActionToken(null);
+    }
+  }
+
+  async function topUpInvite(token: string) {
+    const mins = Math.max(1, Math.min(180, parseInt(topUpMinutes[token] || '10', 10) || 10));
+    setInviteActionToken(token);
+    try {
+      const res = await fetch('/api/staff/invite', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, addMinutes: mins }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Uzatmak şowsuz', data.error);
+        return;
+      }
+      toastSuccess('Möhlet uzadyldy', `+${mins} min · galýan ${fmtInviteLeft(data.expiresInSec || 0)}`);
+      if (inviteResult?.token === token && data.invite) {
+        setInviteLeft(data.expiresInSec || 0);
+        setInviteResult((prev) =>
+          prev
+            ? { ...prev, expiresInSec: data.expiresInSec, url: data.invite.url || prev.url }
+            : prev
+        );
+      }
+      await loadInvitesList();
+    } finally {
+      setInviteActionToken(null);
+    }
+  }
+
+  function reopenInviteInModal(row: InviteRow) {
+    setInviteResult({
+      token: row.token,
+      url: row.url,
+      expiresInSec: row.expiresInSec,
+      seats: row.remainingSeats || row.seats,
+      role: row.role,
+      tenantSlugs: row.tenantSlugs,
+    });
+    setInviteLeft(row.expiresInSec || 0);
+    setInvitesListOpen(false);
+    setInviteOpen(true);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -417,6 +671,18 @@ export default function StaffPage() {
             <CloudUpload className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Sync</span>
           </Button>
+          {canInvite && (
+            <>
+              <Button variant="secondary" size="sm" onClick={openInvite}>
+                <UserPlus className="h-4 w-4" />
+                <span className="text-xs sm:text-sm">Invite</span>
+              </Button>
+              <Button variant="secondary" size="sm" onClick={openInvitesList}>
+                <List className="h-4 w-4" />
+                <span className="text-xs sm:text-sm">Invites</span>
+              </Button>
+            </>
+          )}
           <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4" />
             <span className="text-xs sm:text-sm">Täze işgär</span>
@@ -620,6 +886,328 @@ export default function StaffPage() {
         </div>
         </ModalPortal>
       )}
+
+      {/* Staff invite modal */}
+      <ModalPortal open={Boolean(inviteOpen)}>
+        <div className="fixed inset-0 z-[310] flex items-end sm:items-center justify-center p-0 sm:p-3">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setInviteOpen(false)} />
+          <div className="relative w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl max-h-[90dvh] overflow-y-auto">
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800">
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-indigo-300" />
+                Invite — işgär çagyrmak
+              </h2>
+              <button type="button" className="p-1.5 text-slate-400 hover:text-white" onClick={() => setInviteOpen(false)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {!inviteResult ? (
+                <>
+                  <div>
+                    <label className="text-xs text-slate-400">Firma (birnäçe)</label>
+                    <div className="mt-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-800 divide-y divide-slate-800">
+                      {visibleCompanies.length === 0 ? (
+                        <p className="text-xs text-slate-500 p-3">Firma ýok</p>
+                      ) : (
+                        visibleCompanies.map((c) => {
+                          const on = inviteSlugs.includes(c.slug);
+                          return (
+                            <label
+                              key={c.slug}
+                              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-200 cursor-pointer hover:bg-slate-900"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={on}
+                                onChange={() => {
+                                  setInviteSlugs((prev) =>
+                                    on ? prev.filter((s) => s !== c.slug) : [...prev, c.slug]
+                                  );
+                                }}
+                              />
+                              <span className="truncate">{c.name || c.slug}</span>
+                              <span className="text-[10px] text-slate-500 ml-auto">{c.slug}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400">Rol (diňe 1)</label>
+                    <select
+                      className="mt-1 w-full h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-white"
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                    >
+                      {roleOptions.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400">Näçe işgär</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={inviteSeats}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setInviteSeats(v);
+                        const n = Math.max(1, Math.min(50, parseInt(v, 10) || 1));
+                        // default suggestion: 3 min × seats (user can still change)
+                        setInviteTtlMinutes(String(n * 3));
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-400">Möhlet (minut)</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={180}
+                      value={inviteTtlMinutes}
+                      onChange={(e) => setInviteTtlMinutes(e.target.value)}
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Link näçe minut işjeň bolsun (1–180). Mysal: 10 → 10 minut.
+                    </p>
+                  </div>
+
+                  <Button className="w-full" loading={inviteBusy} onClick={() => void createInvite()}>
+                    <QrCode className="h-4 w-4" />
+                    Döret
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div
+                    className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+                      inviteLeft <= 60
+                        ? 'border-rose-500/40 bg-rose-500/10 text-rose-200'
+                        : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                    }`}
+                  >
+                    Möhlet: <strong className="tabular-nums">{fmtInviteLeft(inviteLeft)}</strong>
+                    <span className="text-xs opacity-70">({inviteResult.seats} işgär)</span>
+                  </div>
+
+                  <div className="flex flex-col items-center gap-3">
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(inviteResult.url)}`}
+                      alt="Invite QR"
+                      className="rounded-xl border border-slate-700 bg-white p-2 w-[200px] h-[200px]"
+                    />
+                    <p className="text-[11px] text-slate-400 text-center break-all px-2">{inviteResult.url}</p>
+                    <p className="text-[11px] text-slate-500 text-center">
+                      Rol: <span className="text-slate-300">{inviteResult.role}</span>
+                      {' · '}
+                      Firma: <span className="text-slate-300">{inviteResult.tenantSlugs.join(', ')}</span>
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button className="flex-1" onClick={() => void shareInvite()}>
+                      <Share2 className="h-4 w-4" />
+                      Ugrat
+                    </Button>
+                    <Button variant="secondary" className="flex-1" onClick={() => void copyInviteLink()}>
+                      <Copy className="h-4 w-4" />
+                      Link göçür
+                    </Button>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() =>
+                      void downloadInviteQr(inviteResult.url, inviteResult.token || 'invite')
+                    }
+                  >
+                    <Download className="h-4 w-4" />
+                    QR PNG ýükle
+                  </Button>
+                  <p className="text-[11px] text-slate-500 text-center">
+                    Telefonda «Ugrat» — messenger saýlap ugradyň. QR skan ýa-da link bilen açylýar.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setInviteResult(null);
+                      setInviteLeft(0);
+                    }}
+                  >
+                    Täze invite
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+
+      {/* Active invites list */}
+      <ModalPortal open={Boolean(invitesListOpen)}>
+        <div className="fixed inset-0 z-[320] flex items-end sm:items-center justify-center p-0 sm:p-3">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setInvitesListOpen(false)} />
+          <div className="relative w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-950 shadow-2xl max-h-[90dvh] flex flex-col">
+            <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 shrink-0">
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <List className="h-4 w-4 text-indigo-300" />
+                Active invites
+              </h2>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="p-1.5 text-slate-400 hover:text-white"
+                  title="Täzele"
+                  onClick={() => void loadInvitesList()}
+                >
+                  <RefreshCw className={`h-4 w-4 ${invitesLoading ? 'animate-spin' : ''}`} />
+                </button>
+                <button type="button" className="p-1.5 text-slate-400 hover:text-white" onClick={() => setInvitesListOpen(false)}>
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {invitesLoading && invitesList.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-8">Ýüklenýär...</p>
+              ) : invitesList.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-8">
+                  Active invite ýok. «Invite» bilen dörediň.
+                </p>
+              ) : (
+                invitesList.map((row) => (
+                  <div
+                    key={row.token}
+                    className={`rounded-xl border p-3 space-y-2 ${
+                      row.active
+                        ? 'border-emerald-700/40 bg-emerald-950/20'
+                        : 'border-slate-700 bg-slate-900/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm text-white font-medium">
+                          {row.role}
+                          <span className="text-slate-500 font-normal">
+                            {' · '}
+                            {row.usedSeats}/{row.seats} ulanyldy
+                          </span>
+                        </p>
+                        <p className="text-[11px] text-slate-400 truncate">
+                          {(row.tenantSlugs || []).join(', ')}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full border ${
+                          row.active
+                            ? 'border-emerald-600/50 text-emerald-300'
+                            : 'border-rose-600/40 text-rose-300'
+                        }`}
+                      >
+                        {row.active ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {fmtInviteLeft(row.expiresInSec)}
+                          </span>
+                        ) : (
+                          'möhleti gutardy'
+                        )}
+                      </span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500 break-all font-mono">{row.url}</p>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-xs"
+                        onClick={() => reopenInviteInModal(row)}
+                      >
+                        <QrCode className="h-3.5 w-3.5" />
+                        Aç
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-xs"
+                        onClick={() => void downloadInviteQr(row.url, row.token)}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        QR PNG
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 text-xs"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(row.url);
+                            toastSuccess('Link göçürildi');
+                          } catch {
+                            toastInfo('Link', row.url);
+                          }
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        Link
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        className="h-8 text-xs"
+                        loading={inviteActionToken === row.token}
+                        onClick={() => void deleteInvite(row.token)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Poz
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
+                      <input
+                        type="number"
+                        min={1}
+                        max={180}
+                        className="w-16 h-8 rounded-lg border border-slate-700 bg-slate-900 px-2 text-xs text-white"
+                        value={topUpMinutes[row.token] ?? '10'}
+                        onChange={(e) =>
+                          setTopUpMinutes((prev) => ({ ...prev, [row.token]: e.target.value }))
+                        }
+                        title="Goşuljak minut"
+                      />
+                      <span className="text-[11px] text-slate-500">min</span>
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs flex-1"
+                        loading={inviteActionToken === row.token}
+                        onClick={() => void topUpInvite(row.token)}
+                      >
+                        <Clock className="h-3.5 w-3.5" />
+                        {row.expired ? 'Täzeden aç (+min)' : 'Top-up'}
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </ModalPortal>
+
+
     </div>
   );
 }

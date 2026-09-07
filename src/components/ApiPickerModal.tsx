@@ -2,10 +2,11 @@
 
 /**
  * Reusable API picker — table + search + optional company auto-filter.
- * Used by widget config and any other place that needs to pick an endpoint.
+ * Used by widget config and dashboard filters.
+ * Can open the full Admin → API-lar editor (add / edit) in an embed frame.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Search, X, Filter } from 'lucide-react';
+import { Search, X, Filter, Plus, Pencil, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ApiPickerEndpoint {
@@ -26,6 +27,26 @@ interface Props {
   /** Prefer showing this company's APIs first / default filter */
   preferredTenantSlug?: string;
   title?: string;
+  /** Show Täze API / Üýtget (default true) */
+  allowManage?: boolean;
+  /** Called after embed editor closes so parent can refresh /api/catalog */
+  onEndpointsChanged?: () => void;
+}
+
+function buildEditorSrc(opts: {
+  mode: 'new' | 'edit';
+  id?: string;
+  tenant?: string;
+}): string {
+  const q = new URLSearchParams();
+  q.set('embed', '1');
+  if (opts.mode === 'new') {
+    q.set('new', '1');
+    if (opts.tenant) q.set('tenant', opts.tenant);
+  } else if (opts.id) {
+    q.set('edit', opts.id);
+  }
+  return `/admin/apis?${q.toString()}`;
 }
 
 export function ApiPickerModal({
@@ -36,12 +57,17 @@ export function ApiPickerModal({
   onSelect,
   preferredTenantSlug,
   title = 'API saýlaň (data source)',
+  allowManage = true,
+  onEndpointsChanged,
 }: Props) {
   const [q, setQ] = useState('');
   const [slugFilter, setSlugFilter] = useState<string>(preferredTenantSlug || '');
   const [autoFilter, setAutoFilter] = useState(Boolean(preferredTenantSlug));
   const [sortKey, setSortKey] = useState<'name' | 'method' | 'path' | 'tenant' | 'db'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  /** highlighted row (for Üýtget) — may differ from committed value until Saýla */
+  const [highlightId, setHighlightId] = useState<string | undefined>(value);
+  const [editorSrc, setEditorSrc] = useState<string | null>(null);
 
   function toggleSort(key: typeof sortKey) {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
@@ -54,12 +80,27 @@ export function ApiPickerModal({
   useEffect(() => {
     if (open) {
       setQ('');
+      setHighlightId(value);
+      setEditorSrc(null);
       if (preferredTenantSlug) {
         setSlugFilter(preferredTenantSlug);
         setAutoFilter(true);
       }
     }
-  }, [open, preferredTenantSlug]);
+  }, [open, preferredTenantSlug, value]);
+
+  // Listen for embed editor close
+  useEffect(() => {
+    if (!editorSrc) return;
+    function onMsg(ev: MessageEvent) {
+      if (ev?.data?.type === 'bi-api-editor-closed') {
+        setEditorSrc(null);
+        onEndpointsChanged?.();
+      }
+    }
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [editorSrc, onEndpointsChanged]);
 
   const tenantOptions = useMemo(() => {
     const set = new Set<string>();
@@ -113,6 +154,31 @@ export function ApiPickerModal({
     });
     return list;
   }, [endpoints, q, slugFilter, autoFilter, preferredTenantSlug, sortKey, sortDir]);
+
+  const highlighted = useMemo(
+    () => endpoints.find((e) => e.id === highlightId),
+    [endpoints, highlightId]
+  );
+
+  function openNew() {
+    setEditorSrc(
+      buildEditorSrc({
+        mode: 'new',
+        tenant: preferredTenantSlug || slugFilter || highlighted?.tenantSlug || '',
+      })
+    );
+  }
+
+  function openEdit(ep?: ApiPickerEndpoint) {
+    const target = ep || highlighted;
+    if (!target?.id) return;
+    setEditorSrc(buildEditorSrc({ mode: 'edit', id: target.id }));
+  }
+
+  function closeEditor() {
+    setEditorSrc(null);
+    onEndpointsChanged?.();
+  }
 
   if (!open) return null;
 
@@ -181,6 +247,28 @@ export function ApiPickerModal({
                 </option>
               ))}
             </select>
+            {allowManage && (
+              <div className="flex items-center gap-1.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={openNew}
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-emerald-700/50 bg-emerald-950/40 text-[11px] text-emerald-300 hover:bg-emerald-900/40"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Täze API
+                </button>
+                <button
+                  type="button"
+                  disabled={!highlighted?.id}
+                  onClick={() => openEdit()}
+                  className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-indigo-700/50 bg-indigo-950/40 text-[11px] text-indigo-300 hover:bg-indigo-900/40 disabled:opacity-40 disabled:pointer-events-none"
+                  title={highlighted ? `Üýtget: ${highlighted.name}` : 'Ilki setir saýlaň'}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Üýtget
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -195,15 +283,16 @@ export function ApiPickerModal({
                     ['path', 'Path', 'hidden sm:table-cell'],
                     ['tenant', 'Firma', ''],
                     ['db', 'DB', 'hidden md:table-cell'],
+                    ['act', '', 'w-10'],
                   ] as const
                 ).map(([key, label, cls]) => (
                   <th
                     key={key}
-                    className={`px-3 py-2 font-medium cursor-pointer select-none hover:text-indigo-300 ${cls}`}
-                    onClick={() => toggleSort(key)}
+                    className={`px-3 py-2 font-medium ${key !== 'act' ? 'cursor-pointer select-none hover:text-indigo-300' : ''} ${cls}`}
+                    onClick={key !== 'act' ? () => toggleSort(key as typeof sortKey) : undefined}
                   >
                     {label}
-                    {sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+                    {key !== 'act' && sortKey === key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
                   </th>
                 ))}
               </tr>
@@ -211,17 +300,30 @@ export function ApiPickerModal({
             <tbody className="divide-y divide-slate-800/80">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                     Netije ýok
+                    {allowManage && (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={openNew}
+                          className="inline-flex items-center gap-1 text-emerald-400 hover:underline text-xs"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Täze API döret
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
                 filtered.map((e) => {
-                  const selected = value === e.id;
+                  const selected = highlightId === e.id || value === e.id;
                   return (
                     <tr
                       key={e.id}
                       onClick={() => {
+                        setHighlightId(e.id);
                         onSelect(e);
                         onClose();
                       }}
@@ -254,6 +356,22 @@ export function ApiPickerModal({
                       <td className="px-3 py-2.5 text-slate-500 hidden md:table-cell">
                         {e.dbKey || 'primary'}
                       </td>
+                      <td className="px-2 py-2.5">
+                        {allowManage && (
+                          <button
+                            type="button"
+                            title="Üýtget"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setHighlightId(e.id);
+                              openEdit(e);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -262,6 +380,41 @@ export function ApiPickerModal({
           </table>
         </div>
       </div>
+
+      {/* Full Admin API editor embed — same module as /admin/apis */}
+      {editorSrc && (
+        <div className="fixed inset-0 z-[2147483010] flex flex-col bg-slate-950">
+          <div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-slate-800 bg-slate-900">
+            <p className="text-xs text-slate-400 truncate">
+              API-lar redaktory (Admin modul)
+            </p>
+            <div className="flex items-center gap-2">
+              <a
+                href={editorSrc.replace('embed=1&', '').replace('embed=1', '')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-indigo-300"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Täze tab
+              </a>
+              <button
+                type="button"
+                onClick={closeEditor}
+                className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-slate-700 text-xs text-slate-200 hover:bg-slate-800"
+              >
+                <X className="h-3.5 w-3.5" />
+                Ýap / täzele
+              </button>
+            </div>
+          </div>
+          <iframe
+            title="API editor"
+            src={editorSrc}
+            className="flex-1 w-full border-0 bg-slate-950"
+          />
+        </div>
+      )}
     </div>
   );
 }

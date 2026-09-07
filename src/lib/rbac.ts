@@ -146,6 +146,10 @@ export function canManageStaff(user: SessionUser): boolean {
   return userHasPermission(user, 'manage_staff');
 }
 
+export function canInviteStaff(user: SessionUser): boolean {
+  return userHasPermission(user, 'invite_staff');
+}
+
 export function canManageCompanies(user: SessionUser): boolean {
   return userHasPermission(user, 'manage_companies');
 }

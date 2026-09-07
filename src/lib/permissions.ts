@@ -14,6 +14,7 @@ export type PermissionKey =
   | 'manage_staff'
   | 'delete_staff'
   | 'confirm_registration'
+  | 'invite_staff'
   | 'assign_viewer'
   | 'assign_editor'
   | 'assign_admin'
@@ -61,6 +62,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   { key: 'manage_staff', label: 'Isgarler (sanaw / uytget)', description: 'Isgarler: gormek, gosmak, redaktirlemek', group: 'Isgarler' },
   { key: 'delete_staff', label: 'Isgar pozmak', description: 'Isgari sanawdan pozmak', group: 'Isgarler' },
   { key: 'confirm_registration', label: 'Hasaba alys tassyklamak', description: 'Registrasiya tassyklamak / ret', group: 'Isgarler' },
+  { key: 'invite_staff', label: 'Isgar invite (QR / link)', description: 'Invite link we QR bilen isgar cagyrmak', group: 'Isgarler' },
   { key: 'assign_viewer', label: 'Viewer rol bermek', description: 'Viewer rol bellemek', group: 'Isgarler' },
   { key: 'assign_editor', label: 'Editor rol bermek', description: 'Editor rol bellemek', group: 'Isgarler' },
   { key: 'assign_admin', label: 'Admin rol bermek', description: 'Admin rol bellemek', group: 'Isgarler' },
@@ -104,7 +106,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMatrix = {
     ...allFalse(),
     view_dashboards: true, create_dashboards: true, edit_dashboards: true, delete_dashboards: true,
     export_dashboards: true, manage_dashboard_access: true,
-    manage_staff: true, delete_staff: true, confirm_registration: true,
+    manage_staff: true, delete_staff: true, confirm_registration: true, invite_staff: true,
     assign_viewer: true, assign_editor: true, assign_admin: false, assign_super_admin: false,
     manage_companies: true, delete_company: true, toggle_company_active: true, change_company_slug: false,
     manage_billing: true, view_billing_ledger: true, manage_tariffs: false, topup_billing: false,
@@ -117,7 +119,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMatrix = {
     ...allFalse(),
     view_dashboards: true, create_dashboards: true, edit_dashboards: true, delete_dashboards: true,
     export_dashboards: true, manage_dashboard_access: true,
-    manage_staff: true, delete_staff: true, confirm_registration: true,
+    manage_staff: true, delete_staff: true, confirm_registration: true, invite_staff: true,
     assign_viewer: true, assign_editor: false, assign_admin: false, assign_super_admin: false,
     manage_companies: true, delete_company: false, toggle_company_active: false, change_company_slug: false,
     manage_billing: true, view_billing_ledger: true, manage_tariffs: false, topup_billing: false,

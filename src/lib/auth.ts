@@ -210,6 +210,7 @@ export {
   canManageMailSettings,
   canDeleteNews,
   canManageSupportContacts,
+  canInviteStaff,
   canDeleteCompany,
   canToggleCompanyActive,
   canChangeCompanySlug,

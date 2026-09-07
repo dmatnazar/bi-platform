@@ -1166,6 +1166,13 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                     setApiPickerOpen(false);
                     void loadColumns(ep.id);
                   }}
+                
+                  onEndpointsChanged={() => {
+                    fetch('/api/catalog')
+                      .then((r) => r.json())
+                      .then((d) => setEndpoints(d.endpoints || []))
+                      .catch(() => setEndpoints([]));
+                  }}
                 />
               </div>
               ) : (

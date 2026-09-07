@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { ApiPickerModal } from '@/components/ApiPickerModal';
-import { Link2, Sparkles } from 'lucide-react';
+import { Link2, Sparkles , Pencil } from 'lucide-react';
 
 interface EndpointOpt {
   id: string;
@@ -106,6 +106,7 @@ export function WidgetConfigPanel({
   }, [ds?.tenantSlug, ds?.path, ds?.endpointId]);
 
   useEffect(() => {
+    const reloadEndpoints = () =>
     fetch('/api/catalog')
       .then((r) => r.json())
       .then((d) => setEndpoints(d.endpoints || []))
@@ -472,10 +473,11 @@ export function WidgetConfigPanel({
 
       <div className="space-y-1.5">
         <label className="text-xs text-slate-400">API (data source)</label>
+        <div className="flex gap-1.5">
         <button
           type="button"
           onClick={() => setApiPickerOpen(true)}
-          className="w-full h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-left text-sm text-white hover:border-indigo-500/50 transition-colors flex items-center justify-between gap-2"
+          className="flex-1 min-w-0 h-10 rounded-lg border border-slate-700 bg-slate-950 px-3 text-left text-sm text-white hover:border-indigo-500/50 transition-colors flex items-center justify-between gap-2"
         >
           <span className="truncate">
             {ds?.endpointId
@@ -489,6 +491,7 @@ export function WidgetConfigPanel({
           </span>
           <span className="text-[10px] text-indigo-400 shrink-0">Saýla</span>
         </button>
+        </div>
         <ApiPickerModal
           open={apiPickerOpen}
           onClose={() => setApiPickerOpen(false)}
@@ -496,6 +499,12 @@ export function WidgetConfigPanel({
           value={ds?.endpointId}
           preferredTenantSlug={preferredTenantSlug || ds?.tenantSlug}
           onSelect={(ep) => selectEndpoint(ep.id)}
+          onEndpointsChanged={() => {
+            fetch('/api/catalog')
+              .then((r) => r.json())
+              .then((d) => setEndpoints(d.endpoints || []))
+              .catch(() => {});
+          }}
         />
       </div>
 

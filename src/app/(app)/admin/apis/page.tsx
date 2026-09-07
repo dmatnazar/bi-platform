@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X, Building2, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
@@ -47,7 +48,11 @@ interface Tenant {
   connections?: TenantConnection[];
 }
 
-export default function ApisPage() {
+function ApisPageInner() {
+  const searchParams = useSearchParams();
+  const embedMode = searchParams.get('embed') === '1';
+  const embedBootstrapped = useRef(false);
+
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [syncedAt, setSyncedAt] = useState('');
@@ -81,6 +86,8 @@ export default function ApisPage() {
       })
       .catch(() => {});
   }, []);
+
+
 
   const tenantCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -367,6 +374,40 @@ export default function ApisPage() {
     void warmSqlSchema(slug, firstDb);
   }
 
+
+  // Embed from widget/filter ApiPicker: ?embed=1&edit=ID or &new=1&tenant=
+  useEffect(() => {
+    if (!embedMode || embedBootstrapped.current || loading) return;
+    const editId = searchParams.get('edit');
+    const isNew = searchParams.get('new') === '1';
+    const tenant = searchParams.get('tenant') || '';
+    if (editId) {
+      const ep = endpoints.find((e) => e.id === editId);
+      if (ep) {
+        embedBootstrapped.current = true;
+        openEdit(ep);
+      } else if (endpoints.length > 0) {
+        embedBootstrapped.current = true;
+      }
+    } else if (isNew) {
+      embedBootstrapped.current = true;
+      openCreate(tenant || undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedMode, loading, endpoints, searchParams]);
+
+  // Embed: after editor closed, notify parent
+  useEffect(() => {
+    if (!embedMode || editEp || !embedBootstrapped.current) return;
+    try {
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'bi-api-editor-closed' }, '*');
+      }
+    } catch {
+      /* */
+    }
+  }, [embedMode, editEp]);
+
   function isEditorDirty(): boolean {
     if (!editEp) return false;
     if (isCreate) {
@@ -438,6 +479,13 @@ export default function ApisPage() {
     setIsCreate(false);
     try {
       document.body.style.overflow = '';
+    } catch {
+      /* */
+    }
+    try {
+      if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'bi-api-editor-closed' }, '*');
+      }
     } catch {
       /* */
     }
@@ -1595,5 +1643,13 @@ export default function ApisPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function ApisPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-400 text-sm">API-lar ýüklenýär…</div>}>
+      <ApisPageInner />
+    </Suspense>
   );
 }
