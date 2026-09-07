@@ -17,6 +17,7 @@ import {
   fetchTableColumns,
   parseSqlTableAliases,
   buildHintTables,
+  type SchemaLoadStatus,
 } from '@/lib/sqlSchemaCache';
 
 interface Endpoint {
@@ -135,6 +136,7 @@ export default function ApisPage() {
   const [sqlTableNames, setSqlTableNames] = useState<string[]>([]);
   const sqlColsByTableRef = useRef<Record<string, string[]>>({});
   const sqlTablesListRef = useRef<string[]>([]);
+  const [schemaStatus, setSchemaStatus] = useState<SchemaLoadStatus>({ state: 'idle' });
 
 
   function pathFromName(name: string) {
@@ -187,22 +189,41 @@ export default function ApisPage() {
     );
   }
 
-  /** Silent: load table list when editor opens / tenant+db changes */
+  /** Load table list when editor opens / tenant+db changes — status shown in SQL toolbar */
   async function warmSqlSchema(tenantSlug: string, dbKey: string) {
-    if (!tenantSlug) return;
+    if (!tenantSlug) {
+      setSchemaStatus({ state: 'idle' });
+      return;
+    }
+    const key = dbKey || 'primary';
+    setSchemaStatus({ state: 'loading' });
     try {
-      const tables = await fetchTableNames(tenantSlug, dbKey || 'primary');
-      if (!tables.length) return;
-      sqlTablesListRef.current = tables;
-      setSqlTableNames(tables);
-      // Seed empty column arrays so table names appear in autocomplete
-      for (const tname of tables) {
-        const k = tname.toLowerCase();
-        if (!sqlColsByTableRef.current[k]) sqlColsByTableRef.current[k] = [];
+      const { tables, error } = await fetchTableNames(tenantSlug, key);
+      if (tables.length) {
+        sqlTablesListRef.current = tables;
+        setSqlTableNames(tables);
+        // Seed empty column arrays so table names appear in autocomplete
+        for (const tname of tables) {
+          const k = tname.toLowerCase();
+          if (!sqlColsByTableRef.current[k]) sqlColsByTableRef.current[k] = [];
+        }
+        refreshSqlHints();
+        setSchemaStatus({ state: 'ok', tables: tables.length, dbKey: key });
+      } else {
+        sqlTablesListRef.current = [];
+        setSqlTableNames([]);
+        if (error) {
+          setSchemaStatus({ state: 'error', message: error, dbKey: key });
+        } else {
+          setSchemaStatus({ state: 'empty', dbKey: key });
+        }
       }
-      refreshSqlHints();
-    } catch {
-      /* silent */
+    } catch (e: any) {
+      setSchemaStatus({
+        state: 'error',
+        message: e?.message || String(e),
+        dbKey: key,
+      });
     }
   }
 
@@ -1329,7 +1350,34 @@ export default function ApisPage() {
                         {/* Right: SQL ~80% */}
             <div className="flex flex-col lg:col-span-9 min-h-0" style={{ height: 'min(80vh, calc(100vh - 5.5rem))' }}>
               <div className="flex flex-wrap items-center gap-2 mb-2">
-                <label className="text-xs text-slate-400 mr-auto">SQL query</label>
+                <label className="text-xs text-slate-400">SQL query</label>
+                {schemaStatus.state === 'loading' && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] text-slate-400">
+                    <RefreshCw className="h-3 w-3 animate-spin" /> tables…
+                  </span>
+                )}
+                {schemaStatus.state === 'ok' && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-700/50 bg-emerald-950/50 px-2 py-0.5 text-[10px] text-emerald-300"
+                    title={`Autocomplete: ${schemaStatus.tables} table · ${schemaStatus.dbKey}`}
+                  >
+                    <Check className="h-3 w-3" /> tables({schemaStatus.tables}) OK
+                  </span>
+                )}
+                {schemaStatus.state === 'empty' && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/40 bg-amber-950/30 px-2 py-0.5 text-[10px] text-amber-300" title="DB bagly, ýöne table tapylmady">
+                    tables(0)
+                  </span>
+                )}
+                {schemaStatus.state === 'error' && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border border-rose-700/50 bg-rose-950/40 px-2 py-0.5 text-[10px] text-rose-300 max-w-[14rem] truncate"
+                    title={schemaStatus.message}
+                  >
+                    tables ✗ {schemaStatus.message}
+                  </span>
+                )}
+                <span className="mr-auto" />
                 <button
                   type="button"
                   onClick={autoCompleteParams}

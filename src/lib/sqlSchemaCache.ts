@@ -1,6 +1,6 @@
 /**
  * Silent MSSQL table/column cache for SQL editor autocomplete.
- * Failures never surface to the UI — editor keeps working as before.
+ * Failures never break the editor — status is reported to callers.
  */
 
 type TablesCache = {
@@ -12,6 +12,13 @@ type ColsCache = {
   at: number;
   columns: string[];
 };
+
+export type SchemaLoadStatus =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'ok'; tables: number; dbKey: string }
+  | { state: 'empty'; dbKey: string }
+  | { state: 'error'; message: string; dbKey: string };
 
 const TTL_MS = 10 * 60 * 1000; // 10 min
 const tablesMem = new Map<string, TablesCache>();
@@ -43,25 +50,61 @@ function lsSet(key: string, val: unknown) {
   }
 }
 
+function pickRows(data: any): Record<string, unknown>[] {
+  if (!data || typeof data !== 'object') return [];
+  if (Array.isArray(data.rows)) return data.rows;
+  if (Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data.result)) return data.result;
+  if (Array.isArray(data.recordset)) return data.recordset;
+  if (data.data && Array.isArray(data.data.rows)) return data.data.rows;
+  if (data.result && Array.isArray(data.result.rows)) return data.result.rows;
+  return [];
+}
+
+/** Lower-case key lookup for driver-dependent column names */
+function rowGet(r: Record<string, unknown>, ...keys: string[]): string {
+  for (const k of keys) {
+    if (r[k] != null && String(r[k]).trim() !== '') return String(r[k]).trim();
+  }
+  // case-insensitive fallback
+  const lower = Object.fromEntries(
+    Object.entries(r).map(([k, v]) => [k.toLowerCase(), v])
+  );
+  for (const k of keys) {
+    const v = lower[k.toLowerCase()];
+    if (v != null && String(v).trim() !== '') return String(v).trim();
+  }
+  return '';
+}
+
 async function runMetaQuery(
   tenantSlug: string,
   dbKey: string,
   sqlQuery: string
-): Promise<Record<string, unknown>[]> {
-  const res = await fetch('/api/admin-test-query', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      tenantSlug,
-      dbKey: dbKey || 'primary',
-      sqlQuery,
-      params: {},
-      timeoutMs: 25000,
-    }),
-  });
-  if (!res.ok) return [];
-  const data = await res.json().catch(() => ({}));
-  return Array.isArray(data.rows) ? data.rows : [];
+): Promise<{ rows: Record<string, unknown>[]; error?: string }> {
+  try {
+    const res = await fetch('/api/admin-test-query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantSlug,
+        dbKey: dbKey || 'primary',
+        sqlQuery,
+        params: {},
+        timeoutMs: 25000,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return {
+        rows: [],
+        error: String(data.error || data.message || `HTTP ${res.status}`),
+      };
+    }
+    return { rows: pickRows(data) };
+  } catch (e: any) {
+    return { rows: [], error: e?.message || String(e) };
+  }
 }
 
 /** Safe identifier for embedding in meta SQL (letters, digits, _, $) */
@@ -74,29 +117,41 @@ function safeIdent(name: string): string | null {
 export async function fetchTableNames(
   tenantSlug: string,
   dbKey: string
-): Promise<string[]> {
-  if (!tenantSlug) return [];
+): Promise<{ tables: string[]; error?: string }> {
+  if (!tenantSlug) return { tables: [], error: 'tenantSlug ýok' };
   const key = cacheKey(tenantSlug, dbKey);
   const mem = tablesMem.get(key);
-  if (mem && Date.now() - mem.at < TTL_MS) return mem.tables;
+  if (mem && Date.now() - mem.at < TTL_MS) return { tables: mem.tables };
 
   const lsKey = `bi-sql-tables:${key}`;
   const fromLs = lsGet<TablesCache>(lsKey);
   if (fromLs && Date.now() - fromLs.at < TTL_MS) {
     tablesMem.set(key, fromLs);
-    return fromLs.tables;
+    return { tables: fromLs.tables };
   }
 
   const parseTableRows = (rows: Record<string, unknown>[]): string[] => {
     const tables: string[] = [];
     const seen = new Set<string>();
     for (const r of rows) {
-      const schema = String(
-        r.s ?? r.S ?? r.TABLE_SCHEMA ?? r.schema_name ?? r.SCHEMA_NAME ?? ''
-      ).trim();
-      const name = String(
-        r.t ?? r.T ?? r.TABLE_NAME ?? r.name ?? r.NAME ?? ''
-      ).trim();
+      const schema = rowGet(
+        r,
+        's',
+        'S',
+        'TABLE_SCHEMA',
+        'schema_name',
+        'SCHEMA_NAME',
+        'table_schema'
+      );
+      const name = rowGet(
+        r,
+        't',
+        'T',
+        'TABLE_NAME',
+        'name',
+        'NAME',
+        'table_name'
+      );
       if (!name) continue;
       // Prefer short name; keep schema.table if not dbo
       const full =
@@ -108,51 +163,59 @@ export async function fetchTableNames(
     return tables;
   };
 
-  try {
-    // Primary: INFORMATION_SCHEMA (portable)
-    let rows = await runMetaQuery(
+  let lastError: string | undefined;
+
+  // Primary: INFORMATION_SCHEMA (portable)
+  let { rows, error } = await runMetaQuery(
+    tenantSlug,
+    dbKey,
+    `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t
+     FROM INFORMATION_SCHEMA.TABLES
+     WHERE TABLE_TYPE IN ('BASE TABLE','VIEW')
+     ORDER BY TABLE_SCHEMA, TABLE_NAME`
+  );
+  if (error) lastError = error;
+  let tables = parseTableRows(rows);
+
+  // Fallback: sys.tables + sys.views (MSSQL)
+  if (!tables.length) {
+    ({ rows, error } = await runMetaQuery(
       tenantSlug,
       dbKey,
-      `SELECT TABLE_SCHEMA AS s, TABLE_NAME AS t
-       FROM INFORMATION_SCHEMA.TABLES
-       WHERE TABLE_TYPE IN ('BASE TABLE','VIEW')
-       ORDER BY TABLE_SCHEMA, TABLE_NAME`
-    );
-    let tables = parseTableRows(rows);
+      `SELECT SCHEMA_NAME(schema_id) AS s, name AS t
+       FROM (
+         SELECT schema_id, name FROM sys.tables
+         UNION ALL
+         SELECT schema_id, name FROM sys.views
+       ) x
+       ORDER BY s, t`
+    ));
+    if (error) lastError = error;
+    tables = parseTableRows(rows);
+  }
 
-    // Fallback: sys.tables + sys.views (MSSQL) — some hosts restrict INFORMATION_SCHEMA
-    if (!tables.length) {
-      rows = await runMetaQuery(
-        tenantSlug,
-        dbKey,
-        `SELECT SCHEMA_NAME(schema_id) AS s, name AS t
-         FROM (
-           SELECT schema_id, name FROM sys.tables
-           UNION ALL
-           SELECT schema_id, name FROM sys.views
-         ) x
-         ORDER BY s, t`
-      );
-      tables = parseTableRows(rows);
-    }
+  // Last resort: simple sys.tables name only
+  if (!tables.length) {
+    ({ rows, error } = await runMetaQuery(
+      tenantSlug,
+      dbKey,
+      `SELECT name AS t FROM sys.tables ORDER BY name`
+    ));
+    if (error) lastError = error;
+    tables = parseTableRows(rows);
+  }
 
-    // Last resort: simple sys.tables name only
-    if (!tables.length) {
-      rows = await runMetaQuery(
-        tenantSlug,
-        dbKey,
-        `SELECT name AS t FROM sys.tables ORDER BY name`
-      );
-      tables = parseTableRows(rows);
-    }
-
+  if (tables.length) {
     const entry: TablesCache = { at: Date.now(), tables };
     tablesMem.set(key, entry);
     lsSet(lsKey, entry);
-    return tables;
-  } catch {
-    return fromLs?.tables || mem?.tables || [];
+    return { tables };
   }
+
+  return {
+    tables: fromLs?.tables || mem?.tables || [],
+    error: lastError || (fromLs?.tables?.length || mem?.tables?.length ? undefined : 'Table sanawy boş'),
+  };
 }
 
 export async function fetchTableColumns(
@@ -186,7 +249,7 @@ export async function fetchTableColumns(
   }
 
   try {
-    const rows = await runMetaQuery(
+    let { rows } = await runMetaQuery(
       tenantSlug,
       dbKey,
       `SELECT COLUMN_NAME AS c
@@ -194,8 +257,23 @@ export async function fetchTableColumns(
        WHERE TABLE_SCHEMA = '${safeSchema}' AND TABLE_NAME = '${safeTable}'
        ORDER BY ORDINAL_POSITION`
     );
+
+    // Fallback: sys.columns
+    if (!rows.length) {
+      ({ rows } = await runMetaQuery(
+        tenantSlug,
+        dbKey,
+        `SELECT c.name AS c
+         FROM sys.columns c
+         INNER JOIN sys.objects o ON c.object_id = o.object_id
+         INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+         WHERE s.name = '${safeSchema}' AND o.name = '${safeTable}'
+         ORDER BY c.column_id`
+      ));
+    }
+
     const columns = rows
-      .map((r) => String(r.c ?? r.C ?? r.COLUMN_NAME ?? '').trim())
+      .map((r) => rowGet(r, 'c', 'C', 'COLUMN_NAME', 'name', 'NAME'))
       .filter(Boolean);
     const entry: ColsCache = { at: Date.now(), columns };
     colsMem.set(key, entry);
@@ -223,10 +301,16 @@ export function parseSqlTableAliases(sql: string): Record<string, string> {
     const alias = m[3];
     if (!table) continue;
     // skip SQL keywords used as false aliases
-    if (alias && /^(WHERE|ON|INNER|LEFT|RIGHT|FULL|CROSS|JOIN|GROUP|ORDER|HAVING|SELECT|SET|AND|OR)$/i.test(alias)) {
+    if (
+      alias &&
+      /^(WHERE|ON|INNER|LEFT|RIGHT|FULL|CROSS|JOIN|GROUP|ORDER|HAVING|SELECT|SET|AND|OR)$/i.test(
+        alias
+      )
+    ) {
       continue;
     }
-    const full = schema && schema.toLowerCase() !== 'dbo' ? `${schema}.${table}` : table;
+    const full =
+      schema && schema.toLowerCase() !== 'dbo' ? `${schema}.${table}` : table;
     if (alias) map[alias] = full;
     map[table] = full;
     if (schema) map[`${schema}.${table}`] = full;

@@ -373,6 +373,9 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
         try {
           instance.showHint({
             completeSingle: false,
+            // body: overflow:hidden parent-lar hint klikini bozmaz ýaly
+            container: typeof document !== 'undefined' ? document.body : undefined,
+            closeOnUnfocus: true,
             hint: (cm: any) =>
               buildSmartHint(CM, cm, {
                 tables: hintTablesRef.current,
