@@ -859,7 +859,7 @@ function TableWidgetBody({
                                       );
                                     }}
                                   />
-                                  <span className="truncate">{cellWithSuffix(String(c ?? ""), val, fieldSuffixes)}</span>
+                                  <span className="truncate">{cellWithSuffix(String(col ?? ""), val, fieldSuffixes)}</span>
                                 </label>
                               );
                             })
@@ -1507,7 +1507,7 @@ function TableWidgetBody({
                                         );
                                       }}
                                     />
-                                    <span className="truncate">{cellWithSuffix(String(c ?? ""), val, fieldSuffixes)}</span>
+                                    <span className="truncate">{cellWithSuffix(String(col ?? ""), val, fieldSuffixes)}</span>
                                   </label>
                                 );
                               })

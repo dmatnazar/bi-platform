@@ -40,7 +40,7 @@ export default function SettingsPage() {
   const [syncSec, setSyncSec] = useState('0');
   const [online, setOnline] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | 'anim' | 'reg' | null>(null);
+  const [saving, setSaving] = useState<'gateway' | 'sync' | 'update' | 'mail' | 'anim' | 'reg' | 'sessions' | null>(null);
   const [version, setVersion] = useState('1.0.0');
 
   const [upProtocol, setUpProtocol] = useState<'http' | 'https'>('https');
