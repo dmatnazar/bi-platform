@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageCompany, canAccessTenant } from '@/lib/auth';
 import { checkGatewayHealth, listDatabasesOnGateway } from '@/lib/gateway';
 
 export async function POST(req: NextRequest) {
@@ -14,8 +14,13 @@ export async function POST(req: NextRequest) {
   if (!body?.tenantSlug) {
     return NextResponse.json({ error: 'tenantSlug gerek' }, { status: 400 });
   }
+  const tenantSlug = String(body.tenantSlug).trim();
+  // Admin/editor diňe öz firmasynyň DB sanawyny görüp bilýär
+  if (!canAccessTenant(user, tenantSlug)) {
+    return NextResponse.json({ error: 'Bu firma üçin rugsat ýok' }, { status: 403 });
+  }
   const res = await listDatabasesOnGateway({
-    tenantSlug: String(body.tenantSlug),
+    tenantSlug,
     host: body.host ? String(body.host) : undefined,
     port: body.port != null ? Number(body.port) : undefined,
     username: body.username ? String(body.username) : undefined,

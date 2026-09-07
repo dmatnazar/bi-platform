@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageConnections, canAccessTenant } from '@/lib/auth';
+import {
+  getSession,
+  canManageConnections,
+  canAccessTenant,
+  isSuperAdmin,
+  actorTenantSlugs,
+} from '@/lib/auth';
 import {
   checkGatewayHealth,
   upsertConnectionOnGateway,
@@ -14,8 +20,23 @@ export async function GET() {
   }
   try {
     const cat = await fetchCatalog(true);
-    const tenants = (cat as any).tenants || [];
+    let tenants = (cat as any).tenants || [];
     const devices = (cat as any).devices || [];
+
+    // Admin / editor: diňe öz firmalary (tenantSlugs / companySlug)
+    if (!isSuperAdmin(user)) {
+      const mine = new Set(actorTenantSlugs(user));
+      if (!mine.size) {
+        return NextResponse.json({
+          connections: [],
+          tenants: [],
+          devices: [],
+          syncedAt: (cat as any).syncedAt,
+        });
+      }
+      tenants = tenants.filter((t: any) => mine.has(String(t.slug || '').trim()));
+    }
+
     const connections = tenants.flatMap((t: any) =>
       (t.connections || []).map((c: any) => ({
         ...c,
@@ -35,10 +56,23 @@ export async function GET() {
           })),
       }))
     );
+
+    // Devices hem tenant scope bilen
+    const scopedDevices = isSuperAdmin(user)
+      ? devices
+      : devices.filter(
+          (d: any) =>
+            actorTenantSlugs(user).includes(String(d.tenantSlug || '').trim()) ||
+            (Array.isArray(d.companySlugs) &&
+              d.companySlugs.some((s: string) =>
+                actorTenantSlugs(user).includes(String(s || '').trim())
+              ))
+        );
+
     return NextResponse.json({
       connections,
       tenants,
-      devices,
+      devices: scopedDevices,
       syncedAt: (cat as any).syncedAt,
     });
   } catch (e: any) {
@@ -55,6 +89,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'VPS offline' }, { status: 503 });
   }
   const body = await req.json();
+  const tenantSlug = String(body?.tenantSlug || '').trim();
+  if (!tenantSlug) {
+    return NextResponse.json({ error: 'tenantSlug gerek' }, { status: 400 });
+  }
+  // Admin/editor diňe öz firmasyna baglanyşyk goşup bilýär
+  if (!canAccessTenant(user, tenantSlug)) {
+    return NextResponse.json({ error: 'Bu firma üçin rugsat ýok' }, { status: 403 });
+  }
   const res = await upsertConnectionOnGateway(body);
   if (!res.ok) {
     return NextResponse.json(
@@ -74,6 +116,10 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'VPS offline' }, { status: 503 });
   }
   const body = await req.json();
+  const tenantSlug = String(body?.tenantSlug || '').trim();
+  if (tenantSlug && !canAccessTenant(user, tenantSlug)) {
+    return NextResponse.json({ error: 'Bu firma üçin rugsat ýok' }, { status: 403 });
+  }
   const res = await deleteConnectionOnGateway(body);
   if (!res.ok) {
     return NextResponse.json(

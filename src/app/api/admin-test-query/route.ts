@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSession, canManageCompany } from '@/lib/auth';
+import { getSession, canManageCompany, canAccessTenant } from '@/lib/auth';
 import { checkGatewayHealth } from '@/lib/gateway';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -50,6 +50,10 @@ export async function POST(req: NextRequest) {
   const sqlQuery = String(body.sqlQuery || '').trim();
   if (!tenantSlug || !sqlQuery) {
     return NextResponse.json({ error: 'tenantSlug we sqlQuery gerek' }, { status: 400 });
+  }
+  // Admin/editor diňe öz firmasyna SQL synag edip bilýär
+  if (!canAccessTenant(user, tenantSlug)) {
+    return NextResponse.json({ error: 'Bu firma üçin rugsat ýok' }, { status: 403 });
   }
 
   const safe = assertReadOnlySql(sqlQuery);
