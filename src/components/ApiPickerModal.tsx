@@ -86,8 +86,12 @@ export function ApiPickerModal({
         setSlugFilter(preferredTenantSlug);
         setAutoFilter(true);
       }
+      // Parent catalog empty → ask refresh (widget/filter onEndpointsChanged)
+      if ((!endpoints || endpoints.length === 0) && onEndpointsChanged) {
+        onEndpointsChanged();
+      }
     }
-  }, [open, preferredTenantSlug, value]);
+  }, [open, preferredTenantSlug, value, endpoints, onEndpointsChanged]);
 
   // Listen for embed editor close
   useEffect(() => {

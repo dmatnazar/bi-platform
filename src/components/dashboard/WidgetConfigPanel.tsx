@@ -106,11 +106,10 @@ export function WidgetConfigPanel({
   }, [ds?.tenantSlug, ds?.path, ds?.endpointId]);
 
   useEffect(() => {
-    const reloadEndpoints = () =>
     fetch('/api/catalog')
       .then((r) => r.json())
       .then((d) => setEndpoints(d.endpoints || []))
-      .catch(() => { });
+      .catch(() => {});
   }, []);
 
   function extractRows(data: any): Record<string, unknown>[] {
