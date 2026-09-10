@@ -517,6 +517,19 @@ export async function upsertConnectionOnGateway(payload: Record<string, unknown>
   return gatewayFetch('POST', '/api/admin/connection-upsert', payload);
 }
 
+export async function agentRpcOnGateway(payload: {
+  tenantSlug: string;
+  action: string;
+  host?: string;
+  filePath?: string;
+  path?: string;
+  database?: string;
+  sheet?: string;
+  timeoutMs?: number;
+}) {
+  return gatewayFetch('POST', '/api/admin/agent-rpc', payload, 130_000);
+}
+
 export async function deleteConnectionOnGateway(payload: {
   id?: string;
   tenantSlug: string;

@@ -21,6 +21,8 @@ export type SchemaLoadStatus =
   | { state: 'error'; message: string; dbKey: string };
 
 const TTL_MS = 10 * 60 * 1000; // 10 min
+const EMPTY_TTL_MS = 30 * 1000; // retry empty soon
+
 const tablesMem = new Map<string, TablesCache>();
 const colsMem = new Map<string, ColsCache>();
 
@@ -114,20 +116,45 @@ function safeIdent(name: string): string | null {
   return s;
 }
 
+export function clearSqlSchemaCache(tenantSlug?: string, dbKey?: string) {
+  if (!tenantSlug) {
+    tablesMem.clear();
+    colsMem.clear();
+    return;
+  }
+  const key = cacheKey(tenantSlug, dbKey || 'primary');
+  tablesMem.delete(key);
+  try {
+    sessionStorage.removeItem(`bi-sql-tables:${key}`);
+  } catch {
+    /* */
+  }
+}
+
 export async function fetchTableNames(
   tenantSlug: string,
-  dbKey: string
+  dbKey: string,
+  opts?: { force?: boolean }
 ): Promise<{ tables: string[]; error?: string }> {
   if (!tenantSlug) return { tables: [], error: 'tenantSlug ýok' };
   const key = cacheKey(tenantSlug, dbKey);
-  const mem = tablesMem.get(key);
-  if (mem && Date.now() - mem.at < TTL_MS) return { tables: mem.tables };
-
   const lsKey = `bi-sql-tables:${key}`;
+  const mem = tablesMem.get(key);
   const fromLs = lsGet<TablesCache>(lsKey);
-  if (fromLs && Date.now() - fromLs.at < TTL_MS) {
-    tablesMem.set(key, fromLs);
-    return { tables: fromLs.tables };
+
+  if (!opts?.force) {
+    if (mem && Date.now() - mem.at < TTL_MS) return { tables: mem.tables };
+    if (fromLs && fromLs.tables?.length && Date.now() - fromLs.at < TTL_MS) {
+      tablesMem.set(key, fromLs);
+      return { tables: fromLs.tables };
+    }
+  } else {
+    tablesMem.delete(key);
+    try {
+      sessionStorage.removeItem(lsKey);
+    } catch {
+      /* */
+    }
   }
 
   const parseTableRows = (rows: Record<string, unknown>[]): string[] => {

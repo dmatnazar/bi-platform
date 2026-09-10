@@ -92,14 +92,29 @@ function ensureHintStyles() {
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
+    const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null;
+    if (existing) {
+      // Already fully loaded
+      if ((existing as any).dataset.loaded === '1') {
+        resolve();
+        return;
+      }
+      // In-flight: wait for same tag
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener(
+        'error',
+        () => reject(new Error(`Failed to load ${src}`)),
+        { once: true }
+      );
       return;
     }
     const s = document.createElement('script');
     s.src = src;
     s.async = false;
-    s.onload = () => resolve();
+    s.onload = () => {
+      (s as any).dataset.loaded = '1';
+      resolve();
+    };
     s.onerror = () => reject(new Error(`Failed to load ${src}`));
     document.head.appendChild(s);
   });
@@ -109,7 +124,10 @@ let loadPromise: Promise<void> | null = null;
 
 function ensureCodeMirror(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
-  if (window.CodeMirror) return Promise.resolve();
+  // Need both core + showHint addon
+  if (window.CodeMirror && typeof window.CodeMirror.prototype.showHint === 'function') {
+    return Promise.resolve();
+  }
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     CM_CSS.forEach(loadCss);
@@ -117,9 +135,18 @@ function ensureCodeMirror(): Promise<void> {
     for (const src of CM_JS) {
       await loadScript(src);
     }
-  })();
+    if (!window.CodeMirror || typeof window.CodeMirror.prototype.showHint !== 'function') {
+      loadPromise = null;
+      throw new Error('CodeMirror show-hint ýüklenmedi (CDN / vendor)');
+    }
+  })().catch((e) => {
+    loadPromise = null;
+    throw e;
+  });
+
   return loadPromise;
 }
+
 
 export type SqlCodeEditorHandle = {
   getSelectedOrFull: () => string;
@@ -371,11 +398,13 @@ export const SqlCodeEditor = forwardRef<SqlCodeEditorHandle, Props>(
 
       function triggerHint(instance: any) {
         try {
+          if (typeof instance.showHint !== 'function') return;
           instance.showHint({
             completeSingle: false,
             // body: overflow:hidden parent-lar hint klikini bozmaz ýaly
             container: typeof document !== 'undefined' ? document.body : undefined,
             closeOnUnfocus: true,
+            alignWithWord: true,
             hint: (cm: any) =>
               buildSmartHint(CM, cm, {
                 tables: hintTablesRef.current,

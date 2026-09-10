@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X, Building2, ChevronRight } from 'lucide-react';
+import { RefreshCw, Copy, ExternalLink, Check, Plus, Trash2, Pencil, ArrowLeft, Play, ClipboardPaste, Scissors, Eraser, Sparkles, X, Building2, ChevronRight, Square } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
@@ -18,6 +18,7 @@ import {
   fetchTableColumns,
   parseSqlTableAliases,
   buildHintTables,
+  clearSqlSchemaCache,
   type SchemaLoadStatus,
 } from '@/lib/sqlSchemaCache';
 
@@ -39,6 +40,8 @@ interface TenantConnection {
   dbKey: string;
   label?: string;
   database?: string;
+  host?: string;
+  dbType?: string;
 }
 
 interface Tenant {
@@ -46,6 +49,14 @@ interface Tenant {
   slug: string;
   name: string;
   connections?: TenantConnection[];
+}
+
+function isExcelConn(c?: TenantConnection | null): boolean {
+  if (!c) return false;
+  return (
+    String(c.dbType || '').toLowerCase() === 'excel' ||
+    /\.(xlsx|xls|xlsm|xlsb|csv)$/i.test(String(c.host || ''))
+  );
 }
 
 function ApisPageInner() {
@@ -119,6 +130,12 @@ function ApisPageInner() {
   const [editMethod, setEditMethod] = useState('GET');
   const [editSql, setEditSql] = useState('');
   const [editDbKey, setEditDbKey] = useState('primary');
+  const [excelColumns, setExcelColumns] = useState<string[]>([]);
+  const [excelSelCols, setExcelSelCols] = useState<Set<string>>(new Set());
+  const [excelFilterCols, setExcelFilterCols] = useState<Set<string>>(new Set());
+  const [excelColsLoading, setExcelColsLoading] = useState(false);
+  const [excelColsError, setExcelColsError] = useState<string | null>(null);
+
   const [editCache, setEditCache] = useState(0);
   const [editMaxRows, setEditMaxRows] = useState(1000);
   const [editAuth, setEditAuth] = useState(true);
@@ -128,6 +145,7 @@ function ApisPageInner() {
   const [editTenantSlug, setEditTenantSlug] = useState('');
   const [saving, setSaving] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const execAbortRef = useRef<AbortController | null>(null);
   const [execResult, setExecResult] = useState<{
     ok?: boolean;
     rows?: unknown[];
@@ -139,6 +157,7 @@ function ApisPageInner() {
   /** Values used when running test SQL (per declared param) */
   const [testParamValues, setTestParamValues] = useState<Record<string, string>>({});
   const sqlEditorRef = useRef<SqlCodeEditorHandle | null>(null);
+
   const [sqlHintTables, setSqlHintTables] = useState<Record<string, string[]>>({});
   const [sqlTableNames, setSqlTableNames] = useState<string[]>([]);
   const sqlColsByTableRef = useRef<Record<string, string[]>>({});
@@ -197,7 +216,100 @@ function ApisPageInner() {
   }
 
   /** Load table list when editor opens / tenant+db changes — status shown in SQL toolbar */
-  async function warmSqlSchema(tenantSlug: string, dbKey: string) {
+
+  function currentEditConnection(): TenantConnection | undefined {
+    const slug = editTenantSlug || editEp?.tenantSlug || '';
+    const tn = tenants.find((x) => x.slug === slug);
+    const key = editDbKey || 'primary';
+    return (tn?.connections || []).find((c) => (c.dbKey || 'primary') === key);
+  }
+
+  async function loadExcelColumnsForEditor() {
+    const slug = editTenantSlug || editEp?.tenantSlug || '';
+    const conn = currentEditConnection();
+    if (!slug || !conn) {
+      setExcelColsError('Firma / Excel connection saýlaň');
+      return;
+    }
+    setExcelColsLoading(true);
+    setExcelColsError(null);
+    try {
+      const res = await fetch('/api/connections/agent-rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: slug,
+          action: 'listColumns',
+          host: conn.host,
+          database: conn.database,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setExcelColsError(data.error || 'Sütünler alynmady');
+        setExcelColumns([]);
+        return;
+      }
+      const cols: string[] = data.columns || (data.rows || []).map((r: any) => r.name).filter(Boolean);
+      setExcelColumns(cols);
+      setExcelSelCols(new Set(cols));
+      setExcelFilterCols(new Set());
+    } catch (e) {
+      setExcelColsError(String(e));
+    } finally {
+      setExcelColsLoading(false);
+    }
+  }
+
+  function applyExcelBuilderSql() {
+    const conn = currentEditConnection();
+    const sheet = conn?.database || 'Sheet1';
+    const cols =
+      excelSelCols.size === 0 || excelSelCols.size === excelColumns.length
+        ? '*'
+        : [...excelSelCols].map((c) => `[${c}]`).join(', ');
+    let sql = `SELECT ${cols} FROM [${sheet}]`;
+    const filters = [...excelFilterCols];
+    if (filters.length) {
+      const where = filters
+        .map((c) => {
+          const param = c.replace(/[^\w]/g, '_') || 'p';
+          return `[${c}] IN (@${param})`;
+        })
+        .join(' AND ');
+      sql += `\nWHERE ${where}`;
+    }
+    setEditSql(sql);
+    if (filters.length) {
+      setEditParams((prev) => {
+        const existing = new Set(prev.map((p) => p.name));
+        const next = [...prev];
+        for (const c of filters) {
+          const name = c.replace(/[^\w]/g, '_') || 'p';
+          if (!existing.has(name)) {
+            next.push({ name, type: 'nvarchar', required: false, source: 'query' as const });
+          }
+        }
+        return next;
+      });
+    }
+    toastSuccess('Excel SQL', 'SQL we filter param-lar ýazylý');
+  }
+
+  async function warmSqlSchema(tenantSlug: string, dbKey: string, force = false) {
+    // Excel connections have no MSSQL schema — skip table/column introspection
+    try {
+      const tn = tenants.find((x) => x.slug === tenantSlug);
+      const conn = (tn?.connections || []).find((c) => (c.dbKey || 'primary') === (dbKey || 'primary'));
+      if (
+        conn &&
+        (String(conn.dbType || '').toLowerCase() === 'excel' ||
+          /\.(xlsx|xls|csv)$/i.test(String(conn.host || '')))
+      ) {
+        setSchemaStatus({ state: 'ok', tables: 0, dbKey: dbKey || 'primary' });
+        return;
+      }
+    } catch { /* */ }
     if (!tenantSlug) {
       setSchemaStatus({ state: 'idle' });
       return;
@@ -205,7 +317,8 @@ function ApisPageInner() {
     const key = dbKey || 'primary';
     setSchemaStatus({ state: 'loading' });
     try {
-      const { tables, error } = await fetchTableNames(tenantSlug, key);
+      if (force) clearSqlSchemaCache(tenantSlug, key);
+      const { tables, error } = await fetchTableNames(tenantSlug, key, { force });
       if (tables.length) {
         sqlTablesListRef.current = tables;
         setSqlTableNames(tables);
@@ -716,6 +829,15 @@ function ApisPageInner() {
         }
       }
     }
+    if (execAbortRef.current) {
+      try {
+        execAbortRef.current.abort();
+      } catch {
+        /* */
+      }
+    }
+    const ac = new AbortController();
+    execAbortRef.current = ac;
     setExecuting(true);
     setExecResult(null);
     try {
@@ -728,8 +850,11 @@ function ApisPageInner() {
           dbKey: editDbKey || editEp.dbKey || 'primary',
           params,
         }),
+        signal: ac.signal,
       });
+      if (ac.signal.aborted) return;
       const data = await res.json();
+      if (ac.signal.aborted) return;
       if (!res.ok) {
         setExecResult({ ok: false, error: data.error || 'şowsuz' });
         setShowResultModal(true);
@@ -757,11 +882,28 @@ function ApisPageInner() {
           (truncated ? ` · max ${lim}` : '')
       );
     } catch (e: any) {
+      if (e?.name === 'AbortError' || ac.signal.aborted) {
+        toastInfo('Run togtadyldy', 'SQL execute stop edildi');
+        return;
+      }
       setExecResult({ ok: false, error: String(e) });
       toastError('Execute şowsuz', String(e));
     } finally {
+      if (execAbortRef.current === ac) execAbortRef.current = null;
       setExecuting(false);
     }
+  }
+
+  function stopExecuteSql() {
+    if (execAbortRef.current) {
+      try {
+        execAbortRef.current.abort();
+      } catch {
+        /* */
+      }
+      execAbortRef.current = null;
+    }
+    setExecuting(false);
   }
 
   async function deleteEp(e: Endpoint) {
@@ -1000,7 +1142,9 @@ function ApisPageInner() {
                       <>
                         {conns.map((c: any) => (
                           <option key={c.dbKey || c.id} value={c.dbKey || 'primary'}>
-                            {(c.label || c.dbKey || 'primary')} ({c.dbKey || 'primary'})
+                            {String(c.dbType || '').toLowerCase() === 'excel' || /\.(xlsx|xls|csv)$/i.test(String(c.host || ''))
+                              ? `EXCEL · ${(c.label || c.dbKey || 'primary')} [${c.database || 'Sheet'}]`
+                              : `${(c.label || c.dbKey || 'primary')} (${c.dbKey || 'primary'})`}
                           </option>
                         ))}
                         <option value="__custom">— el bilen ýaz —</option>
@@ -1405,12 +1549,20 @@ function ApisPageInner() {
                   </span>
                 )}
                 {schemaStatus.state === 'ok' && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full border border-emerald-700/50 bg-emerald-950/50 px-2 py-0.5 text-[10px] text-emerald-300"
-                    title={`Autocomplete: ${schemaStatus.tables} table · ${schemaStatus.dbKey}`}
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-700/50 bg-emerald-950/50 px-2 py-0.5 text-[10px] text-emerald-300 hover:bg-emerald-900/40"
+                    title={`Autocomplete: ${schemaStatus.tables} table · ${schemaStatus.dbKey} · täzele üçin bas`}
+                    onClick={() =>
+                      void warmSqlSchema(
+                        editTenantSlug || editEp?.tenantSlug || '',
+                        editDbKey || editEp?.dbKey || 'primary',
+                        true
+                      )
+                    }
                   >
                     <Check className="h-3 w-3" /> tables({schemaStatus.tables}) OK
-                  </span>
+                  </button>
                 )}
                 {schemaStatus.state === 'empty' && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/40 bg-amber-950/30 px-2 py-0.5 text-[10px] text-amber-300" title="DB bagly, ýöne table tapylmady">
@@ -1418,12 +1570,20 @@ function ApisPageInner() {
                   </span>
                 )}
                 {schemaStatus.state === 'error' && (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full border border-rose-700/50 bg-rose-950/40 px-2 py-0.5 text-[10px] text-rose-300 max-w-[14rem] truncate"
-                    title={schemaStatus.message}
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border border-rose-700/50 bg-rose-950/40 px-2 py-0.5 text-[10px] text-rose-300 max-w-[14rem] truncate hover:bg-rose-900/40"
+                    title={`${schemaStatus.message} · täzele üçin bas`}
+                    onClick={() =>
+                      void warmSqlSchema(
+                        editTenantSlug || editEp?.tenantSlug || '',
+                        editDbKey || editEp?.dbKey || 'primary',
+                        true
+                      )
+                    }
                   >
                     tables ✗ {schemaStatus.message}
-                  </span>
+                  </button>
                 )}
                 <span className="mr-auto" />
                 <button
@@ -1449,13 +1609,103 @@ function ApisPageInner() {
                 <button type="button" onClick={sqlBeautify} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-emerald-300 hover:bg-slate-800">
                   <Sparkles className="h-3 w-3" /> Beautify
                 </button>
-                <Button size="sm" variant="secondary" loading={executing} onClick={() => void executeSql()}>
-                  <Play className="h-3.5 w-3.5" />
-                  Run
-                </Button>
+                {executing ? (
+                  <Button size="sm" variant="danger" onClick={stopExecuteSql}>
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                    Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="secondary" onClick={() => void executeSql()}>
+                    <Play className="h-3.5 w-3.5" />
+                    Run
+                  </Button>
+                )}
               </div>
               <div className="relative flex-1 rounded-xl border border-slate-700 overflow-hidden bg-slate-950 min-h-[50vh]">
-                <SqlCodeEditor
+                
+              {isExcelConn(currentEditConnection()) && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 space-y-2 mb-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-emerald-300">Excel Query Builder</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      loading={excelColsLoading}
+                      onClick={() => void loadExcelColumnsForEditor()}
+                    >
+                      Sütünleri ýükle
+                    </Button>
+                    <Button type="button" size="sm" onClick={() => applyExcelBuilderSql()}>
+                      SQL we param goý
+                    </Button>
+                  </div>
+                  {excelColsError && (
+                    <p className="text-xs text-rose-400">{excelColsError}</p>
+                  )}
+                  {excelColumns.length > 0 && (
+                    <>
+                      <p className="text-[11px] text-slate-400">SELECT sütünleri</p>
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                        {excelColumns.map((c) => (
+                          <label
+                            key={`sel-${c}`}
+                            className={`text-[11px] px-2 py-1 rounded-md border cursor-pointer ${
+                              excelSelCols.has(c)
+                                ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-100'
+                                : 'border-slate-700 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={excelSelCols.has(c)}
+                              onChange={() => {
+                                setExcelSelCols((prev) => {
+                                  const n = new Set(prev);
+                                  if (n.has(c)) n.delete(c);
+                                  else n.add(c);
+                                  return n;
+                                });
+                              }}
+                            />
+                            {c}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-slate-400">Filter (WHERE col IN (@col))</p>
+                      <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                        {excelColumns.map((c) => (
+                          <label
+                            key={`flt-${c}`}
+                            className={`text-[11px] px-2 py-1 rounded-md border cursor-pointer ${
+                              excelFilterCols.has(c)
+                                ? 'border-amber-500/50 bg-amber-500/15 text-amber-100'
+                                : 'border-slate-700 text-slate-400'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={excelFilterCols.has(c)}
+                              onChange={() => {
+                                setExcelFilterCols((prev) => {
+                                  const n = new Set(prev);
+                                  if (n.has(c)) n.delete(c);
+                                  else n.add(c);
+                                  return n;
+                                });
+                              }}
+                            />
+                            {c}
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+<SqlCodeEditor
                   ref={sqlEditorRef}
                   value={editSql}
                   onChange={(v) => {

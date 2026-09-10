@@ -15,6 +15,7 @@ import {
 } from '@/lib/types';
 import { ChartWidget } from '@/components/charts/ChartWidget';
 import { cn } from '@/lib/utils';
+import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { getEndpointCatalog, resolveLiveEndpoint, type CatalogEndpoint } from '@/lib/endpoint-catalog-client';
 
 interface Props {
@@ -248,6 +249,8 @@ function LiveWidgetInner({
   const inflightKey = useRef<string>('');
   const lastRefreshHandled = useRef<number>(0);
   const hasRowsRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const [localRefresh, setLocalRefresh] = useState(0);
   useEffect(() => {
     hasRowsRef.current = rows !== undefined;
   }, [rows]);
@@ -260,10 +263,14 @@ function LiveWidgetInner({
       return;
     }
 
-    // Manual refresh: only when token actually increases (not every re-render)
-    const token = typeof refreshToken === 'number' ? refreshToken : 0;
-    const force = token > 0 && token !== lastRefreshHandled.current;
-    // Same query already in component state
+    // Manual refresh: parent token or local retry button
+    const parentTok = typeof refreshToken === 'number' ? refreshToken : 0;
+    const parentForce = parentTok > 0 && parentTok !== lastRefreshHandled.current;
+    // localRefresh is bumped by center "Täzele" — always force when it changes via dep
+    const force = parentForce || lastFetchedKey.current === '' || Boolean(error);
+    if (parentForce) lastRefreshHandled.current = parentTok;
+
+    // Same query already in component state (no error, not forced)
     if (!force && lastFetchedKey.current === queryKey && hasRowsRef.current) {
       return;
     }
@@ -280,13 +287,22 @@ function LiveWidgetInner({
       }
     } else {
       QUERY_CACHE.delete(queryKey);
-      lastRefreshHandled.current = token;
     }
 
-    let cancelled = false;
+    // Abort any previous in-flight request (filter changed / retry)
+    if (abortRef.current) {
+      try {
+        abortRef.current.abort();
+      } catch {
+        /* */
+      }
+    }
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const thisKey = queryKey;
+
     async function load(showOverlay: boolean) {
-      if (inflightKey.current === queryKey && !force) return;
-      inflightKey.current = queryKey;
+      inflightKey.current = thisKey;
       if (showOverlay) setLoading(true);
       setError('');
       try {
@@ -301,42 +317,49 @@ function LiveWidgetInner({
             dbKey: resolved!.dbKey || 'primary',
             params,
           }),
+          signal: ac.signal,
         });
-        const data = await res.json();
-        if (!cancelled) {
-          if (!res.ok) setError(data.error || 'API säwlik');
-          else {
-            let next = Array.isArray(data.rows)
-              ? data.rows
-              : Array.isArray(data)
-                ? data
-                : [];
-            const maxRows =
-              (typeof data.maxRows === 'number' && data.maxRows > 0
-                ? data.maxRows
-                : typeof (ds as any)?.maxRows === 'number' && (ds as any).maxRows > 0
-                  ? (ds as any).maxRows
-                  : 1000);
-            let truncated = Boolean(data.truncated);
-            if (next.length > maxRows) {
-              next = next.slice(0, maxRows);
-              truncated = true;
-            }
-            if (truncated) {
-              setTruncatedWarn(`Ilkinji ${maxRows} setir görkezilýär (API max setir çägi).`);
-            } else {
-              setTruncatedWarn(null);
-            }
-            setRows(next);
-            cacheSet(queryKey, next);
-            lastFetchedKey.current = queryKey;
+        const data = await res.json().catch(() => ({}));
+        if (ac.signal.aborted) return;
+        if (!res.ok) {
+          setError(data.error || data.message || 'API säwlik');
+          setRows(undefined);
+          lastFetchedKey.current = '';
+        } else {
+          let next = Array.isArray(data.rows)
+            ? data.rows
+            : Array.isArray(data)
+              ? data
+              : [];
+          const maxRows =
+            typeof data.maxRows === 'number' && data.maxRows > 0
+              ? data.maxRows
+              : typeof (ds as any)?.maxRows === 'number' && (ds as any).maxRows > 0
+                ? (ds as any).maxRows
+                : 1000;
+          let truncated = Boolean(data.truncated);
+          if (next.length > maxRows) {
+            next = next.slice(0, maxRows);
+            truncated = true;
           }
+          if (truncated) {
+            setTruncatedWarn(`Ilkinji ${maxRows} setir görkezilýär (API max setir çägi).`);
+          } else {
+            setTruncatedWarn(null);
+          }
+          setRows(next);
+          cacheSet(thisKey, next);
+          lastFetchedKey.current = thisKey;
+          setError('');
         }
-      } catch (e) {
-        if (!cancelled) setError(String(e));
+      } catch (e: any) {
+        if (ac.signal.aborted || e?.name === 'AbortError') return;
+        setError(e?.message || String(e));
+        setRows(undefined);
+        lastFetchedKey.current = '';
       } finally {
-        if (inflightKey.current === queryKey) inflightKey.current = '';
-        if (!cancelled) setLoading(false);
+        if (inflightKey.current === thisKey) inflightKey.current = '';
+        if (!ac.signal.aborted) setLoading(false);
       }
     }
 
@@ -347,17 +370,61 @@ function LiveWidgetInner({
       sec > 0
         ? setInterval(() => {
             lastFetchedKey.current = '';
-            QUERY_CACHE.delete(queryKey);
-            void load(false);
+            QUERY_CACHE.delete(thisKey);
+            // new abort for interval cycle
+            if (abortRef.current) {
+              try {
+                abortRef.current.abort();
+              } catch {
+                /* */
+              }
+            }
+            const nextAc = new AbortController();
+            abortRef.current = nextAc;
+            void (async () => {
+              inflightKey.current = thisKey;
+              try {
+                const params = resolveWidgetParams(ds, apiFilters);
+                const res = await fetch('/api/gateway/query', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    tenantSlug: resolved!.tenantSlug,
+                    path: resolved!.path,
+                    method: resolved!.method || 'GET',
+                    dbKey: resolved!.dbKey || 'primary',
+                    params,
+                  }),
+                  signal: nextAc.signal,
+                });
+                const data = await res.json().catch(() => ({}));
+                if (nextAc.signal.aborted) return;
+                if (res.ok) {
+                  const next = Array.isArray(data.rows) ? data.rows : [];
+                  setRows(next);
+                  cacheSet(thisKey, next);
+                  lastFetchedKey.current = thisKey;
+                  setError('');
+                }
+              } catch {
+                /* */
+              } finally {
+                if (inflightKey.current === thisKey) inflightKey.current = '';
+              }
+            })();
           }, sec * 1000)
         : null;
 
     return () => {
-      cancelled = true;
+      try {
+        ac.abort();
+      } catch {
+        /* */
+      }
       if (id) clearInterval(id);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inView, queryKey, resolved?.tenantSlug, resolved?.path, ds?.refreshSec, refreshToken]);
+  }, [inView, queryKey, resolved?.tenantSlug, resolved?.path, ds?.refreshSec, refreshToken, localRefresh]);
 
   const displayRows = useMemo(() => {
     let r = filterRowsByGlobalSearch(rows, searchQuery);
@@ -372,12 +439,33 @@ function LiveWidgetInner({
     return r;
   }, [rows, searchQuery, ds?.hiddenColumns]);
 
+  function retryFetch() {
+    QUERY_CACHE.delete(queryKey);
+    lastFetchedKey.current = '';
+    setLocalRefresh((n) => n + 1);
+  }
+
   return (
     <div ref={rootRef} className="relative h-full min-h-0 flex flex-col">
-      <LoadingOverlay active={loading} />
-      {error && (
-        <div className="absolute inset-x-2 bottom-2 z-30 text-[10px] text-rose-400 bg-rose-500/10 rounded px-2 py-1 truncate">
-          {error}
+      <LoadingOverlay active={loading && !error} />
+      {error && !loading && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center p-3 bg-slate-950/70 backdrop-blur-[1px]">
+          <div className="max-w-[90%] w-full rounded-2xl border border-rose-500/30 bg-slate-900/95 shadow-xl px-4 py-5 flex flex-col items-center gap-3 text-center">
+            <div className="h-10 w-10 rounded-full bg-rose-500/15 flex items-center justify-center">
+              <AlertTriangle className="h-5 w-5 text-rose-400" />
+            </div>
+            <p className="text-xs text-rose-200/90 leading-snug break-words max-h-16 overflow-hidden">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={retryFetch}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-xl border border-indigo-500/40 bg-indigo-500/15 text-sm font-medium text-indigo-200 hover:bg-indigo-500/25 hover:border-indigo-400/60 transition-colors"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Täzele
+            </button>
+          </div>
         </div>
       )}
       {!inView && rows === undefined && (

@@ -14,6 +14,10 @@ import {
   ChevronRight,
   Building2,
   ArrowLeft,
+  X,
+  Folder,
+  HardDrive,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
@@ -38,6 +42,7 @@ interface ConnRow {
   trustServerCertificate?: boolean;
   isPrimary?: boolean;
   hasPassword?: boolean;
+  dbType?: string;
   devices?: { id: string; name: string; status: string; hostname?: string }[];
 }
 
@@ -57,6 +62,7 @@ const emptyForm = {
   encrypt: true,
   trustServerCertificate: true,
   isPrimary: false,
+  dbType: 'mssql' as 'mssql' | 'excel',
 };
 
 export default function ConnectionsPage() {
@@ -72,6 +78,25 @@ export default function ConnectionsPage() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [listingDbs, setListingDbs] = useState(false);
   const [dbOptions, setDbOptions] = useState<string[]>([]);
+  const [pickingExcel, setPickingExcel] = useState(false);
+  const [sheetOptions, setSheetOptions] = useState<string[]>([]);
+  const [browseOpen, setBrowseOpen] = useState(false);
+  const [browsePath, setBrowsePath] = useState('');
+  const [browseParent, setBrowseParent] = useState('');
+  const [browseEntries, setBrowseEntries] = useState<
+    Array<{
+      name: string;
+      path: string;
+      isDir?: boolean;
+      isDrive?: boolean;
+      isFile?: boolean;
+      isQuick?: boolean;
+      size?: number;
+    }>
+  >([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseError, setBrowseError] = useState<string | null>(null);
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,18 +189,22 @@ export default function ConnectionsPage() {
     setEditing(c);
     setShowPassword(false);
     setDbOptions(c.database ? [c.database] : []);
+    const isExcel =
+      String(c.dbType || '').toLowerCase() === 'excel' ||
+      /\.(xlsx|xls|xlsm|xlsb|csv)$/i.test(String(c.host || ''));
     setForm({
       tenantSlug: c.tenantSlug,
       label: c.label || c.dbKey || '',
       database: c.database || '',
       host: c.host || '',
-      port: Number(c.port) || 1433,
+      port: Number(c.port) || (isExcel ? 0 : 1433),
       username: c.username || '',
       // Catalog may return decrypted password (admin)
       password: c.password || '',
       encrypt: c.encrypt !== false,
       trustServerCertificate: c.trustServerCertificate !== false,
       isPrimary: Boolean(c.isPrimary),
+      dbType: isExcel ? 'excel' : 'mssql',
     });
     setModal(true);
   }
@@ -183,6 +212,10 @@ export default function ConnectionsPage() {
   async function fetchDatabaseList() {
     if (!form.tenantSlug) {
       toastError('Zerur', 'Ilki firma saýlaň');
+      return;
+    }
+    if (form.dbType === 'excel') {
+      toastInfo('Excel', 'Sheet adyny el bilen ýazyň (mes: Sheet1). List sanawy Electron-da barlanýar.');
       return;
     }
     if (!form.host.trim() || !form.username.trim()) {
@@ -261,13 +294,132 @@ export default function ConnectionsPage() {
     }
   }
 
+
+  async function loadBrowseDir(dirPath: string) {
+    if (!form.tenantSlug) {
+      toastError('Zerur', 'Ilki firma saýlaň');
+      return;
+    }
+    setBrowseLoading(true);
+    setBrowseError(null);
+    try {
+      const res = await fetch('/api/connections/agent-rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: form.tenantSlug,
+          action: 'listDir',
+          path: dirPath || '',
+          host: dirPath || '',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setBrowseError(data.error || 'Papka alynmady — Electron online bolmaly');
+        setBrowseEntries([]);
+        return;
+      }
+      const entries = data.entries || data.rows || [];
+      setBrowseEntries(entries);
+      setBrowsePath(String(data.path || dirPath || ''));
+      setBrowseParent(String(data.parent || ''));
+    } catch (e) {
+      setBrowseError(String(e));
+      setBrowseEntries([]);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function pickExcelOnElectron() {
+    if (!form.tenantSlug) {
+      toastError('Zerur', 'Ilki firma saýlaň');
+      return;
+    }
+    setBrowseOpen(true);
+    setBrowsePath('');
+    setBrowseParent('');
+    setBrowseEntries([]);
+    await loadBrowseDir('');
+  }
+
+  async function selectBrowseFile(filePath: string) {
+    setForm((f) => ({ ...f, host: filePath }));
+    setBrowseOpen(false);
+    setPickingExcel(true);
+    try {
+      const res = await fetch('/api/connections/agent-rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: form.tenantSlug,
+          action: 'listSheets',
+          host: filePath,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const sheets: string[] = data.sheets || data.databases || [];
+        setSheetOptions(sheets.map(String));
+        if (sheets.length) {
+          setForm((f) => ({ ...f, host: filePath, database: sheets[0] }));
+        }
+        toastSuccess('Excel saýlandy', filePath.split(/[/\\]/).pop() || filePath);
+      } else {
+        toastSuccess('Faýl saýlandy', filePath.split(/[/\\]/).pop() || filePath);
+      }
+    } catch {
+      toastSuccess('Faýl saýlandy', filePath.split(/[/\\]/).pop() || filePath);
+    } finally {
+      setPickingExcel(false);
+    }
+  }
+
+  async function loadExcelSheets() {
+    if (!form.tenantSlug || !form.host.trim()) {
+      toastError('Zerur', 'Ilki Excel faýl ýoly gerek');
+      return;
+    }
+    setListingDbs(true);
+    try {
+      const res = await fetch('/api/connections/agent-rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantSlug: form.tenantSlug,
+          action: 'listSheets',
+          host: form.host.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Sheet', data.error || 'Alynmady');
+        return;
+      }
+      const sheets: string[] = data.sheets || data.databases || [];
+      setSheetOptions(sheets.map(String));
+      if (sheets.length && !form.database) {
+        setForm((f) => ({ ...f, database: sheets[0] }));
+      }
+      toastSuccess('Sheet', `${sheets.length} sany`);
+    } catch (e) {
+      toastError('Sheet', String(e));
+    } finally {
+      setListingDbs(false);
+    }
+  }
+
   async function save() {
     if (!form.tenantSlug || !form.host.trim()) {
-      toastError('Zerur', 'Firma we host gerek');
+      toastError('Zerur', form.dbType === 'excel' ? 'Firma we Excel faýl ýoly gerek' : 'Firma we host gerek');
       return;
     }
     if (!form.database.trim()) {
-      toastError('Zerur', 'Database saýlaň ýa-da ýazyň');
+      toastError('Zerur', form.dbType === 'excel' ? 'Sheet (list) adyny ýazyň' : 'Database saýlaň ýa-da ýazyň');
+      return;
+    }
+    if (form.dbType !== 'excel' && !form.username.trim()) {
+      toastError('Zerur', 'Username gerek');
       return;
     }
     setSaving(true);
@@ -281,12 +433,13 @@ export default function ConnectionsPage() {
           label: form.label,
           database: form.database,
           host: form.host.trim(),
-          port: Number(form.port) || 1433,
-          username: form.username,
+          port: form.dbType === 'excel' ? 0 : Number(form.port) || 1433,
+          username: form.dbType === 'excel' ? '' : form.username,
           password: form.password || undefined,
-          encrypt: form.encrypt,
+          encrypt: form.dbType === 'excel' ? false : form.encrypt,
           trustServerCertificate: form.trustServerCertificate,
           isPrimary: form.isPrimary,
+          dbType: form.dbType || 'mssql',
         }),
       });
       const data = await res.json();
@@ -419,7 +572,9 @@ export default function ConnectionsPage() {
                         )}
                       </p>
                       <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">
-                        {c.host || '—'}:{c.port || 1433} / {c.database || '—'}
+                        {String(c.dbType || '').toLowerCase() === 'excel' || /\.(xlsx|xls|csv)$/i.test(c.host || '')
+                          ? `EXCEL · ${c.host || '—'} · sheet: ${c.database || '—'}`
+                          : `${c.host || '—'}:${c.port || 1433} / ${c.database || '—'}`}
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">user: {c.username || '—'}</p>
                     </div>
@@ -469,74 +624,189 @@ export default function ConnectionsPage() {
                 onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
                 placeholder="Primary"
               />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <Input
-                    label="Host"
-                    value={form.host}
-                    onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
-                    placeholder="10.0.0.5"
-                  />
-                </div>
-                <Input
-                  label="Port"
-                  value={String(form.port)}
-                  onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 1433 }))}
-                />
-              </div>
-              <Input
-                label="Username"
-                value={form.username}
-                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                autoComplete="off"
-              />
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-400">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                    className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                    autoComplete="new-password"
-                    placeholder={editing?.hasPassword && !form.password ? 'Saklanan parol bar' : ''}
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white"
-                    onClick={() => setShowPassword((v) => !v)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
               <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={listingDbs}
-                  onClick={() => void fetchDatabaseList()}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      dbType: 'mssql',
+                      port: 1433,
+                      encrypt: true,
+                    }))
+                  }
+                  className={`px-3 py-1.5 rounded-lg text-xs border transition ${
+                    form.dbType !== 'excel'
+                      ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-200'
+                      : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                  }`}
                 >
-                  <Database className="h-3.5 w-3.5" />
-                  Bar bolan DB al we test
-                </Button>
+                  Microsoft SQL Server
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      dbType: 'excel',
+                      port: 0,
+                      username: '',
+                      encrypt: false,
+                    }))
+                  }
+                  className={`px-3 py-1.5 rounded-lg text-xs border transition ${
+                    form.dbType === 'excel'
+                      ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                      : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+                  }`}
+                >
+                  Excel / CSV faýl
+                </button>
               </div>
 
-              {dbOptions.length > 0 ? (
-                <Select
-                  label="Database"
-                  value={form.database}
-                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
-                  options={dbOptions.map((d) => ({ value: d, label: d }))}
-                />
+              {form.dbType === 'excel' ? (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-400">
+                      Excel faýl ýoly (Electron kompýuterinde) *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={form.host}
+                        onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
+                        placeholder="C:\data\sales.xlsx"
+                        className="flex-1 h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        loading={pickingExcel}
+                        onClick={() => void pickExcelOnElectron()}
+                      >
+                        Saýla…
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      «Saýla» → BI-da Electron kompýuteriniň papkalary (agent online bolmaly).
+                    </p>
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      {sheetOptions.length > 0 ? (
+                        <Select
+                          label="List (Sheet) *"
+                          value={form.database}
+                          onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                          options={sheetOptions.map((s) => ({ value: s, label: s }))}
+                        />
+                      ) : (
+                        <Input
+                          label="List (Sheet) *"
+                          value={form.database}
+                          onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                          placeholder="Sheet1"
+                        />
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      loading={listingDbs}
+                      onClick={() => void loadExcelSheets()}
+                    >
+                      Sheet al
+                    </Button>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-400">
+                      Faýl paroly (islege görä)
+                    </label>
+                    <input
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                      placeholder="Boş goýup bilersiňiz"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Faýl Electron online kompýuterde bolmaly. Sync soň Electron-da peýda bolýar.
+                  </p>
+                </>
               ) : (
-                <Input
-                  label="Database"
-                  value={form.database}
-                  onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
-                  placeholder="MyDb"
-                />
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <Input
+                        label="Host"
+                        value={form.host}
+                        onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
+                        placeholder="10.0.0.5"
+                      />
+                    </div>
+                    <Input
+                      label="Port"
+                      value={String(form.port)}
+                      onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 1433 }))}
+                    />
+                  </div>
+                  <Input
+                    label="Username"
+                    value={form.username}
+                    onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                    autoComplete="off"
+                  />
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-400">Password</label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={form.password}
+                        onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                        className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                        autoComplete="new-password"
+                        placeholder={editing?.hasPassword && !form.password ? 'Saklanan parol bar' : ''}
+                      />
+                      <button
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-white"
+                        onClick={() => setShowPassword((v) => !v)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={listingDbs}
+                      onClick={() => void fetchDatabaseList()}
+                    >
+                      <Database className="h-3.5 w-3.5" />
+                      Bar bolan DB al we test
+                    </Button>
+                  </div>
+
+                  {dbOptions.length > 0 ? (
+                    <Select
+                      label="Database"
+                      value={form.database}
+                      onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                      options={dbOptions.map((d) => ({ value: d, label: d }))}
+                    />
+                  ) : (
+                    <Input
+                      label="Database"
+                      value={form.database}
+                      onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
+                      placeholder="MyDb"
+                    />
+                  )}
+                </>
               )}
 
               <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -578,6 +848,142 @@ export default function ConnectionsPage() {
           </div>
         </ModalPortal>
       )}
+
+      {browseOpen && (
+        <ModalPortal open={browseOpen}>
+          <div className="fixed inset-0 z-[2147483000] flex items-center justify-center bg-black/70 p-3 sm:p-4">
+            <div className="w-full max-w-lg rounded-2xl border border-slate-600 bg-slate-900 shadow-2xl flex flex-col max-h-[85vh]">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-800 px-4 py-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white">Excel faýl saýla</h3>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    Electron kompýuteri · {form.tenantSlug || 'firma'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                  onClick={() => setBrowseOpen(false)}
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="px-4 py-2 border-b border-slate-800 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                  disabled={!browseParent && !browsePath}
+                  onClick={() => void loadBrowseDir(browseParent || '')}
+                >
+                  ← Yza
+                </button>
+                <button
+                  type="button"
+                  className="text-xs px-2 py-1 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                  onClick={() => void loadBrowseDir('')}
+                >
+                  Baş sahypa
+                </button>
+                <span className="text-[11px] text-slate-500 font-mono truncate flex-1" title={browsePath}>
+                  {browsePath || 'Bystro dostup / Diskler'}
+                </span>
+              </div>
+              <div className="flex-1 overflow-y-auto min-h-[260px] px-2 py-2">
+                {browseLoading && <p className="text-xs text-slate-400 p-3">Ýüklenýär…</p>}
+                {browseError && <p className="text-xs text-rose-400 p-3">{browseError}</p>}
+                {!browseLoading && !browseError && browseEntries.length === 0 && (
+                  <p className="text-xs text-slate-500 p-3">Boş ýa-da Excel faýl ýok</p>
+                )}
+                {!browsePath && (
+                  <>
+                    {browseEntries.some((e: any) => e.isQuick) && (
+                      <>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500 px-3 pt-1 pb-0.5">
+                          Bystro dostup
+                        </p>
+                        <ul className="space-y-0.5 mb-2">
+                          {browseEntries
+                            .filter((e: any) => e.isQuick)
+                            .map((e) => (
+                              <li key={`q-${e.path}`}>
+                                <button
+                                  type="button"
+                                  className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-200"
+                                  onClick={() => void loadBrowseDir(e.path)}
+                                >
+                                  <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+                                  <span className="truncate">{e.name}</span>
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
+                    {browseEntries.some((e) => e.isDrive) && (
+                      <>
+                        <p className="text-[10px] uppercase tracking-wide text-slate-500 px-3 pt-1 pb-0.5">
+                          Diskler
+                        </p>
+                        <ul className="space-y-0.5">
+                          {browseEntries
+                            .filter((e) => e.isDrive)
+                            .map((e) => (
+                              <li key={`d-${e.path}`}>
+                                <button
+                                  type="button"
+                                  className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-200"
+                                  onClick={() => void loadBrowseDir(e.path)}
+                                >
+                                  <HardDrive className="h-4 w-4 text-slate-400 shrink-0" />
+                                  <span className="truncate">{e.name}</span>
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      </>
+                    )}
+                  </>
+                )}
+                {!!browsePath && (
+                  <ul className="space-y-0.5">
+                    {browseEntries.map((e) => (
+                      <li key={e.path}>
+                        <button
+                          type="button"
+                          className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-200"
+                          onClick={() => {
+                            if (e.isDir || e.isDrive) void loadBrowseDir(e.path);
+                            else void selectBrowseFile(e.path);
+                          }}
+                        >
+                          {e.isDir || e.isDrive ? (
+                            <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+                          ) : (
+                            <FileSpreadsheet className="h-4 w-4 text-emerald-400 shrink-0" />
+                          )}
+                          <span className="truncate">{e.name}</span>
+                          {e.isFile && e.size != null && (
+                            <span className="ml-auto text-[10px] text-slate-500 shrink-0">
+                              {e.size > 1024 * 1024
+                                ? `${(e.size / (1024 * 1024)).toFixed(1)} MB`
+                                : `${Math.max(1, Math.round(e.size / 1024))} KB`}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="border-t border-slate-800 px-4 py-2 text-[10px] text-slate-500">
+                Diňe .xlsx / .xls / .csv. Papka üstüne basyp içine giriň.
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
     </div>
   );
 }
