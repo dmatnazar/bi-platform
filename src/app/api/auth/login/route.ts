@@ -128,6 +128,10 @@ async function issueSessionResponse(
   const token = await createSessionToken(user);
   await setSessionCookie(token);
   return NextResponse.json({
+    // Bearer token — mobil app (Flutter) cookie ulanyp bilmeýär,
+    // şonuň üçin body-de token hem gaýtarylýar. Web cookie bilen işlemegini
+    // dowam etdirýär; bu meýdan goşmaça we yza-utgaşykly.
+    token,
     user: {
       id: user.id,
       username: user.username,

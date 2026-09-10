@@ -1,6 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getSettings, getStaffByUsername, getCompanyById } from './db';
 import type { SessionUser, StaffRole } from './types';
 
@@ -83,7 +83,19 @@ export async function clearSessionCookie() {
 export async function logoutCurrentSession() {
   try {
     const jar = await cookies();
-    const token = jar.get(COOKIE_NAME)?.value;
+    let token = jar.get(COOKIE_NAME)?.value;
+    // Mobil / API: cookie ýok bolsa Authorization: Bearer <token> kabul et
+    if (!token) {
+      try {
+        const h = await headers();
+        const auth = h.get('authorization') || h.get('Authorization');
+        if (auth && auth.toLowerCase().startsWith('bearer ')) {
+          token = auth.slice(7).trim();
+        }
+      } catch {
+        /* no request headers context */
+      }
+    }
     if (token) {
       const user = await verifySessionToken(token);
       if (user?.sessionId) {
@@ -111,7 +123,23 @@ export async function getSession(): Promise<SessionUser | null> {
     }
   }
   const jar = await cookies();
-  const token = jar.get(COOKIE_NAME)?.value;
+  let token = jar.get(COOKIE_NAME)?.value;
+
+  // Mobil / API clients (Flutter) httpOnly cookie ulanyp bilmeýär,
+  // şonuň üçin Authorization: Bearer <token> hem kabul edilýär.
+  // Web üçin cookie öňki ýaly üstiňlikli.
+  if (!token) {
+    try {
+      const h = await headers();
+      const auth = h.get('authorization') || h.get('Authorization');
+      if (auth && auth.toLowerCase().startsWith('bearer ')) {
+        token = auth.slice(7).trim();
+      }
+    } catch {
+      /* headers() unavailable outside a request context */
+    }
+  }
+
   if (!token) return null;
   const user = await verifySessionToken(token);
   if (!user) return null;
