@@ -16,6 +16,8 @@ function ensure() {
   if (!fs.existsSync(FILE)) fs.writeFileSync(FILE, '[]', 'utf8');
 }
 
+ensure();
+
 export function listPushTokens(): PushSubscriptionRow[] {
   ensure();
   try {
@@ -56,4 +58,11 @@ export function tokensForUser(username: string): string[] {
   return listPushTokens()
     .filter((r) => r.username.toLowerCase() === username.toLowerCase())
     .map((r) => r.token);
+}
+
+// Bootstrap empty file so data/push-subscriptions.json exists
+try {
+  listPushTokens();
+} catch {
+  /* */
 }

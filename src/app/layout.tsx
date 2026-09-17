@@ -3,35 +3,47 @@ import localFont from 'next/font/local';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 
-// Local Inter Font
+/**
+ * Local fonts under src/app/fonts/ (also mirrored in public/fonts/).
+ * Required files for build:
+ *   Inter-Regular.woff2  (or Inter-Black.woff2 as fallback)
+ *   JetBrainsMono-Regular.woff2
+ *   JetBrainsMono-Bold.woff2 (optional)
+ */
 const inter = localFont({
   src: [
     {
-      path: '../../public/fonts/Inter-Regular.woff2',
+      path: './fonts/Inter-Regular.woff2',
       weight: '400',
+      style: 'normal',
+    },
+    {
+      path: './fonts/Inter-Black.woff2',
+      weight: '900',
       style: 'normal',
     },
   ],
   variable: '--font-sans',
   display: 'swap',
+  fallback: ['system-ui', 'Segoe UI', 'Roboto', 'sans-serif'],
 });
 
-// Local JetBrains Mono Font
 const jetbrainsMono = localFont({
   src: [
     {
-      path: '../../public/fonts/JetBrainsMono-Regular.woff2',
+      path: './fonts/JetBrainsMono-Regular.woff2',
       weight: '400',
       style: 'normal',
     },
     {
-      path: '../../public/fonts/JetBrainsMono-Bold.woff2',
+      path: './fonts/JetBrainsMono-Bold.woff2',
       weight: '700',
       style: 'normal',
     },
   ],
   variable: '--font-mono',
   display: 'swap',
+  fallback: ['ui-monospace', 'Consolas', 'monospace'],
 });
 
 export const metadata: Metadata = {
@@ -66,7 +78,6 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
-/** Inline script — applies saved theme before paint to avoid FOUC */
 const themeInitScript = `
 (function(){
   try {

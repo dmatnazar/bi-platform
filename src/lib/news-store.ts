@@ -146,6 +146,43 @@ export function createNews(input: {
   return item;
 }
 
+/** Extract filename from /api/news/media/NAME */
+export function mediaUrlToFilename(url: string): string | null {
+  const m = String(url || '').match(/\/api\/news\/media\/([^/?#]+)/);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+}
+
+export function deleteNewsMediaFile(urlOrName: string): boolean {
+  ensure();
+  const name = mediaUrlToFilename(urlOrName) || path.basename(urlOrName);
+  if (!name || name === '.' || name === '..') return false;
+  const full = path.join(MEDIA_DIR, name);
+  try {
+    if (fs.existsSync(full)) {
+      fs.unlinkSync(full);
+      return true;
+    }
+  } catch {
+    /* */
+  }
+  return false;
+}
+
+function collectMediaUrls(item: NewsItem): string[] {
+  const urls: string[] = [];
+  if (Array.isArray(item.images)) urls.push(...item.images.filter(Boolean));
+  if (Array.isArray(item.media)) {
+    for (const m of item.media) if (m?.url) urls.push(m.url);
+  }
+  return [...new Set(urls)];
+}
+
+
 export function updateNews(
   id: string,
   patch: Partial<Pick<NewsItem, 'title' | 'body' | 'images' | 'media' | 'published' | 'pinned'>>
@@ -154,7 +191,7 @@ export function updateNews(
   const i = f.items.findIndex((n) => n.id === id);
   if (i < 0) return null;
   const cur = f.items[i];
-  f.items[i] = {
+  const next: NewsItem = {
     ...cur,
     title: patch.title !== undefined ? String(patch.title).trim() : cur.title,
     body: patch.body !== undefined ? String(patch.body) : cur.body,
@@ -164,15 +201,29 @@ export function updateNews(
     pinned: patch.pinned !== undefined ? !!patch.pinned : cur.pinned,
     updatedAt: new Date().toISOString(),
   };
+  try {
+    const before = new Set(collectMediaUrls(cur));
+    const after = new Set(collectMediaUrls(next));
+    for (const u of before) {
+      if (!after.has(u)) deleteNewsMediaFile(u);
+    }
+  } catch {
+    /* */
+  }
+  f.items[i] = next;
   writeNews(f);
   return f.items[i];
 }
 
 export function deleteNews(id: string): boolean {
   const f = readNews();
-  const next = f.items.filter((n) => n.id !== id);
-  if (next.length === f.items.length) return false;
-  f.items = next;
+  const cur = f.items.find((n) => n.id === id);
+  if (!cur) return false;
+  // Pozulýan habaryň ähli media faýllaryny diskden öçür
+  for (const u of collectMediaUrls(cur)) {
+    deleteNewsMediaFile(u);
+  }
+  f.items = f.items.filter((n) => n.id !== id);
   writeNews(f);
   return true;
 }

@@ -487,10 +487,10 @@ export default function NewsPage() {
                 </div>
                 <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 cursor-pointer hover:bg-slate-800">
                   <ImagePlus className="h-3.5 w-3.5" />
-                  {uploading ? 'Ýüklenýär…' : 'Surat / Video goş'}
+                  {uploading ? 'Ýüklenýär…' : 'Surat / GIF / Video goş'}
                   <input
                     type="file"
-                    accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
+                    accept="image/*,image/gif,video/mp4,video/webm,video/ogg,video/quicktime"
                     className="hidden"
                     disabled={uploading}
                     onChange={(e) => {

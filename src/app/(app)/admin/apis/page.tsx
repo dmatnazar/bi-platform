@@ -975,18 +975,16 @@ function ApisPageInner() {
         header: 'Doly URL',
         accessor: (r) => fullUrl(r),
         cell: (r) => (
-          <div className="space-y-0.5" onClick={(e) => e.stopPropagation()}>
-            <a
-              href={openUrl(r)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-mono text-[11px] text-sky-400 hover:text-sky-300 hover:underline break-all"
-              title="Session bilen aç (auth required)"
-            >
-              {fullUrl(r)}
-            </a>
-            <p className="text-[9px] text-slate-500">Open → platform session · Copy → daşarda Basic login</p>
-          </div>
+          <a
+            href={openUrl(r)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-[11px] text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300 hover:underline break-all"
+            title="Session bilen aç"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {fullUrl(r)}
+          </a>
         ),
       },
       {
@@ -1140,7 +1138,9 @@ function ApisPageInner() {
                 <div>
                   <label className="text-xs text-slate-400">Method</label>
                   <select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={editMethod} onChange={(e) => setEditMethod(e.target.value)}>
-                    {['GET','POST','PUT','PATCH','DELETE'].map((m) => <option key={m} value={m}>{m}</option>)}
+                    {['GET','POST','PUT','PATCH','DELETE'].map((m) => (
+                      <option key={m} value={m} disabled={m !== 'GET'}>{m}{m !== 'GET' ? ' (soň)' : ''}</option>
+                    ))}
                   </select>
                 </div>
                 <Input label="Path" value={editPath} onChange={(e) => setEditPath(e.target.value)} />
@@ -1321,8 +1321,8 @@ function ApisPageInner() {
                     onChange={(e) => setEditMethod(e.target.value)}
                   >
                     {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
-                      <option key={m} value={m}>
-                        {m}
+                      <option key={m} value={m} disabled={m !== 'GET'}>
+                        {m}{m !== 'GET' ? ' (soň)' : ''}
                       </option>
                     ))}
                   </select>
