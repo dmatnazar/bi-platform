@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Plus, Building2 } from 'lucide-react';
+import { useTheme } from '@/components/ThemeProvider';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface CompanyOpt {
   id: string;
@@ -27,6 +29,8 @@ type SubmitPhase =
   | 'error';
 
 export default function RegisterPage() {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   const router = useRouter();
   const [authAnim, setAuthAnim] = useState(true);
   const [regAllowed, setRegAllowed] = useState(true);
@@ -251,7 +255,7 @@ export default function RegisterPage() {
     const ok = phase === 'approved' || phase === 'delivered';
     return (
       <div className="min-h-dvh flex relative items-center justify-center px-4 overflow-hidden">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950 z-0">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0" style={{ background: isLight ? '#f1f5f9' : '#020617' }}>
         {authAnim && (
           <>
             <div className="login-orb login-orb-a" />
@@ -260,8 +264,16 @@ export default function RegisterPage() {
             <ParticlesBackground theme="login" className="absolute inset-0 z-[1] h-full w-full overflow-hidden" />
           </>
         )}
-        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
+        <div
+          className="absolute inset-0 z-[2]"
+          style={{
+            background: isLight
+              ? 'radial-gradient(ellipse at center, transparent 20%, rgb(241 245 249) 85%)'
+              : 'radial-gradient(ellipse at center, transparent 20%, rgb(2 6 23) 85%)',
+          }}
+        />
       </div>
+      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
 
         <div className={`max-w-md w-full text-center space-y-4 ${authAnim ? 'animate-fade-in' : ''}`}>
           <div
@@ -318,7 +330,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-4 py-10 relative overflow-hidden">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950 z-0">
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0" style={{ background: isLight ? '#f1f5f9' : '#020617' }}>
         {authAnim && (
           <>
             <div className="login-orb login-orb-a" />
@@ -327,8 +339,16 @@ export default function RegisterPage() {
             <ParticlesBackground theme="login" className="absolute inset-0 z-[1] h-full w-full overflow-hidden" />
           </>
         )}
-        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_25%,rgb(2_6_23)_88%)]" />
+        <div
+          className="absolute inset-0 z-[2]"
+          style={{
+            background: isLight
+              ? 'radial-gradient(ellipse at center, transparent 25%, rgb(241 245 249) 88%)'
+              : 'radial-gradient(ellipse at center, transparent 25%, rgb(2 6 23) 88%)',
+          }}
+        />
       </div>
+      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
 
       <div className={`relative z-10 w-full max-w-lg ${authAnim ? 'animate-fade-in' : ''}`}>
         <div className="flex flex-col items-center mb-6">

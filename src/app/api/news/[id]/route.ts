@@ -35,6 +35,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     title: body.title,
     body: body.body,
     images: body.images,
+      media: body.media,
     published: body.published,
     pinned: body.pinned,
   });

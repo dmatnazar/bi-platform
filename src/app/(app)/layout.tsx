@@ -15,14 +15,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const superAdmin = isSuperAdmin(user);
 
   return (
-    <div className="flex min-h-dvh relative overflow-x-hidden">
+    <div className="flex h-dvh max-h-dvh relative overflow-hidden">
       <div className="app-particles-wrap" aria-hidden>
         <AppShellBackground />
       </div>
-      <div className="relative z-10 flex min-h-0 min-h-dvh w-full">
+      <div className="relative z-10 flex h-full min-h-0 w-full overflow-hidden">
       <Sidebar user={user} />
-      <main className="flex-1 min-w-0 pt-14 lg:pt-0">
-        <div className="border-b border-slate-800/80 bg-slate-950/80 px-2 sm:px-6 lg:px-8 sticky top-0 z-20 backdrop-blur">
+      <main className="flex-1 min-w-0 min-h-0 pt-14 lg:pt-0 overflow-y-auto overflow-x-hidden">
+        <div className="border-b border-slate-800/80 bg-slate-950/80 px-2 sm:px-6 lg:px-8 sticky top-0 z-20 backdrop-blur status-bar-shell">
           <div className="max-w-[1600px] mx-auto w-full">
             <ConnectionStatusBar
               isSuperAdmin={superAdmin}

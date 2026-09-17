@@ -12,6 +12,8 @@ import { LoginAppsSection } from '@/components/apps/LoginAppsSection';
 import { LoginSupportModal } from '@/components/support/LoginSupportModal';
 import { requestFullscreenSafe, fullscreenPrefDisabled } from '@/lib/fullscreen';
 import { InstallAppBanner } from '@/components/pwa/InstallAppBanner';
+import { useTheme } from '@/components/ThemeProvider';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 interface Notif {
   id: string;
@@ -23,6 +25,8 @@ interface Notif {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -195,7 +199,11 @@ export default function LoginPage() {
   return (
     <div className="min-h-dvh flex flex-col items-center justify-center px-3 sm:px-4 py-8 sm:py-10 relative overflow-hidden">
       {/* Fixed viewport background — does not grow with page scroll / canvas size */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden bg-slate-950 z-0" aria-hidden>
+      <div
+        className="pointer-events-none fixed inset-0 overflow-hidden z-0"
+        style={{ background: isLight ? '#f1f5f9' : '#020617' }}
+        aria-hidden
+      >
         {authAnim && (
           <>
             <div className="login-orb login-orb-a" />
@@ -204,8 +212,19 @@ export default function LoginPage() {
             <ParticlesBackground theme="login" className="absolute inset-0 z-[1] h-full w-full overflow-hidden" />
           </>
         )}
-        <div className="absolute inset-0 z-[2] bg-[radial-gradient(ellipse_at_center,transparent_35%,rgb(2_6_23)_90%)] sm:bg-[radial-gradient(ellipse_at_center,transparent_20%,rgb(2_6_23)_85%)]" />
-        <div className="absolute inset-0 z-[2] bg-slate-950/15 sm:bg-transparent" />
+        <div
+          className="absolute inset-0 z-[2]"
+          style={{
+            background: isLight
+              ? 'radial-gradient(ellipse at center, transparent 35%, rgb(241 245 249) 92%)'
+              : 'radial-gradient(ellipse at center, transparent 35%, rgb(2 6 23) 90%)',
+          }}
+        />
+      </div>
+
+      {/* Theme toggle — login */}
+      <div className="fixed top-3 right-3 z-20">
+        <ThemeToggle compact />
       </div>
 
       <div

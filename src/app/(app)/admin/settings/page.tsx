@@ -77,6 +77,10 @@ export default function SettingsPage() {
 
   const loadGateway = useCallback(async () => {
     const res = await fetch('/api/settings');
+      if (res.status === 403) {
+        window.location.href = '/dashboards?denied=settings';
+        return;
+      }
     const data = await res.json();
     if (res.ok) {
       setGatewayUrl(data.settings?.gatewayUrl || '');
@@ -351,6 +355,10 @@ export default function SettingsPage() {
     setOnline(null);
     try {
       const res = await fetch('/api/settings');
+      if (res.status === 403) {
+        window.location.href = '/dashboards?denied=settings';
+        return;
+      }
       const data = await res.json();
       if (res.ok) {
         setOnline(!!data.gatewayOnline);

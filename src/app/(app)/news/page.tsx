@@ -16,11 +16,13 @@ import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
 import { formatDateTime } from '@/lib/utils';
 
+type NewsMedia = { url: string; type: 'image' | 'video'; caption?: string };
 type NewsItem = {
   id: string;
   title: string;
   body: string;
   images: string[];
+  media?: NewsMedia[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -41,6 +43,8 @@ export default function NewsPage() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [images, setImages] = useState<string[]>([]);
+  const [media, setMedia] = useState<NewsMedia[]>([]);
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [published, setPublished] = useState(true);
   const [pinned, setPinned] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -99,6 +103,7 @@ export default function NewsPage() {
     setTitle('');
     setBody('');
     setImages([]);
+    setMedia([]);
     setPublished(true);
     setPinned(false);
     setEditorOpen(true);
@@ -109,30 +114,44 @@ export default function NewsPage() {
     setTitle(item.title);
     setBody(item.body);
     setImages([...(item.images || [])]);
+    setMedia(
+      item.media?.length
+        ? [...item.media]
+        : (item.images || []).map((url) => ({ url, type: 'image' as const, caption: '' }))
+    );
     setPublished(item.published);
     setPinned(!!item.pinned);
     setEditorOpen(true);
   }
 
-  async function uploadImage(file: File) {
+  async function uploadMedia(file: File) {
     setUploading(true);
     try {
-      const { compressImageFile } = await import('@/lib/image-compress-client');
-      const { file: out, compressed } = await compressImageFile(file, {
-        maxWidth: 1600,
-        maxHeight: 1600,
-        quality: 0.78,
-      });
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|ogg|mov)$/i.test(file.name);
+      let out: File = file;
+      let compressed = false;
+      if (!isVideo) {
+        const { compressImageFile } = await import('@/lib/image-compress-client');
+        const r = await compressImageFile(file, {
+          maxWidth: 1600,
+          maxHeight: 1600,
+          quality: 0.78,
+        });
+        out = r.file;
+        compressed = r.compressed;
+      }
       const fd = new FormData();
       fd.append('file', out);
       if (compressed) fd.append('compressed', '1');
       const res = await fetch('/api/news/upload', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
-      setImages((prev) => [...prev, data.url]);
-      toastSuccess(compressed ? 'Surat gysyldy we goşuldy' : 'Surat goşuldy');
+      const entry: NewsMedia = { url: data.url, type: isVideo ? 'video' : 'image', caption: '' };
+      setMedia((prev) => [...prev, entry]);
+      if (!isVideo) setImages((prev) => [...prev, data.url]);
+      toastSuccess(isVideo ? 'Video goşuldy' : compressed ? 'Surat gysyldy we goşuldy' : 'Surat goşuldy');
     } catch (e) {
-      toastError('Surat', String(e));
+      toastError('Media', String(e));
     } finally {
       setUploading(false);
     }
@@ -149,7 +168,14 @@ export default function NewsPage() {
         const res = await fetch(`/api/news/${editing.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, body, images, published, pinned }),
+          body: JSON.stringify({
+            title,
+            body,
+            images: media.filter((m) => m.type === 'image').map((m) => m.url),
+            media,
+            published,
+            pinned,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'şowsuz');
@@ -158,7 +184,14 @@ export default function NewsPage() {
         const res = await fetch('/api/news', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, body, images, published, pinned }),
+          body: JSON.stringify({
+            title,
+            body,
+            images: media.filter((m) => m.type === 'image').map((m) => m.url),
+            media,
+            published,
+            pinned,
+          }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'şowsuz');
@@ -325,17 +358,39 @@ export default function NewsPage() {
                 {formatDateTime(selected.createdAt)}
                 {selected.pinned ? ' · Pin' : ''}
               </p>
-              {selected.images?.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {selected.images.map((src) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={src}
-                      src={src}
-                      alt=""
-                      className="w-full rounded-xl border border-slate-800 object-cover max-h-64"
-                    />
-                  ))}
+              {((selected.media && selected.media.length > 0) || (selected.images && selected.images.length > 0)) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(selected.media?.length
+                    ? selected.media
+                    : selected.images.map((url) => ({ url, type: 'image' as const, caption: '' }))
+                  ).map((m) =>
+                    m.type === 'video' ? (
+                      <div key={m.url} className="space-y-1">
+                        <video
+                          src={m.url}
+                          className="w-full max-h-72 rounded-xl border border-slate-700 bg-black"
+                          controls
+                          playsInline
+                          preload="metadata"
+                        />
+                        {m.caption ? (
+                          <p className="text-xs text-slate-400 px-0.5">{m.caption}</p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div key={m.url} className="space-y-1">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={m.url}
+                          alt={m.caption || ''}
+                          className="w-full rounded-xl border border-slate-800 object-cover max-h-64"
+                        />
+                        {m.caption ? (
+                          <p className="text-xs text-slate-400 px-0.5">{m.caption}</p>
+                        ) : null}
+                      </div>
+                    )
+                  )}
                 </div>
               )}
               <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
@@ -395,16 +450,35 @@ export default function NewsPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 mb-1.5 block">Suratlar</label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {images.map((src) => (
-                    <div key={src} className="relative h-16 w-16">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={src} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-700" />
+                <label className="text-xs text-slate-400 mb-1.5 block">Surat / Video</label>
+                <div className="space-y-2 mb-2">
+                  {media.map((m, idx) => (
+                    <div key={m.url} className="flex gap-2 items-start rounded-xl border border-slate-800 bg-slate-950/50 p-2">
+                      {m.type === 'video' ? (
+                        <video src={m.url} className="h-16 w-24 rounded-lg object-cover border border-slate-700 bg-black" muted />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.url} alt="" className="h-16 w-16 rounded-lg object-cover border border-slate-700" />
+                      )}
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-[10px] text-slate-500">{m.type === 'video' ? 'Video' : 'Surat'}</p>
+                        <input
+                          className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white"
+                          placeholder="Asagyndaky tekst (title / caption)"
+                          value={m.caption || ''}
+                          onChange={(e) => {
+                            const caption = e.target.value;
+                            setMedia((prev) => prev.map((x, i) => (i === idx ? { ...x, caption } : x)));
+                          }}
+                        />
+                      </div>
                       <button
                         type="button"
-                        className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-rose-600 text-white text-xs"
-                        onClick={() => setImages((prev) => prev.filter((x) => x !== src))}
+                        className="h-7 w-7 rounded-full bg-rose-600/90 text-white text-sm shrink-0"
+                        onClick={() => {
+                          setMedia((prev) => prev.filter((_, i) => i !== idx));
+                          if (m.type === 'image') setImages((prev) => prev.filter((x) => x !== m.url));
+                        }}
                       >
                         ×
                       </button>
@@ -413,15 +487,15 @@ export default function NewsPage() {
                 </div>
                 <label className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 cursor-pointer hover:bg-slate-800">
                   <ImagePlus className="h-3.5 w-3.5" />
-                  {uploading ? 'Ýüklenýär…' : 'Surat goş'}
+                  {uploading ? 'Ýüklenýär…' : 'Surat / Video goş'}
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/mp4,video/webm,video/ogg,video/quicktime"
                     className="hidden"
                     disabled={uploading}
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) void uploadImage(f);
+                      if (f) void uploadMedia(f);
                       e.target.value = '';
                     }}
                   />
@@ -447,6 +521,18 @@ export default function NewsPage() {
               </Button>
             </div>
           </div>
+        </div>
+      )}
+      {playerUrl && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/90 p-4" onClick={() => setPlayerUrl(null)}>
+          <video
+            src={playerUrl}
+            className="max-w-full max-h-full rounded-xl"
+            controls
+            autoPlay
+            playsInline
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>

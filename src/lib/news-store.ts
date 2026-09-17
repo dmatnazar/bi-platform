@@ -5,12 +5,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+export type NewsMedia = {
+  url: string;
+  type: 'image' | 'video';
+  /** Caption under media */
+  caption?: string;
+};
+
 export type NewsItem = {
   id: string;
   title: string;
   body: string;
-  /** Cover / inline image paths or absolute URLs */
+  /** Cover / inline image paths or absolute URLs (legacy) */
   images: string[];
+  /** Images + videos with optional captions */
+  media?: NewsMedia[];
   createdAt: string;
   updatedAt: string;
   createdBy: string;
@@ -109,6 +118,7 @@ export function createNews(input: {
   title: string;
   body: string;
   images?: string[];
+  media?: NewsMedia[];
   published?: boolean;
   pinned?: boolean;
   createdBy: string;
@@ -121,6 +131,7 @@ export function createNews(input: {
     title: String(input.title || '').trim(),
     body: String(input.body || ''),
     images: Array.isArray(input.images) ? input.images.filter(Boolean) : [],
+    media: Array.isArray(input.media) ? input.media : [],
     createdAt: now,
     updatedAt: now,
     createdBy: input.createdBy,
@@ -137,7 +148,7 @@ export function createNews(input: {
 
 export function updateNews(
   id: string,
-  patch: Partial<Pick<NewsItem, 'title' | 'body' | 'images' | 'published' | 'pinned'>>
+  patch: Partial<Pick<NewsItem, 'title' | 'body' | 'images' | 'media' | 'published' | 'pinned'>>
 ): NewsItem | null {
   const f = readNews();
   const i = f.items.findIndex((n) => n.id === id);
@@ -148,6 +159,7 @@ export function updateNews(
     title: patch.title !== undefined ? String(patch.title).trim() : cur.title,
     body: patch.body !== undefined ? String(patch.body) : cur.body,
     images: patch.images !== undefined ? patch.images.filter(Boolean) : cur.images,
+    media: patch.media !== undefined ? patch.media : cur.media,
     published: patch.published !== undefined ? !!patch.published : cur.published,
     pinned: patch.pinned !== undefined ? !!patch.pinned : cur.pinned,
     updatedAt: new Date().toISOString(),

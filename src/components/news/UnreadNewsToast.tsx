@@ -11,7 +11,8 @@ export function UnreadNewsToast() {
       if (n && Number(n) > 0) {
         toastWarning(
           'Okalmadyk habarlar',
-          `Siziň ${n} sany okalmadyk habaryňyz bar. Habarlar bölümine geçiň.`
+          `Siziň ${n} sany okalmadyk habaryňyz bar. Habarlar bölümine geçiň.`,
+          '/news'
         );
         sessionStorage.removeItem('bi-unread-news');
       }

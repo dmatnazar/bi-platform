@@ -8,7 +8,7 @@ import 'react-resizable/css/styles.css';
 import type { Dashboard, DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import { LiveWidget } from './LiveWidget';
 import { cn } from '@/lib/utils';
-import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown, RotateCcw, Download, ArrowLeftRight } from 'lucide-react';
+import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown, RotateCcw, Download, ArrowLeftRight, MoreVertical } from 'lucide-react';
 import { generateId } from '@/lib/utils';
 
 interface Props {
@@ -60,6 +60,7 @@ export function DashboardCanvas({
   // Fullscreen view — essential on mobile where grid cells are too small to
   // read a busy table/chart comfortably.
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [menuWidgetId, setMenuWidgetId] = useState<string | null>(null);
   const expandedWidget = dashboard.widgets.find((w) => w.id === expandedId) || null;
   
   // Task 7: Widget transfer between dashboards (+ API + dbKey select)
@@ -695,128 +696,124 @@ export function DashboardCanvas({
               )}
               <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 truncate">{widget.mobileTitle ? (<><span className="hidden sm:inline">{widget.title}</span><span className="sm:hidden">{widget.mobileTitle || widget.title}</span></>) : widget.title}</h4>
               
-              {/* Task 16: Buttons positioned right - Maximize first, then others */}
+              {/* Toolbar: desktop full icons; mobile maximize + ⋮ menu */}
               <div className="flex items-center gap-0.5 shrink-0 ml-auto">
-                {/* Task 17: Full-page Refresh button - completely reload widget data */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    bumpRefresh(widget.id);
-                    // Trigger full page refresh-like behavior
-                    window.dispatchEvent(new CustomEvent('bi-widget-fullrefresh', { detail: { id: widget.id } }));
-                  }}
-                  className="p-1 rounded-lg text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-                  title="Doly täzele (page refresh)"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-
-                {['bar', 'line', 'pie', 'area'].includes(widget.type) && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        window.dispatchEvent(
-                          new CustomEvent('bi-chart-cmd', {
-                            detail: { id: widget.id, action: 'reset' },
-                          })
-                        )
-                      }
-                      className="p-1 rounded-lg text-slate-500 hover:text-sky-300 hover:bg-sky-500/10 transition-colors"
-                      title="Reset zoom"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        window.dispatchEvent(
-                          new CustomEvent('bi-chart-cmd', {
-                            detail: { id: widget.id, action: 'png' },
-                          })
-                        )
-                      }
-                      className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
-                      title="PNG ýükle"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
-
-                {/* Task 16: Maximize button positioned far right */}
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(widget.id)}
-                  className="p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 shadow-lg backdrop-blur transition-colors"
-                  title="Doly ekran"
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </button>
-
-                {editable && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => void openTransfer(widget.id)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
-                      title="Başga dashboarda geçir"
-                    >
-                      <ArrowLeftRight className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onConfigureWidget?.(widget.id)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
-                      title="Sazla"
-                    >
-                      <Settings2 className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeWidget(widget.id)}
-                      className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                      title="Poz"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
-              </div>
-
-              {/* Task 16: Mobile buttons (width, move up/down) - below main header on mobile */}
-              {editable && isMobile && (
-                <div className="flex items-center gap-0.5 absolute top-10 left-2 z-10">
+                {/* Desktop actions */}
+                <div className="hidden sm:flex items-center gap-0.5">
                   <button
                     type="button"
-                    onClick={() => toggleMobileWidth(widget.id)}
-                    className="px-1 py-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 text-[10px] font-semibold leading-none w-[22px] text-center"
-                    title="Ini: ýarym / doly"
+                    onClick={() => {
+                      bumpRefresh(widget.id);
+                      window.dispatchEvent(new CustomEvent('bi-widget-fullrefresh', { detail: { id: widget.id } }));
+                    }}
+                    className="p-1 rounded-lg text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
+                    title="Doly täzele (page refresh)"
                   >
-                    {Math.min(Math.max(widget.mobileW ?? (widget.type === 'kpi' ? 1 : MOBILE_COLS), 1), MOBILE_COLS) >= MOBILE_COLS
-                      ? '½'
-                      : '1/1'}
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                  {['bar', 'line', 'pie', 'area'].includes(widget.type) && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.dispatchEvent(
+                            new CustomEvent('bi-chart-cmd', {
+                              detail: { id: widget.id, action: 'reset' },
+                            })
+                          )
+                        }
+                        className="p-1 rounded-lg text-slate-500 hover:text-sky-300 hover:bg-sky-500/10 transition-colors"
+                        title="Reset zoom"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.dispatchEvent(
+                            new CustomEvent('bi-chart-cmd', {
+                              detail: { id: widget.id, action: 'png' },
+                            })
+                          )
+                        }
+                        className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+                        title="PNG ýükle"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(widget.id)}
+                    className="p-2 rounded-full bg-slate-900/80 border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-500 shadow-lg backdrop-blur transition-colors"
+                    title="Doly ekran"
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                  </button>
+                  {editable && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void openTransfer(widget.id)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+                        title="Başga dashboarda geçir"
+                      >
+                        <ArrowLeftRight className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onConfigureWidget?.(widget.id)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                        title="Sazla"
+                      >
+                        <Settings2 className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeWidget(widget.id)}
+                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        title="Poz"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                {/* Mobile: maximize + ⋮ */}
+                <div className="flex sm:hidden items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId(widget.id)}
+                    className="p-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-slate-400"
+                    title="Doly ekran"
+                  >
+                    <Maximize2 className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => moveWidgetMobile(widget.id, -1)}
-                    className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800"
-                    title="Ýokary süýş"
+                    onClick={() => setMenuWidgetId(widget.id)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                    title="Menýu"
+                    aria-label="Widget menýu"
                   >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => moveWidgetMobile(widget.id, 1)}
-                    className="p-1 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800"
-                    title="Aşak süýş"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
+                    <MoreVertical className="h-4 w-4" />
                   </button>
                 </div>
-              )}
+              </div>
+
+
             </div>
-            <div className="flex-1 min-h-0 p-1.5 sm:p-3">
+            <div
+              className="flex-1 min-h-0 p-1.5 sm:p-3 cursor-pointer"
+              onClick={(e) => {
+                // Widget body click/tap → fullscreen (zoom diňe şol ýerde)
+                const t = e.target as HTMLElement;
+                if (t.closest('button, a, input, select, textarea, [data-no-expand], .drag-handle')) return;
+                setExpandedId(widget.id);
+              }}
+            >
               <LiveWidget
                 widget={widget}
                 editable={editable}
@@ -832,6 +829,159 @@ export function DashboardCanvas({
 
             {/* Fullscreen via portal — avoids transform/overflow parents breaking fixed positioning */}
       {/* Task 7: Widget transfer dialog */}
+
+      {/* Mobile widget action sheet */}
+      {menuWidgetId &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div className="fixed inset-0 z-[2147483000] flex flex-col justify-end sm:hidden">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMenuWidgetId(null)} />
+            <div className="relative rounded-t-2xl border border-slate-700 bg-slate-950 shadow-2xl px-3 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-1 animate-in slide-in-from-bottom duration-200">
+              <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-slate-700" />
+              <p className="text-xs text-slate-400 px-2 pb-1 truncate">
+                {dashboard.widgets.find((w) => w.id === menuWidgetId)?.title || 'Widget'}
+              </p>
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                onClick={() => {
+                  const id = menuWidgetId;
+                  setMenuWidgetId(null);
+                  if (!id) return;
+                  bumpRefresh(id);
+                  window.dispatchEvent(new CustomEvent('bi-widget-fullrefresh', { detail: { id } }));
+                }}
+              >
+                <RefreshCw className="h-4 w-4 text-cyan-400" /> Täzele
+              </button>
+              {['bar', 'line', 'pie', 'area'].includes(
+                dashboard.widgets.find((w) => w.id === menuWidgetId)?.type || ''
+              ) && (
+                <>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (!id) return;
+                      window.dispatchEvent(
+                        new CustomEvent('bi-chart-cmd', { detail: { id, action: 'reset' } })
+                      );
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4 text-sky-400" /> Zoom reset
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (!id) return;
+                      window.dispatchEvent(
+                        new CustomEvent('bi-chart-cmd', { detail: { id, action: 'png' } })
+                      );
+                    }}
+                  >
+                    <Download className="h-4 w-4 text-emerald-400" /> PNG ýükle
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                onClick={() => {
+                  const id = menuWidgetId;
+                  setMenuWidgetId(null);
+                  if (id) setExpandedId(id);
+                }}
+              >
+                <Maximize2 className="h-4 w-4 text-slate-300" /> Doly ekran
+              </button>
+              {editable && (
+                <>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (id) toggleMobileWidth(id);
+                    }}
+                  >
+                    <span className="w-4 text-center text-[11px] font-bold text-amber-400">½</span>
+                    Ini: ýarym / doly
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (id) moveWidgetMobile(id, -1);
+                    }}
+                  >
+                    <ChevronUp className="h-4 w-4 text-slate-300" /> Ýokary süýş
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (id) moveWidgetMobile(id, 1);
+                    }}
+                  >
+                    <ChevronDown className="h-4 w-4 text-slate-300" /> Aşak süýş
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (id) void openTransfer(id);
+                    }}
+                  >
+                    <ArrowLeftRight className="h-4 w-4 text-emerald-400" /> Başga dashboarda geçir
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-slate-200 hover:bg-slate-800"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (id) onConfigureWidget?.(id);
+                    }}
+                  >
+                    <Settings2 className="h-4 w-4 text-indigo-400" /> Sazla
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-rose-300 hover:bg-rose-500/10"
+                    onClick={() => {
+                      const id = menuWidgetId;
+                      setMenuWidgetId(null);
+                      if (id) removeWidget(id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" /> Poz
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="w-full py-3 text-center text-sm text-slate-400"
+                onClick={() => setMenuWidgetId(null)}
+              >
+                Ýap
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
+
       {transferWidgetId &&
         typeof document !== 'undefined' &&
         createPortal(
@@ -1002,6 +1152,7 @@ export function DashboardCanvas({
                 <div className="flex-1 min-h-0 h-full w-full">
                   <LiveWidget
                     widget={expandedWidget}
+                    zoomEnabled
                     editable={false}
                     globalFilters={globalFilters}
                     refreshToken={refreshTokens[expandedWidget.id]}

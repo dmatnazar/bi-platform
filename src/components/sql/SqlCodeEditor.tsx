@@ -17,14 +17,14 @@ declare global {
 const CM_CSS = [
   '/vendor/codemirror/codemirror.min.css',
   '/vendor/codemirror/material-darker.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.css',
+  '/vendor/codemirror/show-hint.min.css',
 ];
 
 const CM_JS = [
   '/vendor/codemirror/codemirror.min.js',
   '/vendor/codemirror/sql.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/hint/show-hint.min.js',
+  '/vendor/codemirror/matchbrackets.min.js',
+  '/vendor/codemirror/show-hint.min.js',
 ];
 
 /** Navicat-like SQL keywords (upper-case insert) */

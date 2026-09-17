@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, isSuperAdmin } from '@/lib/auth';
 import { getSettings } from '@/lib/db';
-import { gatewayFetch } from '@/lib/gateway';
+import { gatewayFetch, fetchCatalog, staffLookup, decryptPasswordPlain } from '@/lib/gateway';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -113,16 +113,54 @@ export async function POST(req: NextRequest) {
   console.log('[bi-gateway-query] outgoing params', JSON.stringify(params), 'url=', url.toString());
 
   try {
+    // Auth required endpoint → forward staff Basic credentials (platform session)
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'x-debug-params': '1',
+      'x-staff-role': String(user.role || ''),
+      'x-staff-id': String(user.id || user.username || ''),
+      'x-staff-username': String(user.username || ''),
+      'x-billing-done': '1',
+    };
+    try {
+      const catalog = await fetchCatalog(false);
+      const ep = (catalog.endpoints || []).find((e: any) => {
+        const epPath = String(e.pathTemplate || e.path || '');
+        const norm = epPath.startsWith('/') ? epPath : `/${epPath}`;
+        return (
+          String(e.tenantSlug || '') === tenantSlug &&
+          (norm === p || epPath === path || String(e.pathTemplate || '') === path) &&
+          String(e.method || 'GET').toUpperCase() === method
+        );
+      });
+      const needAuth = ep ? ep.authRequired !== false : true;
+      if (needAuth && user.username) {
+        let plain = '';
+        const staffRow = (catalog.staff || []).find(
+          (s: any) => String(s.username || '').toLowerCase() === String(user.username).toLowerCase()
+        );
+        if (staffRow?.passwordEnc) plain = decryptPasswordPlain(staffRow.passwordEnc);
+        if (!plain) {
+          const lookup = await staffLookup(user.username);
+          if (lookup.ok && lookup.data) {
+            const d = lookup.data as any;
+            if (d.passwordEnc) plain = decryptPasswordPlain(d.passwordEnc);
+            else if (d.passwordPlain) plain = String(d.passwordPlain);
+          }
+        }
+        if (plain) {
+          headers.Authorization =
+            'Basic ' + Buffer.from(`${user.username}:${plain}`, 'utf8').toString('base64');
+        }
+      }
+    } catch (e) {
+      console.warn('[bi-gateway-query] auth resolve failed', e);
+    }
+
     const res = await fetch(url.toString(), {
       method,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'x-debug-params': '1',
-        'x-staff-role': String(user.role || ''),
-        'x-staff-id': String(user.id || user.username || ''),
-        'x-billing-done': '1',
-      },
+      headers,
       body: method === 'POST' ? JSON.stringify(params || {}) : undefined,
       signal: AbortSignal.timeout(30000),
     });

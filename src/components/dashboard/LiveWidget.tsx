@@ -19,6 +19,8 @@ import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { getEndpointCatalog, resolveLiveEndpoint, type CatalogEndpoint } from '@/lib/endpoint-catalog-client';
 
 interface Props {
+  /** Fullscreen: enable chart wheel/pinch zoom */
+  zoomEnabled?: boolean;
   widget: DashboardWidget;
   editable?: boolean;
   onConfigure?: () => void;
@@ -161,6 +163,7 @@ function LiveWidgetInner({
   globalFilters = {},
   refreshToken,
   className,
+  zoomEnabled = false,
 }: Props) {
   const [rows, setRows] = useState<Record<string, unknown>[] | undefined>(undefined);
   const [truncatedWarn, setTruncatedWarn] = useState<string | null>(null);
@@ -491,6 +494,7 @@ function LiveWidgetInner({
           globalSearch={searchQuery}
           globalFilters={apiFilters}
           className={cn('h-full', className)}
+          zoomEnabled={zoomEnabled}
         />
       </div>
     </div>
@@ -502,6 +506,7 @@ function liveWidgetPropsEqual(a: Props, b: Props): boolean {
   if (a.editable !== b.editable) return false;
   if (a.refreshToken !== b.refreshToken) return false;
   if (a.className !== b.className) return false;
+  if (a.zoomEnabled !== b.zoomEnabled) return false;
   const aw = a.widget;
   const bw = b.widget;
   if (aw.type !== bw.type) return false;

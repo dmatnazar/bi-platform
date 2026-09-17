@@ -289,6 +289,14 @@ export function DashboardFilterBar({
     onChange(next);
   }
 
+  function isPresetActive(p: (typeof PRESETS)[0]) {
+    const rangeFilter = filters.find((f) => f.type === 'daterange');
+    if (!rangeFilter) return false;
+    const b = toDateInputValue(values[rangeFilter.key]);
+    const e = toDateInputValue(values[rangeFilter.endKey || 'endDate']);
+    return b === p.begin() && e === p.end();
+  }
+
   function applyPreset(p: (typeof PRESETS)[0]) {
     const rangeFilter = filters.find((f) => f.type === 'daterange');
     if (!rangeFilter) return;
@@ -315,7 +323,7 @@ export function DashboardFilterBar({
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-900/60 shadow-md shadow-black/15',
+        'rounded-xl border border-slate-800 bg-slate-900/80 shadow-md shadow-black/15',
         compact ? 'p-2' : 'p-2.5',
         className
       )}
@@ -342,16 +350,23 @@ export function DashboardFilterBar({
 
         {filters.some((f) => f.type === 'daterange') && (
           <div className="flex flex-wrap gap-1 sm:gap-1.5 ml-auto max-w-full justify-end">
-            {PRESETS.map((p) => (
+            {PRESETS.map((p) => {
+              const active = isPresetActive(p);
+              return (
               <button
                 key={p.label}
                 type="button"
                 onClick={() => applyPreset(p)}
-                className="px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-medium bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border border-slate-700/80 transition-colors whitespace-nowrap"
+                className={cn(
+                  'px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-medium border transition-colors whitespace-nowrap',
+                  active
+                    ? 'bg-indigo-500/25 text-indigo-200 border-indigo-400/60 shadow-sm shadow-indigo-500/20'
+                    : 'bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border-slate-700/80'
+                )}
               >
                 {p.label}
               </button>
-            ))}
+            );})}
           </div>
         )}
       </div>
@@ -361,7 +376,7 @@ export function DashboardFilterBar({
         {filters.map((f) => {
           if (f.type === 'daterange') {
             return (
-              <div key={f.key} className="w-full sm:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-2 p-2 sm:p-0 rounded-xl sm:rounded-none bg-slate-950/40 sm:bg-transparent border border-slate-800/80 sm:border-0">
+              <div key={f.key} className="w-full sm:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-2 p-0 rounded-none bg-transparent border-0">
                 <div className="w-full sm:min-w-[100px] sm:min-w-[140px] sm:w-auto">
                   <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                     {f.label} — başla
@@ -373,7 +388,7 @@ export function DashboardFilterBar({
                       type="date"
                       value={toDateInputValue(values[f.key])}
                       onChange={(e) => setKey(f.key, e.target.value || null)}
-                      className="w-full h-11 sm:h-9 rounded-xl border border-slate-700 bg-slate-950/80 pl-8 pr-3 text-base sm:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+                      className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 pl-8 pr-3 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
                     />
                   </div>
                 </div>
@@ -387,7 +402,7 @@ export function DashboardFilterBar({
                       type="date"
                       value={toDateInputValue(values[f.endKey || 'endDate'])}
                       onChange={(e) => setKey(f.endKey || 'endDate', e.target.value || null)}
-                      className="w-full h-11 sm:h-9 rounded-xl border border-slate-700 bg-slate-950/80 pl-8 pr-3 text-base sm:text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
+                      className="w-full h-9 rounded-xl border border-slate-700 bg-slate-950 pl-8 pr-3 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50"
                     />
                   </div>
                 </div>

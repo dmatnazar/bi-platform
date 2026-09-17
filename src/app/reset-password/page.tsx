@@ -6,6 +6,8 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { BarChart3, Clock, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useTheme } from '@/components/ThemeProvider';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function ResetForm() {
   const search = useSearchParams();
@@ -177,8 +179,11 @@ function ResetForm() {
 }
 
 export default function ResetPasswordPage() {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: isLight ? '#f1f5f9' : '#020617' }}>
+      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">

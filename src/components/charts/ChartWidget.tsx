@@ -1,6 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTheme } from '@/components/ThemeProvider';
+import {
+  resolveThemeColor,
+  resolveThemeColorList,
+  THEME_DEFAULTS,
+} from '@/lib/theme-color';
 import { createPortal } from 'react-dom';
 import ReactECharts from 'echarts-for-react';
 import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
@@ -82,6 +88,7 @@ function cloneOptionPreserveFns<T>(obj: T): T {
 
 
 interface Props {
+  zoomEnabled?: boolean;
   widget: DashboardWidget;
   data?: Record<string, unknown>[];
   className?: string;
@@ -1701,9 +1708,10 @@ function TableWidgetBody({
   );
 }
 
-export function ChartWidget({ widget, data, className, globalFilters }: Props) {
+export function ChartWidget({ widget, data, className, globalFilters, zoomEnabled = false }: Props) {
+  const { theme } = useTheme();
   const option = useMemo(() => {
-    const color = widget.config?.color || '#6366f1';
+    const color = resolveThemeColor(widget.config?.color, theme, THEME_DEFAULTS.primary[theme]);
     const showLegend = widget.config?.showLegend !== false;
 
     if (widget.type === 'kpi' || widget.type === 'text' || widget.type === 'table') return null;
@@ -1739,9 +1747,11 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
         seriesFieldList.length
           ? seriesFieldList.map((f) => String(r[f] ?? '')).filter(Boolean).join(' / ') || 'Series'
           : '';
-      const palette = widget.config?.colors?.length
-        ? widget.config.colors
-        : [color, '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
+      const palette = resolveThemeColorList(
+        widget.config?.colors?.length ? widget.config.colors : undefined,
+        theme,
+        [color, ...THEME_DEFAULTS.palette[theme].slice(1)]
+      );
       const seriesType = widget.type === 'bar' ? 'bar' : 'line';
       const smooth = widget.config?.smooth !== false && widget.type !== 'bar';
       const stacked = !!widget.config?.stacked;
@@ -1830,10 +1840,16 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           show: !!showLabels,
           position: pos,
           color: labelInsideBar
-            ? '#f8fafc'
-            : (widget.config as any)?.valueLabelColor ||
-              widget.config?.labelColor ||
-              seriesColor,
+            ? resolveThemeColor(
+                (widget.config as any)?.valueLabelColor ?? widget.config?.labelColor,
+                theme,
+                THEME_DEFAULTS.chartLabelInside[theme]
+              )
+            : resolveThemeColor(
+                (widget.config as any)?.valueLabelColor ?? widget.config?.labelColor,
+                theme,
+                seriesColor
+              ),
           fontSize: Math.max(
             10,
             (widget.config?.labelFontSize || 12) - (valueKeys.length > 2 ? 1 : 0)
@@ -1843,10 +1859,14 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           hideOverlap: true,
           ...(useLabelBg
             ? {
-                backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                backgroundColor: resolveThemeColor(
+                  (widget.config as any)?.valueLabelBgColor,
+                  theme,
+                  THEME_DEFAULTS.labelBg[theme]
+                ),
                 borderRadius: 2,
                 padding: [1, 3] as [number, number],
-                borderColor: 'rgba(148, 163, 184, 0.3)',
+                borderColor: theme === 'light' ? 'rgba(148, 163, 184, 0.45)' : 'rgba(148, 163, 184, 0.3)',
                 borderWidth: 1,
               }
             : {
@@ -1998,8 +2018,27 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       }
 
       // Task 15: configurable label/axis colors
-      const labelColor = widget.config?.labelColor || '#94a3b8';
-      const axisLabelColor = widget.config?.axisLabelColor || '#94a3b8';
+      const labelColor = resolveThemeColor(
+        widget.config?.labelColor,
+        theme,
+        THEME_DEFAULTS.label[theme]
+      );
+      const axisLabelColor = resolveThemeColor(
+        widget.config?.axisLabelColor,
+        theme,
+        THEME_DEFAULTS.axisLabel[theme]
+      );
+      const showGridLines = widget.config?.gridLines !== false;
+      const gridLineColor = resolveThemeColor(
+        widget.config?.gridLineColor,
+        theme,
+        THEME_DEFAULTS.gridLine[theme]
+      );
+      const axisLineColorResolved = resolveThemeColor(
+        widget.config?.axisLineColor,
+        theme,
+        THEME_DEFAULTS.axisLine[theme]
+      );
       const baseLabelFs = Math.min(14, Math.max(9, widget.config?.labelFontSize || 11));
 
       // Task 16: dual Y only when multiple value series on a vertical value axis
@@ -2052,7 +2091,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           // Emit a click event so onChartClick can pop up the untruncated label.
           triggerEvent: true,
         },
-        axisLine: { lineStyle: { color: '#334155' } },
+        axisLine: { lineStyle: { color: axisLineColorResolved } },
         axisTick: { alignWithLabel: true },
       };
       // Axis number format: compact (400k) | full (400000) | grouped (400,000)
@@ -2069,7 +2108,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           margin: 4,
           formatter: formatAxisNumber,
         },
-        splitLine: { lineStyle: { color: '#1e293b' } },
+        splitLine: { show: showGridLines, lineStyle: { color: gridLineColor, type: 'solid', width: 1 } },
         scale: true,
         alignTicks: false,
       };
@@ -2124,7 +2163,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           containLabel: true,
         },
         dataZoom: [
-          { type: 'inside', zoomOnMouseWheel: true, moveOnMouseMove: true },
+          { type: 'inside', zoomOnMouseWheel: false, moveOnMouseWheel: false, moveOnMouseMove: false, zoomOnMouseMove: false, preventDefaultMouseMove: false },
           {
             type: 'slider',
             height: 28,
@@ -2146,7 +2185,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
                 type: 'scroll',
                 orient: 'horizontal',
                 textStyle: { color: labelColor, fontSize: baseLabelFs },
-                pageTextStyle: { color: '#94a3b8' },
+                pageTextStyle: { color: axisLabelColor },
               }
             : undefined,
         xAxis: horizontal ? valueAxis : categoryAxis,
@@ -2188,9 +2227,11 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             ? [widget.dataSource.valueField]
             : ['value'];
       const valKey = valueKeys[0] || 'value';
-      const palette = widget.config?.colors?.length
-        ? widget.config.colors
-        : [color, '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
+      const palette = resolveThemeColorList(
+        widget.config?.colors?.length ? widget.config.colors : undefined,
+        theme,
+        [color, ...THEME_DEFAULTS.palette[theme].slice(1)]
+      );
       const showLabels = widget.config?.showDataLabels !== false;
       const showPercent = widget.config?.showPercent !== false;
       const showValueInLabel = !!widget.config?.showValueInLabel;
@@ -2212,12 +2253,16 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
           r[pieSourceField] != null && r[pieSourceField] !== ''
             ? r[pieSourceField]
             : r['fich_id'] ?? r['fish_id'] ?? r['id'] ?? r['Id'];
+        const sliceColor = palette[i % palette.length];
         return {
           name: formatCategoryLabel(r[catKey]),
           value,
           _drillId: drillId,
           _row: r,
-          itemStyle: { color: palette[i % palette.length] },
+          itemStyle: { color: sliceColor },
+          labelLine: widget.config?.pieLabelLineAuto
+            ? { lineStyle: { color: sliceColor } }
+            : undefined,
         };
       });
       // Center metric can use a different column than slice value
@@ -2264,7 +2309,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             top: showLegend ? '40%' : '44%',
             style: {
               text: centerText,
-              fill: '#e2e8f0',
+              fill: resolveThemeColor(undefined, theme, THEME_DEFAULTS.chartLabelOutside[theme]),
               fontSize: 15,
               fontWeight: 600,
               textAlign: 'center',
@@ -2277,7 +2322,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             top: showLegend ? '48%' : '52%',
             style: {
               text: centerLabel,
-              fill: '#94a3b8',
+              fill: resolveThemeColor(undefined, theme, THEME_DEFAULTS.legend[theme]),
               fontSize: 11,
               textAlign: 'center',
             },
@@ -2288,13 +2333,19 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
 
       return {
         backgroundColor: 'transparent',
-        tooltip: {
-          trigger: 'item',
-          formatter: (p: any) => {
-            const pct = p.percent != null ? ` (${p.percent}%)` : '';
-            return `${p.name}: ${p.value}${showPercent ? pct : ''}`;
-          },
-        },
+        tooltip: widget.config?.pieHoverTooltip === false
+          ? { show: false }
+          : {
+              trigger: 'item',
+              formatter: (p: any) => {
+                const showVal = widget.config?.pieHoverShowValue !== false;
+                const showPct = widget.config?.pieHoverShowPercent !== false;
+                const parts: string[] = [String(p.name ?? '')];
+                if (showVal && p.value != null) parts.push(String(p.value));
+                if (showPct && p.percent != null) parts.push(`(${p.percent}%)`);
+                return parts.filter(Boolean).join(': ').replace(': (', ' (');
+              },
+            },
         legend: showLegend
           ? {
               bottom: 4,
@@ -2303,8 +2354,8 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               itemHeight: 10,
               itemWidth: 12,
               padding: [2, 4],
-              textStyle: { color: '#94a3b8', fontSize: 11 },
-              pageTextStyle: { color: '#94a3b8' },
+              textStyle: { color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]), fontSize: 11 },
+              pageTextStyle: { color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]) },
             }
           : undefined,
         series: [
@@ -2319,10 +2370,33 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
             avoidLabelOverlap: true,
             minShowLabelAngle: 0,
             label: {
-              color: widget.config?.labelColor || (labelInside ? '#f1f5f9' : '#e2e8f0'),
+              color: resolveThemeColor(
+                widget.config?.labelColor,
+                theme,
+                labelInside
+                  ? THEME_DEFAULTS.chartLabelInside[theme]
+                  : THEME_DEFAULTS.chartLabelOutside[theme]
+              ),
               fontSize: widget.config?.labelFontSize || 10,
               show: showLabels,
               position: labelInside ? 'inside' : 'outside',
+              backgroundColor:
+                !labelInside && !!widget.config?.pieLabelBg
+                  ? resolveThemeColor(
+                      widget.config?.pieLabelBgColor,
+                      theme,
+                      THEME_DEFAULTS.labelBg[theme]
+                    )
+                  : 'transparent',
+              borderRadius: !labelInside && !!widget.config?.pieLabelBg ? 3 : 0,
+              padding: !labelInside && !!widget.config?.pieLabelBg ? [2, 4] : 0,
+              borderWidth: !labelInside && !!widget.config?.pieLabelBg ? 1 : 0,
+              borderColor:
+                !labelInside && !!widget.config?.pieLabelBg
+                  ? theme === 'light'
+                    ? 'rgba(148,163,184,0.4)'
+                    : 'rgba(148,163,184,0.25)'
+                  : 'transparent',
               // Word-aware wrap. Auto-size ON → tighter wrap; OFF → wider single-line prefer.
               formatter: (p: any) => {
                 const name = String(p.name ?? '');
@@ -2373,22 +2447,65 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
               draggable: false,
             },
             labelLine: {
-              show: showLabels && !labelInside,
+              show: showLabels && !labelInside && widget.config?.pieLabelLine !== false,
               length: 8,
               length2: 6,
               smooth: false,
-              lineStyle: { width: 1 },
+              lineStyle: {
+                width: 1.25,
+                color: widget.config?.pieLabelLineAuto
+                  ? undefined
+                  : resolveThemeColor(
+                      widget.config?.pieLabelLineColor,
+                      theme,
+                      THEME_DEFAULTS.pieLabelLine[theme]
+                    ),
+              },
             },
-            itemStyle: { borderRadius: 4, borderColor: '#0f172a', borderWidth: 2 },
+            itemStyle: {
+              borderRadius: 4,
+              borderColor: resolveThemeColor(
+                widget.config?.pieBorderColor,
+                theme,
+                THEME_DEFAULTS.pieBorder[theme]
+              ),
+              borderWidth: 2,
+            },
             emphasis: {
               scale: true,
               scaleSize: 8,
-              itemStyle: { shadowBlur: 16, shadowColor: 'rgba(0,0,0,0.35)' },
+              itemStyle: {
+                shadowBlur: 16,
+                shadowColor: theme === 'light' ? 'rgba(15,23,42,0.2)' : 'rgba(0,0,0,0.35)',
+                borderColor: resolveThemeColor(
+                  widget.config?.pieBorderActiveColor,
+                  theme,
+                  THEME_DEFAULTS.pieBorderActive[theme]
+                ),
+                borderWidth: 3,
+              },
               label: { show: true, fontWeight: 'bold', fontSize: 12 },
+              labelLine: {
+                lineStyle: {
+                  color: resolveThemeColor(
+                    widget.config?.pieLabelLineColor,
+                    theme,
+                    THEME_DEFAULTS.pieLabelLine[theme]
+                  ),
+                },
+              },
             },
             selectedMode: 'single',
             select: {
-              itemStyle: { shadowBlur: 12, borderWidth: 3, borderColor: '#fff' },
+              itemStyle: {
+                shadowBlur: 12,
+                borderWidth: 3,
+                borderColor: resolveThemeColor(
+                  widget.config?.pieBorderActiveColor,
+                  theme,
+                  THEME_DEFAULTS.pieBorderActive[theme]
+                ),
+              },
             },
           },
         ],
@@ -2398,7 +2515,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
 
 
     return null;
-  }, [widget, data]);
+  }, [widget, data, theme]);
 
   if (widget.type === 'kpi') {
     const live =
@@ -2416,7 +2533,11 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
     // Unit/suffix on SAME line as value — no second row (avoids empty space above/below)
     const unit = widget.config?.unit || '';
     const suffix = widget.config?.suffix || '';
-    const kpiColor = widget.config?.color || '#ffffff';
+    const kpiColor = resolveThemeColor(
+      widget.config?.color,
+      theme,
+      THEME_DEFAULTS.kpiText[theme]
+    );
     const enableAutoTextSize = widget.config?.enableAutoTextSize !== false;
     const textAlign = (widget.config?.textAlign || 'center') as 'center' | 'left' | 'right';
 
@@ -2644,6 +2765,7 @@ export function ChartWidget({ widget, data, className, globalFilters }: Props) {
       widget={widget}
       data={data}
       globalFilters={globalFilters}
+      zoomEnabled={zoomEnabled}
     />
   );
 }
@@ -2657,6 +2779,7 @@ function ChartCanvas({
   widget,
   data,
   globalFilters = {},
+  zoomEnabled = false,
 }: {
   option: any;
   className?: string;
@@ -2665,7 +2788,52 @@ function ChartCanvas({
   widget: DashboardWidget;
   data?: Record<string, unknown>[];
   globalFilters?: GlobalFilterValues;
+  /** Fullscreen / expanded: allow wheel & pinch zoom */
+  zoomEnabled?: boolean;
 }) {
+  function withZoom(opt: any) {
+    if (!opt) return opt;
+    const o = { ...opt };
+    if (!zoomEnabled) {
+      // Adaty görnüş: dataZoom ýok → wheel sahypany scroll edýär, zoom ýok
+      o.dataZoom = [];
+      return o;
+    }
+    // Doly ekran: inside + slider zoom
+    if (Array.isArray(o.dataZoom)) {
+      o.dataZoom = o.dataZoom.map((dz: any) => {
+        if (dz?.type === 'inside') {
+          return {
+            ...dz,
+            disabled: false,
+            zoomOnMouseWheel: true,
+            moveOnMouseWheel: true,
+            moveOnMouseMove: true,
+            zoomOnMouseMove: false,
+            preventDefaultMouseMove: true,
+          };
+        }
+        if (dz?.type === 'slider') {
+          return { ...dz, show: true, disabled: false };
+        }
+        return dz;
+      });
+    } else {
+      o.dataZoom = [
+        {
+          type: 'inside',
+          zoomOnMouseWheel: true,
+          moveOnMouseWheel: true,
+          moveOnMouseMove: true,
+          preventDefaultMouseMove: true,
+        },
+        { type: 'slider', height: 28, bottom: 6, show: true },
+      ];
+    }
+    return o;
+  }
+
+  const { theme } = useTheme();
   const chartRef = useRef<any>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   // Init zoom state so first paint can aggregate when enabled
@@ -2700,7 +2868,7 @@ function ChartCanvas({
     }
     if (labelPopupTimer.current) clearTimeout(labelPopupTimer.current);
     setLabelPopup({ text, x, y });
-    labelPopupTimer.current = setTimeout(() => setLabelPopup(null), 3000);
+    labelPopupTimer.current = setTimeout(() => setLabelPopup(null), Math.max(1000, Number(widget.config?.pieClickPopupMs) || 5000));
   }
   useEffect(
     () => () => {
@@ -2803,7 +2971,7 @@ function ChartCanvas({
     if (!inst) return;
     try {
       inst.dispatchAction({ type: 'restore' });
-      inst.setOption(option, true);
+      inst.setOption(withZoom(option), true);
     } catch {
       /* */
     }
@@ -3005,18 +3173,18 @@ function ChartCanvas({
       showLabelPopup(String(params.value), params.event);
       return;
     }
-    // Fix: pie/donut label click → show full name (+ value), but only when
-    // drill-down isn't wired up for this widget (drill-down already has its
-    // own, more useful, click behavior below).
+    // Pie/donut: always show name + value popup (hover/click feedback),
+    // even when hierarchy drill-down is enabled.
     if (
       params?.componentType === 'series' &&
       (chartKind === 'pie' || chartKind === 'donut') &&
-      !dd?.enabled &&
       params?.name
     ) {
-      const text = params.value != null ? `${params.name}: ${params.value}` : String(params.name);
-      showLabelPopup(text, params.event);
-      return;
+      if (widget.config?.pieClickPopup !== false) {
+        const text = params.value != null ? `${params.name}: ${params.value}` : String(params.name);
+        showLabelPopup(text, params.event);
+      }
+      if (!dd?.enabled) return;
     }
     if (chartKind !== 'pie' && chartKind !== 'donut') return;
     if (!params?.data?.name) return;
@@ -3063,8 +3231,8 @@ function ChartCanvas({
     const catKey = levelMeta.categoryField;
     const valKey = levelMeta.valueField;
     const palette = widget.config?.colors?.length
-      ? widget.config.colors
-      : ['#6366f1', '#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#fb7185', '#60a5fa'];
+      ? resolveThemeColorList(widget.config.colors, theme, THEME_DEFAULTS.palette[theme])
+      : [...THEME_DEFAULTS.palette[theme]];
     const pieData = levelRows.map((r, i) => ({
       name: formatCategoryLabel(r[catKey]),
       value: Number(r[valKey] ?? 0),
@@ -3081,7 +3249,11 @@ function ChartCanvas({
           center: ['50%', '52%'],
           data: pieData,
           label: {
-            color: '#cbd5e1',
+            color: resolveThemeColor(
+              widget.config?.labelColor,
+              theme,
+              THEME_DEFAULTS.chartLabelOutside[theme]
+            ),
             fontSize: 11,
             formatter: '{b}\n{d}%',
           },
@@ -3089,7 +3261,7 @@ function ChartCanvas({
         },
       ],
     };
-  }, [levelRows, levelMeta, widget.config?.colors]);
+  }, [levelRows, levelMeta, widget.config?.colors, widget.config?.labelColor, theme]);
 
   const hierarchyChartRef = useRef<any>(null);
 

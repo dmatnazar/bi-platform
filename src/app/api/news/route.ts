@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
     title,
     body: String(body.body || ''),
     images: Array.isArray(body.images) ? body.images.map(String) : [],
+    media: Array.isArray(body.media) ? body.media : undefined,
     published: body.published !== false,
     pinned: !!body.pinned,
     createdBy: user.username,

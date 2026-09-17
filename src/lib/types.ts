@@ -1,3 +1,5 @@
+import type { ThemeColor } from '@/lib/theme-color';
+
 export type StaffRole = 'super_admin' | 'admin' | 'editor' | 'viewer';
 
 export type RegistrationStatus = 'pending' | 'approved' | 'rejected';
@@ -246,10 +248,10 @@ export interface DashboardWidget {
   /** static KPI value or text content when no dataSource */
   staticValue?: string | number;
   config?: {
-    /** Primary series color */
-    color?: string;
-    /** Extra palette for multi-series / pie slices */
-    colors?: string[];
+    /** Primary series / KPI text color (theme-aware) */
+    color?: ThemeColor;
+    /** Extra palette for multi-series / pie slices (theme-aware entries) */
+    colors?: ThemeColor[];
     showLegend?: boolean;
     /** Pivot (сводная): row dimension fields */
     pivotRows?: string[];
@@ -278,10 +280,12 @@ export interface DashboardWidget {
     pieCenterAgg?: 'sum' | 'count' | 'avg' | 'none';
     /** Pie: which column to aggregate in donut center */
     pieCenterField?: string;
-    /** Chart/KPI label text color */
-    labelColor?: string;
-    /** Axis tick label color */
-    axisLabelColor?: string;
+    /** Chart/KPI label text color (theme-aware) */
+    labelColor?: ThemeColor;
+    /** Value labels on bars/lines (theme-aware) */
+    valueLabelColor?: ThemeColor;
+    /** Axis tick label color (theme-aware) */
+    axisLabelColor?: ThemeColor;
     /** Chart data label font size (px) */
     labelFontSize?: number;
     /** Auto scale font size with widget box */
@@ -299,6 +303,38 @@ export interface DashboardWidget {
     valueFieldSuffix?: Record<string, string>;
     /** Show opaque background behind chart value labels */
     valueLabelBg?: boolean;
+    /** Label background color (theme-aware) when valueLabelBg is on */
+    valueLabelBgColor?: ThemeColor;
+    /** Show chart split/grid lines (bar/line/area) — default true for value axis */
+    gridLines?: boolean;
+    /** Grid / split line color (theme-aware) */
+    gridLineColor?: ThemeColor;
+    /** Category/value axis line color */
+    axisLineColor?: ThemeColor;
+    /** Pie outside labels: dark box behind text */
+    pieLabelBg?: boolean;
+    /** Pie label box color */
+    pieLabelBgColor?: ThemeColor;
+    /** Pie leader line (label connector) color */
+    pieLabelLineColor?: ThemeColor;
+    /** Pie slice border color (gap between slices) */
+    pieBorderColor?: ThemeColor;
+    /** Pie slice border on select/hover */
+    pieBorderActiveColor?: ThemeColor;
+    /** Show pie label connector lines — default true when labels outside */
+    pieLabelLine?: boolean;
+    /** 'auto' follows slice/label color */
+    pieLabelLineAuto?: boolean;
+    /** Show ECharts hover tooltip on pie — default true */
+    pieHoverTooltip?: boolean;
+    /** Include percent in pie hover tooltip — default true */
+    pieHoverShowPercent?: boolean;
+    /** Include value in pie hover tooltip — default true */
+    pieHoverShowValue?: boolean;
+    /** Show click popup (name: value) — default true */
+    pieClickPopup?: boolean;
+    /** Click popup duration ms — default 5000 */
+    pieClickPopupMs?: number;
     /** Line/area: when many points, bucket-sum neighboring labels (default off) */
     valueLabelAggregate?: boolean;
     /** KPI prefix/suffix e.g. currency */

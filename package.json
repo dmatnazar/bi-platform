@@ -28,7 +28,8 @@
     "uuid": "^11.0.5",
     "zod": "^3.24.1",
     "zustand": "^5.0.3",
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^6.9.16",
+    "firebase": "^10.13.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

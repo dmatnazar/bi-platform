@@ -18,6 +18,8 @@ import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { ApiPickerModal } from '@/components/ApiPickerModal';
 import { Link2, Sparkles , Pencil } from 'lucide-react';
+import { ThemeColorField } from '@/components/ui/ThemeColorField';
+import { useTheme } from '@/components/ThemeProvider';
 
 interface EndpointOpt {
   id: string;
@@ -47,6 +49,7 @@ export function WidgetConfigPanel({
   onSuggestGlobalFilters,
   preferredTenantSlug,
 }: Props) {
+  const { theme } = useTheme();
   const [apiPickerOpen, setApiPickerOpen] = useState(false);
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
   const [sampleColumns, setSampleColumns] = useState<string[]>([]);
@@ -896,30 +899,29 @@ export function WidgetConfigPanel({
         onChange={(e) => patchDs({ refreshSec: Number(e.target.value) || 0 })}
       />
 
-      <div className="grid grid-cols-2 gap-2">
-        <Input
-          label="Esasy reňk"
-          type="color"
-          value={widget.config?.color || '#6366f1'}
-          onChange={(e) =>
-            onChange({
-              ...widget,
-              config: { ...widget.config, color: e.target.value },
-            })
-          }
-        />
-        <Input
-          label="Birlik (unit)"
-          value={widget.config?.unit || ''}
-          onChange={(e) =>
-            onChange({
-              ...widget,
-              config: { ...widget.config, unit: e.target.value },
-            })
-          }
-          placeholder="TMT, %, sany"
-        />
-      </div>
+      <ThemeColorField
+        label="Esasy reňk (Dark / Light)"
+        value={widget.config?.color}
+        fallbackDark="#6366f1"
+        fallbackLight="#4f46e5"
+        onChange={(c) =>
+          onChange({
+            ...widget,
+            config: { ...widget.config, color: c },
+          })
+        }
+      />
+      <Input
+        label="Birlik (unit)"
+        value={widget.config?.unit || ''}
+        onChange={(e) =>
+          onChange({
+            ...widget,
+            config: { ...widget.config, unit: e.target.value },
+          })
+        }
+        placeholder="TMT, %, sany"
+      />
 
       {(widget.type === 'bar' ||
         widget.type === 'line' ||
@@ -949,25 +951,31 @@ export function WidgetConfigPanel({
                   + Goş
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <p className="text-[10px] text-slate-500">
+                Her reňk üçin Dark we Light aýratyn. Häzirki tema: <span className="text-indigo-300">{theme}</span>
+              </p>
+              <div className="flex flex-col gap-2">
                 {(widget.config?.colors || []).map((c, i) => (
-                  <div key={`c-${i}`} className="flex items-center gap-1">
-                    <input
-                      type="color"
-                      value={c || '#6366f1'}
-                      onChange={(e) => {
-                        const next = [...(widget.config?.colors || [])];
-                        next[i] = e.target.value;
-                        onChange({
-                          ...widget,
-                          config: { ...widget.config, colors: next },
-                        });
-                      }}
-                      className="h-9 w-12 cursor-pointer rounded-lg border border-slate-700 bg-slate-950 p-0.5"
-                    />
+                  <div key={`c-${i}`} className="flex items-start gap-1">
+                    <div className="flex-1 min-w-0">
+                      <ThemeColorField
+                        label={`Reňk #${i + 1}`}
+                        value={c}
+                        fallbackDark="#22d3ee"
+                        fallbackLight="#0891b2"
+                        onChange={(nextColor) => {
+                          const next = [...(widget.config?.colors || [])];
+                          next[i] = nextColor;
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, colors: next },
+                          });
+                        }}
+                      />
+                    </div>
                     <button
                       type="button"
-                      className="text-[10px] text-rose-400 hover:text-rose-300 px-1"
+                      className="mt-6 text-[10px] text-rose-400 hover:text-rose-300 px-1"
                       title="Poz"
                       onClick={() => {
                         const next = (widget.config?.colors || []).filter((_, j) => j !== i);
@@ -1059,6 +1067,69 @@ export function WidgetConfigPanel({
                           />
                           Label fon (bg)
                         </label>
+                        {!!(widget.config as any)?.valueLabelBg && (
+                          <div className="col-span-full w-full">
+                            <ThemeColorField
+                              label="Label fon reňki"
+                              value={(widget.config as any)?.valueLabelBgColor}
+                              fallbackDark="#0f172a"
+                              fallbackLight="#ffffff"
+                              onChange={(c) =>
+                                onChange({
+                                  ...widget,
+                                  config: {
+                                    ...widget.config,
+                                    valueLabelBgColor: c,
+                                  } as any,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={widget.config?.gridLines !== false}
+                            onChange={(e) =>
+                              onChange({
+                                ...widget,
+                                config: {
+                                  ...widget.config,
+                                  gridLines: e.target.checked,
+                                },
+                              })
+                            }
+                          />
+                          Tor çyzyklary (grid)
+                        </label>
+                        {widget.config?.gridLines !== false && (
+                          <div className="col-span-full w-full space-y-2">
+                            <ThemeColorField
+                              label="Tor çyzyk reňki"
+                              value={widget.config?.gridLineColor}
+                              fallbackDark="#1e293b"
+                              fallbackLight="#e2e8f0"
+                              onChange={(c) =>
+                                onChange({
+                                  ...widget,
+                                  config: { ...widget.config, gridLineColor: c },
+                                })
+                              }
+                            />
+                            <ThemeColorField
+                              label="Oks çyzyk reňki"
+                              value={widget.config?.axisLineColor}
+                              fallbackDark="#334155"
+                              fallbackLight="#cbd5e1"
+                              onChange={(c) =>
+                                onChange({
+                                  ...widget,
+                                  config: { ...widget.config, axisLineColor: c },
+                                })
+                              }
+                            />
+                          </div>
+                        )}
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
@@ -1252,63 +1323,220 @@ export function WidgetConfigPanel({
             {['bar', 'line', 'area', 'pie'].includes(widget.type) && (
               <div className="space-y-3 pt-2 border-t border-slate-800">
                 <p className="text-xs font-semibold text-slate-300">Tekst / label sazlamalary</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Label reňki</label>
-                    <input
-                      type="color"
-                      value={widget.config?.labelColor || '#94a3b8'}
-                      onChange={(e) =>
-                        onChange({
-                          ...widget,
-                          config: { ...widget.config, labelColor: e.target.value },
-                        })
-                      }
-                      className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Oks label reňki</label>
-                    <input
-                      type="color"
-                      value={widget.config?.axisLabelColor || '#94a3b8'}
-                      onChange={(e) =>
-                        onChange({
-                          ...widget,
-                          config: { ...widget.config, axisLabelColor: e.target.value },
-                        })
-                      }
-                      className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
-                    />
-                  </div>
-                </div>
-                {(widget.type === 'line' || widget.type === 'area' || widget.type === 'bar') && (
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">
-                      Value (san) reňki — çyzykdan aýratyn
+                <ThemeColorField
+                  label="Label reňki"
+                  value={widget.config?.labelColor}
+                  fallbackDark="#94a3b8"
+                  fallbackLight="#475569"
+                  onChange={(c) =>
+                    onChange({
+                      ...widget,
+                      config: { ...widget.config, labelColor: c },
+                    })
+                  }
+                />
+                <ThemeColorField
+                  label="Oks label reňki"
+                  value={widget.config?.axisLabelColor}
+                  fallbackDark="#94a3b8"
+                  fallbackLight="#64748b"
+                  onChange={(c) =>
+                    onChange({
+                      ...widget,
+                      config: { ...widget.config, axisLabelColor: c },
+                    })
+                  }
+                />
+                {widget.type === 'pie' && (
+                  <div className="space-y-2 pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={!!widget.config?.pieLabelBg}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pieLabelBg: e.target.checked },
+                          })
+                        }
+                      />
+                      Pie label fon (daşyndaky gap)
                     </label>
-                    <input
-                      type="color"
-                      value={
-                        (widget.config as any)?.valueLabelColor ||
-                        widget.config?.labelColor ||
-                        '#e2e8f0'
-                      }
-                      onChange={(e) =>
+                    {!!widget.config?.pieLabelBg && (
+                      <ThemeColorField
+                        label="Pie label fon reňki"
+                        value={widget.config?.pieLabelBgColor}
+                        fallbackDark="#0f172a"
+                        fallbackLight="#ffffff"
+                        onChange={(c) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pieLabelBgColor: c },
+                          })
+                        }
+                      />
+                    )}
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={widget.config?.pieLabelLine !== false}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pieLabelLine: e.target.checked },
+                          })
+                        }
+                      />
+                      Label çyzygy (connector)
+                    </label>
+                    {widget.config?.pieLabelLine !== false && (
+                      <ThemeColorField
+                        label="Label çyzyk reňki"
+                        value={widget.config?.pieLabelLineColor}
+                        fallbackDark="#64748b"
+                        fallbackLight="#94a3b8"
+                        onChange={(c) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pieLabelLineColor: c },
+                          })
+                        }
+                      />
+                    )}
+                    <ThemeColorField
+                      label="Dilimler arasy (border)"
+                      value={widget.config?.pieBorderColor}
+                      fallbackDark="#0f172a"
+                      fallbackLight="#f8fafc"
+                      onChange={(c) =>
                         onChange({
                           ...widget,
-                          config: {
-                            ...widget.config,
-                            valueLabelColor: e.target.value,
-                          } as any,
+                          config: { ...widget.config, pieBorderColor: c },
                         })
                       }
-                      className="w-full h-9 rounded-lg cursor-pointer bg-slate-950 border border-slate-700"
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">
-                      Çyzyk/meýdança reňki — «Esasy reňk / Goşmaça reňkler». Bu diňe sanlaryň reňki.
-                    </p>
+                    <ThemeColorField
+                      label="Hover / saýlanan border"
+                      value={widget.config?.pieBorderActiveColor}
+                      fallbackDark="#ffffff"
+                      fallbackLight="#0f172a"
+                      onChange={(c) =>
+                        onChange({
+                          ...widget,
+                          config: { ...widget.config, pieBorderActiveColor: c },
+                        })
+                      }
+                    />
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={!!widget.config?.pieLabelLineAuto}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: { ...widget.config, pieLabelLineAuto: e.target.checked },
+                          })
+                        }
+                      />
+                      Label çyzyk — Auto (dilim reňki)
+                    </label>
+                    <div className="border-t border-slate-800 pt-2 space-y-1.5">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Hover tooltip</p>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={widget.config?.pieHoverTooltip !== false}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: { ...widget.config, pieHoverTooltip: e.target.checked },
+                            })
+                          }
+                        />
+                        Hover tooltip görkez
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={widget.config?.pieHoverShowValue !== false}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: { ...widget.config, pieHoverShowValue: e.target.checked },
+                            })
+                          }
+                        />
+                        Tooltip-de value
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={widget.config?.pieHoverShowPercent !== false}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: { ...widget.config, pieHoverShowPercent: e.target.checked },
+                            })
+                          }
+                        />
+                        Tooltip-de %
+                      </label>
+                    </div>
+                    <div className="border-t border-slate-800 pt-2 space-y-1.5">
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Click popup</p>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={widget.config?.pieClickPopup !== false}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: { ...widget.config, pieClickPopup: e.target.checked },
+                            })
+                          }
+                        />
+                        Click popup (Category: Value)
+                      </label>
+                      <label className="text-[11px] text-slate-400 block">
+                        Popup wagt (ms)
+                        <input
+                          type="number"
+                          min={1000}
+                          max={30000}
+                          step={500}
+                          value={widget.config?.pieClickPopupMs ?? 5000}
+                          onChange={(e) =>
+                            onChange({
+                              ...widget,
+                              config: {
+                                ...widget.config,
+                                pieClickPopupMs: Math.max(1000, Number(e.target.value) || 5000),
+                              },
+                            })
+                          }
+                          className="mt-1 w-full h-8 rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs text-white"
+                        />
+                      </label>
+                    </div>
                   </div>
+                )}
+
+                {(widget.type === 'line' || widget.type === 'area' || widget.type === 'bar') && (
+                  <ThemeColorField
+                    label="Value (san) reňki — çyzykdan aýratyn"
+                    value={(widget.config as any)?.valueLabelColor}
+                    fallbackDark="#e2e8f0"
+                    fallbackLight="#334155"
+                    onChange={(c) =>
+                      onChange({
+                        ...widget,
+                        config: {
+                          ...widget.config,
+                          valueLabelColor: c,
+                        } as any,
+                      })
+                    }
+                  />
                 )}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">
@@ -1445,36 +1673,19 @@ export function WidgetConfigPanel({
                   </div>
                 </div>
 
-                {/* Task 5: Text Color */}
-                <div className="space-y-2">
-                  <label className="text-[11px] font-semibold text-slate-300">
-                    Teksti Tüsy
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="color"
-                      value={widget.config?.color || '#ffffff'}
-                      onChange={(e) =>
-                        onChange({
-                          ...widget,
-                          config: { ...widget.config, color: e.target.value },
-                        })
-                      }
-                      className="w-12 h-8 rounded cursor-pointer"
-                    />
-                    <Input
-                      label="Hex"
-                      value={widget.config?.color || '#ffffff'}
-                      onChange={(e) =>
-                        onChange({
-                          ...widget,
-                          config: { ...widget.config, color: e.target.value },
-                        })
-                      }
-                      placeholder="#ffffff"
-                    />
-                  </div>
-                </div>
+                {/* Task 5: Text Color — theme-aware */}
+                <ThemeColorField
+                  label="Teksti Tüsy (KPI)"
+                  value={widget.config?.color}
+                  fallbackDark="#ffffff"
+                  fallbackLight="#0f172a"
+                  onChange={(c) =>
+                    onChange({
+                      ...widget,
+                      config: { ...widget.config, color: c },
+                    })
+                  }
+                />
 
                 {/* Task 5: Auto Text Size */}
                 <div className="space-y-2">

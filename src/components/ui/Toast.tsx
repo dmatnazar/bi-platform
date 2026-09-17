@@ -4,48 +4,74 @@ import { create } from 'zustand';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export type ToastVariant = 'success' | 'warning' | 'error' | 'info';
 
-interface ToastItem {
+export type ToastItem = {
   id: string;
   title: string;
   message?: string;
   variant: ToastVariant;
   durationMs: number;
-}
+  href?: string;
+};
 
-interface ToastState {
+type ToastState = {
   items: ToastItem[];
-  push: (o: { title: string; message?: string; variant?: ToastVariant; durationMs?: number }) => string;
+  push: (item: Omit<ToastItem, 'id'> & { id?: string }) => string;
   dismiss: (id: string) => void;
-}
+};
 
 export const useToastStore = create<ToastState>((set, get) => ({
   items: [],
-  push: ({ title, message, variant = 'info', durationMs = 5000 }) => {
-    const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    set((s) => ({ items: [...s.items, { id, title, message, variant, durationMs }].slice(-6) }));
-    if (durationMs > 0) setTimeout(() => get().dismiss(id), durationMs);
+  push: (opts) => {
+    const id = opts.id || `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const item: ToastItem = {
+      id,
+      title: opts.title,
+      message: opts.message,
+      variant: opts.variant,
+      durationMs: opts.durationMs ?? 4500,
+      href: opts.href,
+    };
+    set({ items: [...get().items, item] });
+    if (item.durationMs > 0) {
+      window.setTimeout(() => {
+        get().dismiss(id);
+      }, item.durationMs);
+    }
     return id;
   },
-  dismiss: (id) => set((s) => ({ items: s.items.filter((t) => t.id !== id) })),
+  dismiss: (id) => set({ items: get().items.filter((x) => x.id !== id) }),
 }));
 
-export function toast(opts: { title: string; message?: string; variant?: ToastVariant; durationMs?: number }) {
-  return useToastStore.getState().push(opts);
+export function toast(opts: {
+  title: string;
+  message?: string;
+  variant?: ToastVariant;
+  durationMs?: number;
+  href?: string;
+}) {
+  return useToastStore.getState().push({
+    title: opts.title,
+    message: opts.message,
+    variant: opts.variant || 'info',
+    durationMs: opts.durationMs ?? 4500,
+    href: opts.href,
+  });
 }
-export function toastSuccess(title: string, message?: string) {
-  return toast({ title, message, variant: 'success' });
+export function toastSuccess(title: string, message?: string, href?: string) {
+  return toast({ title, message, variant: 'success', href });
 }
-export function toastWarning(title: string, message?: string) {
-  return toast({ title, message, variant: 'warning', durationMs: 7000 });
+export function toastWarning(title: string, message?: string, href?: string) {
+  return toast({ title, message, variant: 'warning', durationMs: 7000, href });
 }
-export function toastError(title: string, message?: string) {
-  return toast({ title, message, variant: 'error', durationMs: 8000 });
+export function toastError(title: string, message?: string, href?: string) {
+  return toast({ title, message, variant: 'error', durationMs: 8000, href });
 }
-export function toastInfo(title: string, message?: string) {
-  return toast({ title, message, variant: 'info' });
+export function toastInfo(title: string, message?: string, href?: string) {
+  return toast({ title, message, variant: 'info', href });
 }
 
 const STYLES = {
@@ -55,7 +81,6 @@ const STYLES = {
   info: { border: 'border-sky-500/40', bg: 'bg-sky-500/10', Icon: Info, ic: 'text-sky-400' },
 };
 
-/** Always fixed to viewport top — portal avoids sticky/transform ancestors clipping toasts */
 export function ToastHost() {
   const items = useToastStore((s) => s.items);
   const dismiss = useToastStore((s) => s.dismiss);
@@ -71,10 +96,20 @@ export function ToastHost() {
       {items.map((t) => {
         const st = STYLES[t.variant];
         const Icon = st.Icon;
+        const go = () => {
+          if (t.href) {
+            dismiss(t.id);
+            window.location.href = t.href;
+          }
+        };
         return (
           <div
             key={t.id}
-            className={`pointer-events-auto rounded-xl border ${st.border} ${st.bg} bg-slate-950/98 backdrop-blur-md shadow-2xl px-3.5 py-3 flex gap-3`}
+            role={t.href ? 'link' : undefined}
+            onClick={t.href ? go : undefined}
+            className={`pointer-events-auto rounded-xl border ${st.border} ${st.bg} bg-slate-950/98 backdrop-blur-md shadow-2xl px-3.5 py-3 flex gap-3 ${
+              t.href ? 'cursor-pointer hover:ring-1 hover:ring-white/20' : ''
+            }`}
           >
             <Icon className={`h-4.5 w-4.5 ${st.ic} shrink-0 mt-0.5`} />
             <div className="min-w-0 flex-1">
@@ -82,8 +117,18 @@ export function ToastHost() {
               {t.message && (
                 <p className="text-xs text-slate-300 mt-0.5 whitespace-pre-wrap break-words">{t.message}</p>
               )}
+              {t.href && (
+                <p className="text-[10px] text-indigo-300 mt-1">Basyp git →</p>
+              )}
             </div>
-            <button type="button" onClick={() => dismiss(t.id)} className="text-slate-500 hover:text-white shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismiss(t.id);
+              }}
+              className="text-slate-500 hover:text-white shrink-0"
+            >
               <X className="h-4 w-4" />
             </button>
           </div>

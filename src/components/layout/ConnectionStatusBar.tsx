@@ -294,7 +294,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   // Viewer / company user: still show live sync strip (not only VPS)
   if (!isSuperAdmin) {
     return (
-      <div ref={barRef} className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-slate-300 px-11 sm:px-2 py-1.5 text-center">
+      <div ref={barRef} className="hidden lg:flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-slate-300 px-2 py-1.5 text-center rounded-xl bg-slate-900/50 border border-slate-800/60">
         <button
           type="button"
           onClick={() => openClientModal()}
@@ -323,11 +323,11 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             BI Client ({formatClientLabel(status, companyName)})
           </span>
         </button>
-        <div className="inline-flex items-center gap-1.5 text-white">
-          <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+        <div className="inline-flex items-center gap-1.5 text-slate-300">
+          <RefreshCw className={cn('h-3 w-3 text-slate-400', loading && 'animate-spin')} />
           <span>
-            Sync: <span className="text-white">{syncLabel}</span>
-            <span className="text-white/80"> · {intervalLabel}</span>
+            Sync: <span className="text-slate-200 font-medium tabular-nums">{syncLabel}</span>
+            <span className="text-slate-500"> · {intervalLabel}</span>
           </span>
         </div>
         {clientModalUi}
@@ -336,7 +336,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   }
 
   return (
-    <div ref={barRef} className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 text-[10px] sm:text-[11px] text-slate-400 px-11 sm:px-2 py-1.5 text-center">
+    <div ref={barRef} className="hidden lg:flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1 text-[10px] sm:text-[11px] text-slate-400 px-2 py-1.5 text-center rounded-xl bg-slate-900/50 border border-slate-800/60">
       <button
         type="button"
         onClick={() => openClientModal()}
@@ -396,17 +396,17 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
         </span>
       </button>
 
-      <div className="inline-flex items-center gap-1.5 text-white" title="Soňky catalog sync">
-        <RefreshCw className={cn('h-3 w-3', loading && 'animate-spin')} />
+      <div className="inline-flex items-center gap-1.5 text-slate-300" title="Soňky catalog sync">
+        <RefreshCw className={cn('h-3 w-3 text-slate-400', loading && 'animate-spin')} />
         <span>
-          Sync: <span className="text-white">{syncLabel}</span>
-          <span className="mx-1 text-white/70">·</span>
-          <span className="text-white">{intervalLabel}</span>
+          Sync: <span className="text-slate-200 font-medium tabular-nums">{syncLabel}</span>
+          <span className="mx-1 text-slate-500">·</span>
+          <span className="text-slate-300">{intervalLabel}</span>
         </span>
       </div>
 
       {status && (
-        <span className="text-white text-[10px] sm:text-[11px]">
+        <span className="text-slate-300 text-[10px] sm:text-[11px] font-medium">
           {status.counts.tenants}firma · {status.counts.endpoints}API · {status.counts.staff}işgär
         </span>
       )}

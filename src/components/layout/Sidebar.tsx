@@ -270,7 +270,7 @@ export function Sidebar({ user }: Props) {
                 'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors',
                 active
                   ? 'bg-indigo-500/15 text-indigo-300'
-                  : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200',
+                  : 'text-slate-300 hover:bg-slate-800/60 hover:text-white',
                 busy && !pending && 'opacity-50 pointer-events-none',
                 pending && 'opacity-80'
               )}
@@ -350,7 +350,7 @@ export function Sidebar({ user }: Props) {
             />
           </span>
         </Link>
-        <button
+<button
           type="button"
           disabled={logoutPending || !!navPending}
           onClick={() => void logout()}
@@ -391,7 +391,7 @@ export function Sidebar({ user }: Props) {
 
       <aside
         className={cn(
-          'hidden lg:flex shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 backdrop-blur-xl overflow-hidden transition-[width] duration-200 ease-in-out relative',
+          'hidden lg:flex shrink-0 flex-col border-r border-slate-800 bg-slate-950/90 backdrop-blur-xl overflow-hidden transition-[width] duration-200 ease-in-out relative h-full max-h-dvh',
           collapsed ? 'w-0 border-r-0' : 'w-60'
         )}
       >
@@ -404,7 +404,7 @@ export function Sidebar({ user }: Props) {
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
-        <div className="w-60 h-full flex flex-col">{NavContent}</div>
+        <div className="w-60 h-full max-h-dvh flex flex-col min-h-0">{NavContent}</div>
       </aside>
 
       {open && (

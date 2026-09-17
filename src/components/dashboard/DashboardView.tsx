@@ -386,11 +386,11 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
 
   /** Returns true if navigation/leave is allowed */
   const confirmLeave = useCallback(async (): Promise<boolean> => {
-    if (!dirtyRef.current || !editModeRef.current) return true;
+    // Any unsaved dashboard changes (even if edit UI was closed) must confirm
+    if (!dirtyRef.current) return true;
     const action = await promptUnsaved();
     if (action === 'stay') return false;
     if (action === 'discard') {
-      // restore initial state and exit edit
       setDashboard(initialRef.current);
       setName(initialRef.current.name);
       setDirty(false);
@@ -398,7 +398,6 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
       setConfigId(null);
       return true;
     }
-    // save
     const ok = await save();
     return ok;
   }, [promptUnsaved, save]);
@@ -406,7 +405,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   // Task 8: browser refresh / close / tab close
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirtyRef.current && editModeRef.current) {
+      if (dirtyRef.current) {
         e.preventDefault();
         e.returnValue = '';
       }
@@ -418,7 +417,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   // Task 8: intercept internal link clicks (sidebar, back link, etc.)
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (!dirtyRef.current || !editModeRef.current) return;
+      if (!dirtyRef.current) return;
       const target = e.target as HTMLElement | null;
       if (!target) return;
       const anchor = target.closest('a[href]') as HTMLAnchorElement | null;
@@ -452,7 +451,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   // Task 8: browser back/forward
   useEffect(() => {
     const onPopState = () => {
-      if (!dirtyRef.current || !editModeRef.current) return;
+      if (!dirtyRef.current) return;
       // push current URL back so we stay, then ask
       history.pushState(null, '', window.location.href);
       void (async () => {

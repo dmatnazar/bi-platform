@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
   }
   const blob = file as File;
   const buf = Buffer.from(await blob.arrayBuffer());
-  if (buf.length > 5 * 1024 * 1024) {
-    return NextResponse.json({ error: 'Surat 5MB-dan uly bolmaly däl' }, { status: 400 });
+  if (buf.length > 50 * 1024 * 1024) {
+    return NextResponse.json({ error: 'Faýl 50MB-dan uly bolmaly däl' }, { status: 400 });
   }
   const url = saveNewsMedia(blob.name || 'image.png', buf);
   return NextResponse.json({ ok: true, url });

@@ -114,6 +114,16 @@ function ApisPageInner() {
   const selectedTenantName =
     tenants.find((t) => t.slug === selectedTenantSlug)?.name || selectedTenantSlug || '';
 
+  /** Platform içinden açmak — session bilen auth proxy */
+  function openUrl(e: Endpoint) {
+    const db = e.dbKey || 'primary';
+    let path = e.pathTemplate || '/';
+    if (!path.startsWith('/')) path = '/' + path;
+    // /api/gateway/v1/{tenant}/{dbKey}/...rest
+    const rest = path.replace(/^\/+/, '');
+    return `/api/gateway/v1/${encodeURIComponent(e.tenantSlug)}/${encodeURIComponent(db)}/${rest}`;
+  }
+
   function fullUrl(e: Endpoint) {
 
     return buildFullApiUrl({
@@ -478,7 +488,7 @@ function ApisPageInner() {
     setEditDbKey(firstDb);
     setEditCache(0);
     setEditMaxRows(1000);
-    setEditAuth(false);
+    setEditAuth(true);
     setEditTenantSlug(slug);
     setEditParams([]);
     setTestParamValues({});
@@ -965,15 +975,18 @@ function ApisPageInner() {
         header: 'Doly URL',
         accessor: (r) => fullUrl(r),
         cell: (r) => (
-          <a
-            href={fullUrl(r)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-[11px] text-sky-400 hover:text-sky-300 hover:underline break-all"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {fullUrl(r)}
-          </a>
+          <div className="space-y-0.5" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={openUrl(r)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[11px] text-sky-400 hover:text-sky-300 hover:underline break-all"
+              title="Session bilen aç (auth required)"
+            >
+              {fullUrl(r)}
+            </a>
+            <p className="text-[9px] text-slate-500">Open → platform session · Copy → daşarda Basic login</p>
+          </div>
         ),
       },
       {
@@ -1017,11 +1030,11 @@ function ApisPageInner() {
               )}
             </button>
             <a
-              href={fullUrl(r)}
+              href={openUrl(r)}
               target="_blank"
               rel="noopener noreferrer"
               className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-sky-500/10"
-              title="Open"
+              title="Open (session + Basic auth)"
             >
               <ExternalLink className="h-4 w-4" />
             </a>
@@ -1652,8 +1665,8 @@ function ApisPageInner() {
                             key={`sel-${c}`}
                             className={`text-[11px] px-2 py-1 rounded-md border cursor-pointer ${
                               excelSelCols.has(c)
-                                ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-100'
-                                : 'border-slate-700 text-slate-400'
+                                ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                                : 'border-slate-600 bg-slate-900/80 text-slate-200'
                             }`}
                           >
                             <input

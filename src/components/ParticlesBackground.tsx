@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef } from 'react';
+import { useTheme } from '@/components/ThemeProvider';
 
 type Theme = 'login' | 'dashboard' | 'subtle';
 
@@ -45,7 +46,6 @@ function loadTsParticles(): Promise<void> {
     s.dataset.tsparticles = '1';
     s.onload = () => resolve();
     s.onerror = () => {
-      // CDN fallback if local vendor missing
       const s2 = document.createElement('script');
       s2.src = 'https://cdn.jsdelivr.net/npm/tsparticles-slim@2.12.0/tsparticles.slim.bundle.min.js';
       s2.async = true;
@@ -59,9 +59,9 @@ function loadTsParticles(): Promise<void> {
   return loadPromise;
 }
 
-function optionsFor(theme: Theme) {
+function optionsFor(theme: Theme, mode: 'dark' | 'light') {
+  const light = mode === 'light';
   const base = {
-    // Never attach to document body — stays inside our absolute/fixed host
     fullScreen: { enable: false, zIndex: 0 },
     background: { color: { value: 'transparent' } },
     fpsLimit: 48,
@@ -73,7 +73,7 @@ function optionsFor(theme: Theme) {
         resize: true as const,
       },
       modes: {
-        grab: { distance: 140, links: { opacity: 0.35 } },
+        grab: { distance: 140, links: { opacity: light ? 0.45 : 0.35 } },
         push: { quantity: 2 },
       },
     },
@@ -86,15 +86,23 @@ function optionsFor(theme: Theme) {
       ...base,
       particles: {
         number: { value: mobile ? 80 : 90, density: { enable: true, area: mobile ? 450 : 800 } },
-        color: { value: ['#a5b4fc', '#c4b5fd', '#7dd3fc', '#e9d5ff', '#818cf8'] },
+        color: {
+          value: light
+            ? ['#4f46e5', '#7c3aed', '#0891b2', '#db2777', '#ea580c', '#16a34a', '#2563eb']
+            : ['#818cf8', '#c084fc', '#22d3ee', '#f472b6', '#fb923c', '#4ade80', '#60a5fa'],
+        },
         shape: { type: ['circle', 'triangle', 'edge'] },
-        opacity: { value: { min: mobile ? 0.45 : 0.2, max: mobile ? 0.95 : 0.6 } },
+        opacity: {
+          value: light
+            ? { min: mobile ? 0.35 : 0.25, max: mobile ? 0.75 : 0.55 }
+            : { min: mobile ? 0.45 : 0.2, max: mobile ? 0.95 : 0.6 },
+        },
         size: { value: { min: mobile ? 2 : 1, max: mobile ? 5.5 : 4 } },
         links: {
           enable: true,
           distance: mobile ? 95 : 140,
-          color: '#a5b4fc',
-          opacity: mobile ? 0.55 : 0.28,
+          color: light ? '#6366f1' : '#a5b4fc',
+          opacity: light ? (mobile ? 0.4 : 0.28) : mobile ? 0.55 : 0.28,
           width: mobile ? 1.4 : 1,
         },
         move: {
@@ -114,15 +122,19 @@ function optionsFor(theme: Theme) {
       ...base,
       particles: {
         number: { value: 35, density: { enable: true, area: 1000 } },
-        color: { value: ['#6366f1', '#22d3ee', '#a78bfa'] },
+        color: {
+          value: light
+            ? ['#4f46e5', '#0891b2', '#7c3aed', '#db2777', '#16a34a']
+            : ['#818cf8', '#22d3ee', '#c084fc', '#f472b6', '#4ade80'],
+        },
         shape: { type: ['circle', 'edge'] },
-        opacity: { value: { min: 0.08, max: 0.35 } },
+        opacity: { value: { min: light ? 0.12 : 0.08, max: light ? 0.4 : 0.35 } },
         size: { value: { min: 1, max: 3 } },
         links: {
           enable: true,
           distance: 120,
-          color: '#475569',
-          opacity: 0.15,
+          color: light ? '#94a3b8' : '#475569',
+          opacity: light ? 0.22 : 0.15,
           width: 1,
         },
         move: {
@@ -144,20 +156,24 @@ function optionsFor(theme: Theme) {
     };
   }
 
-  // subtle
+  // subtle (app shell)
   return {
     ...base,
     particles: {
-      number: { value: 22, density: { enable: true, area: 1100 } },
-      color: { value: '#64748b' },
+      number: { value: light ? 28 : 22, density: { enable: true, area: 1100 } },
+      color: {
+        value: light
+          ? ['#6366f1', '#06b6d4', '#a855f7', '#f43f5e', '#22c55e']
+          : ['#818cf8', '#22d3ee', '#c084fc', '#fb7185', '#4ade80'],
+      },
       shape: { type: 'circle' },
-      opacity: { value: { min: 0.05, max: 0.2 } },
+      opacity: { value: { min: light ? 0.2 : 0.12, max: light ? 0.5 : 0.35 } },
       size: { value: { min: 1, max: 2.5 } },
       links: {
         enable: true,
         distance: 110,
-        color: '#334155',
-        opacity: 0.12,
+        color: light ? '#6366f1' : '#64748b',
+        opacity: light ? 0.28 : 0.18,
         width: 1,
       },
       move: {
@@ -169,13 +185,10 @@ function optionsFor(theme: Theme) {
   };
 }
 
-/**
- * Network / analytics style particle field (tsParticles slim via CDN).
- * Themes: login (vivid), dashboard (chart-like links), subtle.
- */
 export function ParticlesBackground({ theme = 'login', className }: Props) {
+  const { theme: colorMode } = useTheme();
   const reactId = useId().replace(/:/g, '');
-  const id = `tsp-${theme}-${reactId}`;
+  const id = `tsp-${theme}-${colorMode}-${reactId}`;
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -186,11 +199,11 @@ export function ParticlesBackground({ theme = 'login', className }: Props) {
       try {
         await loadTsParticles();
         if (cancelled || !window.tsParticles) return;
-        container = (await window.tsParticles.load(id, optionsFor(theme))) as {
+        container = (await window.tsParticles.load(id, optionsFor(theme, colorMode))) as {
           destroy?: () => void;
         };
       } catch {
-        /* silent — page still works without particles */
+        /* silent */
       }
     })();
 
@@ -202,7 +215,7 @@ export function ParticlesBackground({ theme = 'login', className }: Props) {
         /* */
       }
     };
-  }, [id, theme]);
+  }, [id, theme, colorMode]);
 
   return (
     <div

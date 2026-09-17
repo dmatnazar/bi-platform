@@ -56,6 +56,10 @@ export async function GET() {
       appAnimations: s.appAnimations !== false,
       modalAnimations: s.modalAnimations !== false,
       registrationEnabled: s.registrationEnabled !== false,
+      maxConcurrentDevices: Math.max(1, Number(s.maxConcurrentDevices) || 1),
+      sessionLoginPolicy: (['warn', 'strict', 'kick_oldest'].includes(String(s.sessionLoginPolicy))
+        ? s.sessionLoginPolicy
+        : 'warn') as 'warn' | 'strict' | 'kick_oldest',
     },
     gatewayOnline: online,
     version: '1.0.0',

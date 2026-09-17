@@ -216,6 +216,7 @@ export default function BillingPage() {
   const [hubPanel, setHubPanel] = useState<'home' | 'tariffs' | 'firms'>('home');
   const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
   const [topupOpen, setTopupOpen] = useState(false);
+  const [topdownOpen, setTopdownOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
   const [tariffOpen, setTariffOpen] = useState(false);
   const [editingTariffId, setEditingTariffId] = useState<string | null>(null);
@@ -346,6 +347,43 @@ export default function BillingPage() {
         `${selected.tenantName || selected.tenantSlug}: +${n} → ${data.balanceAfter}`
       );
       setTopupOpen(false);
+      setReason('');
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function doTopdown() {
+    if (!selected) return;
+    const n = Number(amount);
+    if (!n || n <= 0) {
+      toastError('Mukdar', 'Pozitiw san ýazyň (aýryljak REQ)');
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch('/api/billing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'adjust',
+          tenantSlug: selected.tenantSlug,
+          amount: -Math.abs(n),
+          reason: reason || 'Admin top-down (REQ aýyrmak)',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toastError('Top-down şowsuz', data.error || data.detail?.message);
+        return;
+      }
+      const after = data.balanceAfter ?? data.wallet?.balanceCredits ?? data.balance;
+      toastSuccess(
+        'REQ aýryldy',
+        `${selected.tenantName || selected.tenantSlug}: −${n}${after != null ? ` → ${after}` : ''}`
+      );
+      setTopdownOpen(false);
       setReason('');
       await load();
     } finally {
@@ -637,17 +675,24 @@ export default function BillingPage() {
                 </span>
               </div>
               {!scopedBilling && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="flex-1 text-[11px] px-2 py-2 rounded-lg bg-emerald-500/15 text-emerald-300"
+                  className="flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-emerald-500/15 text-emerald-300"
                   onClick={() => { setSelected(w); setAmount('500'); setTopupOpen(true); }}
                 >
                   Top-up
                 </button>
                 <button
                   type="button"
-                  className="flex-1 text-[11px] px-2 py-2 rounded-lg bg-indigo-500/15 text-indigo-300"
+                  className="flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-rose-500/15 text-rose-300"
+                  onClick={() => { setSelected(w); setAmount(''); setTopdownOpen(true); }}
+                >
+                  Top-down
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-indigo-500/15 text-indigo-300"
                   onClick={() => { setSelected(w); setTariffId(w.tariff?.id || tariffs[0]?.id || ''); setAssignOpen(true); }}
                 >
                   Tarif
@@ -713,7 +758,7 @@ export default function BillingPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="inline-flex gap-1">
+                      <div className="inline-flex flex-wrap gap-1 justify-end">
                         {!scopedBilling && (
                         <button
                           type="button"
@@ -725,6 +770,19 @@ export default function BillingPage() {
                           }}
                         >
                           Top-up
+                        </button>
+                        )}
+                        {!scopedBilling && (
+                        <button
+                          type="button"
+                          className="text-[11px] px-2 py-1 rounded-lg bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                          onClick={() => {
+                            setSelected(w);
+                            setAmount('');
+                            setTopdownOpen(true);
+                          }}
+                        >
+                          Top-down
                         </button>
                         )}
                         {!scopedBilling && (
@@ -886,6 +944,59 @@ export default function BillingPage() {
                   Goş
                 </Button>
                 <Button variant="ghost" onClick={() => setTopupOpen(false)}>
+                  Ýatyr
+                </Button>
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {/* Top-down modal — REQ aýyr */}
+      {topdownOpen && selected && (
+        <ModalPortal open>
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setTopdownOpen(false)} />
+            <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4 shadow-2xl">
+              <h3 className="text-lg font-semibold text-white text-center">REQ aýyr (Top-down)</h3>
+              <p className="text-sm text-slate-400 text-center">{selected.tenantName || selected.tenantSlug}</p>
+              <div className="space-y-1.5">
+                <label className="text-xs text-slate-400">Aýryljak mukdar (REQ)</label>
+                <input
+                  type="number"
+                  min={1}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="Mysal: 100"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[50, 100, 500, 1000].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    onClick={() => setAmount(String(n))}
+                  >
+                    −{n}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-slate-400">Sebäp</label>
+                <input
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Mysal: Ýalňyş top-up yzyna"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button className="flex-1" variant="danger" loading={saving} onClick={() => void doTopdown()}>
+                  Aýyr
+                </Button>
+                <Button variant="ghost" onClick={() => setTopdownOpen(false)}>
                   Ýatyr
                 </Button>
               </div>

@@ -183,6 +183,18 @@ export async function POST(req: NextRequest) {
     (s) => (data.id && s.id === data.id) || s.username.toLowerCase() === data.username.toLowerCase()
   );
 
+  // Täze işgär: şol login eýýäm bar bolsa — UPDATE etme, 409 gaýtar
+  if (!data.id && existingAnywhere && existingAnywhere.username.toLowerCase() === data.username.toLowerCase()) {
+    return NextResponse.json(
+      {
+        error: `Login «${data.username}» eýýäm bar. Başga login saýlaň ýa-da bar bolan işgäri üýtgediň.`,
+        code: 'username_taken',
+        existingId: existingAnywhere.id,
+      },
+      { status: 409 }
+    );
+  }
+
   let passwordHash = 'synced-from-bi:keep';
   let passwordPlain: string | undefined;
   if (data.password) {

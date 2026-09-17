@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { getSettings } from '@/lib/db';
+import { fetchCatalog, staffLookup, decryptPasswordPlain } from '@/lib/gateway';
 
 /**
  * Proxy to VPS Gateway so the browser never talks to gateway directly
@@ -30,7 +31,35 @@ async function proxy(req: NextRequest, ctx: Ctx) {
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'x-staff-username': String(user.username || ''),
+      'x-staff-role': String(user.role || ''),
+      'x-staff-id': String(user.id || user.username || ''),
     };
+
+    // Platform session → Basic auth for authRequired APIs (browser copy still needs login on VPS)
+    try {
+      let plain = '';
+      const catalog = await fetchCatalog(false);
+      const staffRow = (catalog.staff || []).find(
+        (s: any) => String(s.username || '').toLowerCase() === String(user.username || '').toLowerCase()
+      );
+      if (staffRow?.passwordEnc) plain = decryptPasswordPlain(staffRow.passwordEnc);
+      if (!plain && user.username) {
+        const lookup = await staffLookup(user.username);
+        if (lookup.ok && lookup.data) {
+          const d = lookup.data as any;
+          if (d.passwordEnc) plain = decryptPasswordPlain(d.passwordEnc);
+          else if (d.passwordPlain) plain = String(d.passwordPlain);
+        }
+      }
+      if (plain && user.username) {
+        headers.Authorization =
+          'Basic ' + Buffer.from(`${user.username}:${plain}`, 'utf8').toString('base64');
+      }
+    } catch {
+      /* */
+    }
 
     // Forward body for non-GET
     let body: string | undefined;
@@ -42,7 +71,6 @@ async function proxy(req: NextRequest, ctx: Ctx) {
       method: req.method,
       headers,
       body,
-      // timeout-ish
       signal: AbortSignal.timeout(30000),
     });
 
