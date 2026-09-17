@@ -5,12 +5,18 @@ import { Bell, BellOff, X } from 'lucide-react';
 import { requestPushToken, listenForegroundPush, ensurePushServiceWorker } from '@/lib/firebase-client';
 import { toastInfo, toastSuccess, toastError } from '@/components/ui/Toast';
 
+const LS_DISMISS = 'bi-push-dismiss-v2';
+const LS_SECURE_HINT = 'bi-push-http-hint-v1';
+
 /**
- * Login soň: Notification.permission !== 'granted' bolsa panel.
- * Eýýäm Allow bolsa — panel açylmaýar, diňe token täzelenýär.
+ * Login soň push rugsady.
+ * - granted → diňe token täzele, panel ýok
+ * - HTTP (isSecureContext=false) → FCM işlemez; bir gezek gysga düşündiriş, soň soramaz
+ * - default → Allow (brauzer dialog)
  */
 export function PushPermission() {
   const [show, setShow] = useState(false);
+  const [httpHint, setHttpHint] = useState(false);
   const [busy, setBusy] = useState(false);
   const started = useRef(false);
 
@@ -18,31 +24,46 @@ export function PushPermission() {
     if (typeof window === 'undefined') return;
     if (!('Notification' in window)) return;
 
-    void ensurePushServiceWorker();
-
     let cancelled = false;
 
     async function boot() {
-      // Käbir mobile brauzerlerde permission bir az gijä galýar — 2 gezek barla
-      const read = () =>
-        typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+      const secure = window.isSecureContext === true;
+      // localhost HTTP käwagt secure hasaplanýar; LAN IP http://192.x — däl
+      const perm = Notification.permission;
 
-      let perm = read();
       if (perm === 'granted') {
-        if (!cancelled) await enable(true);
+        void ensurePushServiceWorker();
+        if (secure) await enable(true);
         return;
       }
 
-      // Gysa garaşyp ýene barla (Android Chrome käwagt)
-      await new Promise((r) => setTimeout(r, 400));
+      // HTTP + rugsat ýok → FCM/token işlemeýär; hemişe sorama
+      if (!secure) {
+        try {
+          if (localStorage.getItem(LS_SECURE_HINT) === '1') return;
+        } catch {
+          /* */
+        }
+        if (!cancelled) {
+          setHttpHint(true);
+          setShow(true);
+        }
+        return;
+      }
+
+      try {
+        if (localStorage.getItem(LS_DISMISS) === '1' && perm === 'denied') return;
+      } catch {
+        /* */
+      }
+
+      void ensurePushServiceWorker();
+      await new Promise((r) => setTimeout(r, 500));
       if (cancelled) return;
-      perm = read();
-      if (perm === 'granted') {
+      if (Notification.permission === 'granted') {
         await enable(true);
         return;
       }
-
-      // Diňe granted däl bolsa panel
       if (!cancelled) setShow(true);
     }
 
@@ -55,11 +76,13 @@ export function PushPermission() {
 
   useEffect(() => {
     let unsub = () => {};
-    void listenForegroundPush((p) => {
-      toastInfo(p.title || 'Habar', p.body || '');
-    }).then((u) => {
-      unsub = u;
-    });
+    if (typeof window !== 'undefined' && window.isSecureContext) {
+      void listenForegroundPush((p) => {
+        toastInfo(p.title || 'Habar', p.body || '');
+      }).then((u) => {
+        unsub = u;
+      });
+    }
     return () => unsub();
   }, []);
 
@@ -68,9 +91,19 @@ export function PushPermission() {
     started.current = true;
     setBusy(true);
     try {
+      if (typeof window !== 'undefined' && !window.isSecureContext) {
+        if (!silent) {
+          toastError(
+            'HTTPS gerek',
+            'Push diňe HTTPS ýa-da localhost-da işleýär. LAN IP (http://192…) goldanmaýar.'
+          );
+        }
+        started.current = false;
+        return;
+      }
+
       const res = await requestPushToken();
 
-      // Rugsat eýýäm bar (ýa-da täze berildi)
       if (res.permission === 'granted') {
         if (res.token) {
           await fetch('/api/push/subscribe', {
@@ -80,21 +113,28 @@ export function PushPermission() {
           });
           if (!silent) toastSuccess('Bildirişler açyk', 'Rugsat berildi');
         } else if (!silent) {
-          // Allow bar, token ýok (VAPID we ş.m.) — panel ýap, diňe ýalňyşlyk
-          toastError('Bildiriş', res.error || 'Token alynmady (VAPID key barlaň)');
+          toastError('Bildiriş', res.error || 'Token alynmady (VAPID)');
         }
         setShow(false);
+        try {
+          localStorage.removeItem(LS_DISMISS);
+        } catch {
+          /* */
+        }
         return;
       }
 
       if (res.permission === 'denied') {
+        try {
+          localStorage.setItem(LS_DISMISS, '1');
+        } catch {
+          /* */
+        }
         if (!silent) {
-          toastError(
-            'Rugsat ýapyk',
-            'Brauzer Block. Site notifications Allow ediň, soň sahypany täzeläň.'
-          );
+          toastError('Rugsat ýapyk', 'Site settings → Notifications → Allow, soň täzeläň.');
         }
         started.current = false;
+        setShow(false);
         return;
       }
 
@@ -110,11 +150,16 @@ export function PushPermission() {
 
   function dismiss() {
     setShow(false);
+    if (httpHint) {
+      try {
+        localStorage.setItem(LS_SECURE_HINT, '1');
+      } catch {
+        /* */
+      }
+    }
   }
 
   if (!show) return null;
-
-  // Panel açyk wagty permission granted boldy bolsa gizle
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     return null;
   }
@@ -126,36 +171,48 @@ export function PushPermission() {
           <Bell className="h-5 w-5 text-indigo-300" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white">Bildirişlere rugsat</p>
+          <p className="text-sm font-semibold text-white">
+            {httpHint ? 'Bildiriş — HTTPS gerek' : 'Bildirişlere rugsat'}
+          </p>
           <p className="text-xs text-slate-400 mt-0.5">
-            «Allow» basanyňyzda brauzeriň öz tassyklamasy açylar. Eýýäm Allow bolsa bu panel
-            görünmeli däl — sahypany täzeläň.
+            {httpHint ? (
+              <>
+                Siz <span className="text-amber-300">http://</span> bilen girýärsiňiz (mysal: 192.168…).
+                Brauzer push rugsadyny durnukly saklamaýar / FCM işlemeýär. Çözgüt:{' '}
+                <span className="text-emerald-300">HTTPS</span> ýa-da kompýuterde{' '}
+                <span className="text-emerald-300">localhost</span>.
+              </>
+            ) : (
+              <>«Allow» → brauzeriň öz tassyklamasy. Bir gezek berseňiz indiki login-de soramaz.</>
+            )}
           </p>
         </div>
-        <button type="button" className="p-1 text-slate-500 hover:text-white" onClick={dismiss} aria-label="Ýap">
+        <button type="button" className="p-1 text-slate-500 hover:text-white" onClick={dismiss}>
           <X className="h-4 w-4" />
         </button>
       </div>
       <div className="flex gap-2">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => {
-            started.current = false;
-            void enable(false);
-          }}
-          className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2.5 disabled:opacity-60"
-        >
-          <Bell className="h-4 w-4" />
-          {busy ? 'Garaşyň…' : 'Allow'}
-        </button>
+        {!httpHint && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              started.current = false;
+              void enable(false);
+            }}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2.5 disabled:opacity-60"
+          >
+            <Bell className="h-4 w-4" />
+            {busy ? 'Garaşyň…' : 'Allow'}
+          </button>
+        )}
         <button
           type="button"
           onClick={dismiss}
-          className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 text-xs text-slate-400 hover:text-white"
+          className={`inline-flex items-center justify-center gap-1 rounded-lg border border-slate-700 px-3 text-xs text-slate-400 hover:text-white ${httpHint ? 'flex-1 py-2.5 text-sm' : ''}`}
         >
           <BellOff className="h-3.5 w-3.5" />
-          Soň
+          {httpHint ? 'Düşündim' : 'Soň'}
         </button>
       </div>
     </div>

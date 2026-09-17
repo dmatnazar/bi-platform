@@ -44,18 +44,34 @@ function readStoredTheme(): ThemeMode {
   return 'dark';
 }
 
+function isMobileUi(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(max-width: 768px)').matches ||
+    window.matchMedia('(pointer: coarse)').matches
+  );
+}
+
 function runCircleTransition(next: ThemeMode, x: number, y: number) {
   const root = document.documentElement;
-  root.style.setProperty('--theme-x', `${x}px`);
-  root.style.setProperty('--theme-y', `${y}px`);
+  // Clamp coords so mobile address-bar resize doesn't jump
+  const w = window.innerWidth || 1;
+  const h = window.innerHeight || 1;
+  const cx = Math.max(0, Math.min(w, x));
+  const cy = Math.max(0, Math.min(h, y));
+  root.style.setProperty('--theme-x', `${cx}px`);
+  root.style.setProperty('--theme-y', `${cy}px`);
 
   const apply = () => applyThemeClass(next);
 
-  // View Transitions API (Chrome/Edge/Safari recent)
+  // Mobile: View Transitions API ýygy-ýygydan «ortaýa süýşüp, soň bökmek» berýär —
+  // diňe yumşak overlay ulanylýar (desktop-daky ýaly üznüksiz giňelýär).
+  const preferOverlay = isMobileUi();
+
   const doc = document as Document & {
     startViewTransition?: (cb: () => void) => { finished: Promise<void> };
   };
-  if (typeof doc.startViewTransition === 'function') {
+  if (!preferOverlay && typeof doc.startViewTransition === 'function') {
     try {
       root.classList.add('theme-transitioning');
       const t = doc.startViewTransition(apply);
@@ -66,22 +82,24 @@ function runCircleTransition(next: ThemeMode, x: number, y: number) {
     }
   }
 
-  // Fallback: expanding circle overlay
   const overlay = document.createElement('div');
   overlay.className = 'theme-circle-overlay';
-  overlay.style.setProperty('--theme-x', `${x}px`);
-  overlay.style.setProperty('--theme-y', `${y}px`);
+  overlay.style.setProperty('--theme-x', `${cx}px`);
+  overlay.style.setProperty('--theme-y', `${cy}px`);
   const toColor = next === 'light' ? '#f8fafc' : '#020617';
   overlay.style.background = toColor;
   root.classList.add('theme-transitioning');
   document.body.appendChild(overlay);
   void overlay.offsetWidth;
-  overlay.classList.add('theme-circle-overlay--expand');
-  apply();
+  requestAnimationFrame(() => {
+    overlay.classList.add('theme-circle-overlay--expand');
+  });
+  // Theme class mid-animation so content doesn't flash at end
+  window.setTimeout(apply, 40);
   window.setTimeout(() => {
     overlay.remove();
     root.classList.remove('theme-transitioning');
-  }, 1900);
+  }, 2000);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

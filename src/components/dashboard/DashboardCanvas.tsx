@@ -781,16 +781,8 @@ export function DashboardCanvas({
                   )}
                 </div>
 
-                {/* Mobile: maximize + ⋮ */}
+                {/* Mobile: diňe ⋮ (Doly ekran menýuda) — desktop Maximize aýratyn galýar */}
                 <div className="flex sm:hidden items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(widget.id)}
-                    className="p-1.5 rounded-full bg-slate-900/80 border border-slate-700 text-slate-400"
-                    title="Doly ekran"
-                  >
-                    <Maximize2 className="h-3.5 w-3.5" />
-                  </button>
                   <button
                     type="button"
                     onClick={() => setMenuWidgetId(widget.id)}

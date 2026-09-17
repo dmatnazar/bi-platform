@@ -562,11 +562,13 @@ html.theme-transitioning::view-transition-old(root) {
   inset: 0;
   z-index: 2147483646;
   pointer-events: none;
+  will-change: clip-path;
   clip-path: circle(0px at var(--theme-x, 90%) var(--theme-y, 40px));
-  transition: clip-path 1.85s cubic-bezier(0.33, 1, 0.32, 1);
+  /* linear-ish expand — bökmez / ortada durmaz */
+  transition: clip-path 1.65s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .theme-circle-overlay--expand {
-  clip-path: circle(150vmax at var(--theme-x, 90%) var(--theme-y, 40px));
+  clip-path: circle(160vmax at var(--theme-x, 90%) var(--theme-y, 40px));
 }
 
 /* ── Light: sidebar nav + filters + modals contrast ── */

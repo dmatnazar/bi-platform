@@ -2795,40 +2795,48 @@ function ChartCanvas({
     if (!opt) return opt;
     const o = { ...opt };
     if (!zoomEnabled) {
-      // Adaty görnüş: dataZoom ýok → wheel sahypany scroll edýär, zoom ýok
+      // Adaty: dataZoom ýok → sahypa scroll, zoom ýok
       o.dataZoom = [];
       return o;
     }
-    // Doly ekran: inside + slider zoom
-    if (Array.isArray(o.dataZoom)) {
+    const inside = {
+      type: 'inside',
+      disabled: false,
+      zoomOnMouseWheel: true,
+      moveOnMouseWheel: true,
+      moveOnMouseMove: true,
+      zoomOnMouseMove: false,
+      preventDefaultMouseMove: true,
+      zoomLock: false,
+      throttle: 40,
+    };
+    const slider = {
+      type: 'slider',
+      show: true,
+      disabled: false,
+      height: 28,
+      bottom: 6,
+      borderColor: '#475569',
+      fillerColor: 'rgba(99,102,241,0.35)',
+      handleSize: '110%',
+      handleStyle: { color: '#818cf8', borderColor: '#a5b4fc' },
+      textStyle: { color: '#94a3b8', fontSize: 11 },
+    };
+    if (Array.isArray(o.dataZoom) && o.dataZoom.length) {
       o.dataZoom = o.dataZoom.map((dz: any) => {
-        if (dz?.type === 'inside') {
-          return {
-            ...dz,
-            disabled: false,
-            zoomOnMouseWheel: true,
-            moveOnMouseWheel: true,
-            moveOnMouseMove: true,
-            zoomOnMouseMove: false,
-            preventDefaultMouseMove: true,
-          };
-        }
-        if (dz?.type === 'slider') {
-          return { ...dz, show: true, disabled: false };
-        }
+        if (dz?.type === 'inside') return { ...dz, ...inside };
+        if (dz?.type === 'slider') return { ...dz, ...slider, show: true, disabled: false };
         return dz;
       });
+      // inside ýok bolsa goş
+      if (!o.dataZoom.some((dz: any) => dz?.type === 'inside')) {
+        o.dataZoom = [inside, ...o.dataZoom];
+      }
+      if (!o.dataZoom.some((dz: any) => dz?.type === 'slider')) {
+        o.dataZoom = [...o.dataZoom, slider];
+      }
     } else {
-      o.dataZoom = [
-        {
-          type: 'inside',
-          zoomOnMouseWheel: true,
-          moveOnMouseWheel: true,
-          moveOnMouseMove: true,
-          preventDefaultMouseMove: true,
-        },
-        { type: 'slider', height: 28, bottom: 6, show: true },
-      ];
+      o.dataZoom = [inside, slider];
     }
     return o;
   }
@@ -3290,7 +3298,7 @@ function ChartCanvas({
     <div ref={wrapRef} className={cn('relative h-full w-full', className)}>
       <ReactECharts
         ref={chartRef}
-        option={scaledOption || option}
+        option={withZoom(scaledOption || option)}
         style={{ height: '100%', width: '100%' }}
         opts={{ renderer: 'canvas' }}
         notMerge

@@ -1,17 +1,36 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 
-const inter = Inter({
+// Local Inter Font
+const inter = localFont({
+  src: [
+    {
+      path: '../../public/fonts/Inter-Regular.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+  ],
   variable: '--font-sans',
-  subsets: ['latin', 'cyrillic'],
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
+// Local JetBrains Mono Font
+const jetbrainsMono = localFont({
+  src: [
+    {
+      path: '../../public/fonts/JetBrainsMono-Regular.woff2',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/JetBrainsMono-Bold.woff2',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
   variable: '--font-mono',
-  subsets: ['latin', 'cyrillic'],
   display: 'swap',
 });
 
