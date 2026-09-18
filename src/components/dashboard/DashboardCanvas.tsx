@@ -60,6 +60,7 @@ export function DashboardCanvas({
   // Fullscreen view — essential on mobile where grid cells are too small to
   // read a busy table/chart comfortably.
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedMenuOpen, setExpandedMenuOpen] = useState(false);
   const [menuWidgetId, setMenuWidgetId] = useState<string | null>(null);
   const expandedWidget = dashboard.widgets.find((w) => w.id === expandedId) || null;
   
@@ -800,9 +801,14 @@ export function DashboardCanvas({
             <div
               className="flex-1 min-h-0 p-1.5 sm:p-3 cursor-pointer"
               onClick={(e) => {
-                // Widget body click/tap → fullscreen (zoom diňe şol ýerde)
+                // Widget body click/tap → fullscreen
                 const t = e.target as HTMLElement;
-                if (t.closest('button, a, input, select, textarea, [data-no-expand], .drag-handle')) return;
+                if (
+                  t.closest(
+                    'button, a, input, select, textarea, [data-no-expand], .drag-handle, thead, th, [role="columnheader"], .bi-table-head'
+                  )
+                )
+                  return;
                 setExpandedId(widget.id);
               }}
             >
@@ -1087,58 +1093,86 @@ export function DashboardCanvas({
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
             {/* Edge-to-edge fullscreen — no side gaps / no max-width cap */}
             <div className="relative w-full h-[100dvh] max-w-none rounded-none border-0 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
-              <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-b border-slate-800 shrink-0 relative">
                 <h3 className="text-sm sm:text-base font-semibold text-white flex-1 truncate min-w-0">
                   {expandedWidget.title}
                 </h3>
                 <button
                   type="button"
-                  onClick={() => bumpRefresh(expandedWidget.id)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800"
-                  title="Täzele"
+                  onClick={() => setExpandedMenuOpen((v) => !v)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  title="Menýu"
+                  aria-label="Menýu"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <MoreVertical className="h-5 w-5" />
                 </button>
-                {['bar', 'line', 'pie', 'area'].includes(expandedWidget.type) && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        window.dispatchEvent(
-                          new CustomEvent('bi-chart-cmd', {
-                            detail: { id: expandedWidget.id, action: 'reset' },
-                          })
-                        )
-                      }
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800"
-                      title="Reset zoom"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        window.dispatchEvent(
-                          new CustomEvent('bi-chart-cmd', {
-                            detail: { id: expandedWidget.id, action: 'png' },
-                          })
-                        )
-                      }
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-300 hover:bg-slate-800"
-                      title="PNG"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                  </>
-                )}
                 <button
                   type="button"
-                  onClick={() => setExpandedId(null)}
+                  onClick={() => {
+                    setExpandedMenuOpen(false);
+                    setExpandedId(null);
+                  }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
                   title="Ýap"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
+                {expandedMenuOpen && (
+                  <div className="absolute right-2 top-full mt-1 z-20 w-52 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-1">
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 hover:bg-slate-800"
+                      onClick={() => {
+                        bumpRefresh(expandedWidget.id);
+                        setExpandedMenuOpen(false);
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 text-sky-400" /> Täzele
+                    </button>
+                    {['bar', 'line', 'pie', 'area'].includes(expandedWidget.type) && (
+                      <>
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 hover:bg-slate-800"
+                          onClick={() => {
+                            window.dispatchEvent(
+                              new CustomEvent('bi-chart-cmd', {
+                                detail: { id: expandedWidget.id, action: 'reset' },
+                              })
+                            );
+                            setExpandedMenuOpen(false);
+                          }}
+                        >
+                          <RotateCcw className="h-4 w-4 text-sky-400" /> Zoom reset
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-200 hover:bg-slate-800"
+                          onClick={() => {
+                            window.dispatchEvent(
+                              new CustomEvent('bi-chart-cmd', {
+                                detail: { id: expandedWidget.id, action: 'png' },
+                              })
+                            );
+                            setExpandedMenuOpen(false);
+                          }}
+                        >
+                          <Download className="h-4 w-4 text-emerald-400" /> PNG
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-rose-300 hover:bg-slate-800"
+                      onClick={() => {
+                        setExpandedMenuOpen(false);
+                        setExpandedId(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" /> Ýap
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex-1 min-h-0 p-1 sm:p-2 overflow-hidden flex flex-col">
                 <div className="flex-1 min-h-0 h-full w-full">

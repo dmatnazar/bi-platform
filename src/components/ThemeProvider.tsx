@@ -54,7 +54,6 @@ function isMobileUi(): boolean {
 
 function runCircleTransition(next: ThemeMode, x: number, y: number) {
   const root = document.documentElement;
-  // Clamp coords so mobile address-bar resize doesn't jump
   const w = window.innerWidth || 1;
   const h = window.innerHeight || 1;
   const cx = Math.max(0, Math.min(w, x));
@@ -64,14 +63,16 @@ function runCircleTransition(next: ThemeMode, x: number, y: number) {
 
   const apply = () => applyThemeClass(next);
 
-  // Mobile: View Transitions API ýygy-ýygydan «ortaýa süýşüp, soň bökmek» berýär —
-  // diňe yumşak overlay ulanylýar (desktop-daky ýaly üznüksiz giňelýär).
-  const preferOverlay = isMobileUi();
+  // Mobile: derrew tema (gara ekran galmaz). Animasiýa ýok — diňe class.
+  if (isMobileUi()) {
+    apply();
+    return;
+  }
 
   const doc = document as Document & {
     startViewTransition?: (cb: () => void) => { finished: Promise<void> };
   };
-  if (!preferOverlay && typeof doc.startViewTransition === 'function') {
+  if (typeof doc.startViewTransition === 'function') {
     try {
       root.classList.add('theme-transitioning');
       const t = doc.startViewTransition(apply);
@@ -82,24 +83,27 @@ function runCircleTransition(next: ThemeMode, x: number, y: number) {
     }
   }
 
+  // Desktop fallback: circle overlay — theme mid-way, then fade out overlay
   const overlay = document.createElement('div');
   overlay.className = 'theme-circle-overlay';
   overlay.style.setProperty('--theme-x', `${cx}px`);
   overlay.style.setProperty('--theme-y', `${cy}px`);
-  const toColor = next === 'light' ? '#f8fafc' : '#020617';
-  overlay.style.background = toColor;
+  overlay.style.background = next === 'light' ? '#f8fafc' : '#020617';
   root.classList.add('theme-transitioning');
   document.body.appendChild(overlay);
   void overlay.offsetWidth;
   requestAnimationFrame(() => {
     overlay.classList.add('theme-circle-overlay--expand');
   });
-  // Theme class mid-animation so content doesn't flash at end
-  window.setTimeout(apply, 40);
+  window.setTimeout(apply, 50);
+  // Expand ~1.2s, then fade 0.25s so black lag ýok
+  window.setTimeout(() => {
+    overlay.classList.add('theme-circle-overlay--fade');
+  }, 1100);
   window.setTimeout(() => {
     overlay.remove();
     root.classList.remove('theme-transitioning');
-  }, 2000);
+  }, 1400);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

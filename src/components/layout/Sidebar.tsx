@@ -24,6 +24,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { ProfilePanel } from '@/components/profile/ProfilePanel';
 import { cn } from '@/lib/utils';
 import type { SessionUser } from '@/lib/types';
 import {
@@ -64,7 +65,21 @@ export function Sidebar({ user }: Props) {
     setNavPending(null);
   }, [pathname]);
   const [open, setOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [avatarOverride, setAvatarOverride] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  
+  useEffect(() => {
+    function onAv(e: Event) {
+      const d = (e as CustomEvent).detail || {};
+      setAvatarOverride(d.avatarUrl ?? (d.avatarId ? `/avatars/${encodeURIComponent(d.avatarId)}` : null));
+    }
+    window.addEventListener('bi-avatar-changed', onAv as EventListener);
+    const u = user as any;
+    if (u?.avatarUrl) setAvatarOverride(u.avatarUrl);
+    else if (u?.avatar) setAvatarOverride(`/avatars/${encodeURIComponent(String(u.avatar))}`);
+    return () => window.removeEventListener('bi-avatar-changed', onAv as EventListener);
+  }, [user]);
   const [badges, setBadges] = useState<NavBadges>({});
   /** Effective permission flags from server matrix (overrides static role defaults) */
   const [permFlags, setPermFlags] = useState<Record<string, boolean> | null>(null);
@@ -114,6 +129,7 @@ export function Sidebar({ user }: Props) {
   const loadBadges = useCallback(async () => {
     try {
       const res = await fetch('/api/nav-badges');
+      if (res.status === 401) return;
       if (!res.ok) return;
       const data = await res.json();
       setBadges({
@@ -128,9 +144,22 @@ export function Sidebar({ user }: Props) {
   }, []);
 
   useEffect(() => {
-    void loadBadges();
-    const t = setInterval(() => void loadBadges(), 20000);
-    return () => clearInterval(t);
+    let stopped = false;
+    const tick = () => {
+      if (!stopped) void loadBadges();
+    };
+    tick();
+    const t = setInterval(tick, 20000);
+    const onOut = () => {
+      stopped = true;
+      clearInterval(t);
+    };
+    window.addEventListener('bi-logged-out', onOut);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+      window.removeEventListener('bi-logged-out', onOut);
+    };
   }, [loadBadges]);
 
   const superA = isSuperAdmin(user);
@@ -210,13 +239,23 @@ export function Sidebar({ user }: Props) {
   async function logout() {
     if (logoutPending || navPending) return;
     setLogoutPending(true);
+    // Poller-leri derrew togtat (401 tufany ýok)
     try {
-      await fetch('/api/auth/me', { method: 'DELETE' });
-      router.push('/login');
-      router.refresh();
-    } finally {
-      // keep disabled until unmount / login page
+      window.dispatchEvent(new Event('bi-logged-out'));
+    } catch {
+      /* */
     }
+    try {
+      // timeout bilen — uzun garaşma
+      const ac = new AbortController();
+      const t = window.setTimeout(() => ac.abort(), 2500);
+      await fetch('/api/auth/me', { method: 'DELETE', signal: ac.signal }).catch(() => {});
+      window.clearTimeout(t);
+    } catch {
+      /* */
+    }
+    // Full navigation — router.push köplenç haýal / component poll dowam edýär
+    window.location.replace('/login');
   }
 
   function Badge({ n }: { n?: number }) {
@@ -290,19 +329,11 @@ export function Sidebar({ user }: Props) {
       </nav>
 
       <div className="border-t border-slate-800 p-3 space-y-2">
-        <Link
-          href="/profile"
-          onClick={(e) => {
-            if (logoutPending || navPending) {
-              e.preventDefault();
-              return;
-            }
-            if (pathname === '/profile' || pathname.startsWith('/profile/')) {
-              e.preventDefault();
-              setOpen(false);
-              return;
-            }
-            setNavPending('/profile');
+        <button
+          type="button"
+          onClick={() => {
+            if (logoutPending || navPending) return;
+            setProfileOpen(true);
             setOpen(false);
           }}
           className={cn(
@@ -314,10 +345,11 @@ export function Sidebar({ user }: Props) {
           title="Profil"
         >
           <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden border border-slate-700">
-            {(user as any).avatarUrl || (user as any).avatar ? (
+            {avatarOverride || (user as any).avatarUrl || (user as any).avatar ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={
+                  avatarOverride ||
                   (user as any).avatarUrl ||
                   `/avatars/${encodeURIComponent(String((user as any).avatar))}`
                 }
@@ -349,7 +381,7 @@ export function Sidebar({ user }: Props) {
               role={user.role}
             />
           </span>
-        </Link>
+        </button>
 <button
           type="button"
           disabled={logoutPending || !!navPending}
@@ -420,6 +452,7 @@ export function Sidebar({ user }: Props) {
           </aside>
         </div>
       )}
+      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
     </>
   );
 }

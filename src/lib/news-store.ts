@@ -265,6 +265,43 @@ export function saveNewsMedia(filename: string, buffer: Buffer): string {
   return `/api/news/media/${encodeURIComponent(name)}`;
 }
 
+export type NewsMediaFileInfo = {
+  name: string;
+  url: string;
+  size: number;
+  mtime: string;
+  type: 'image' | 'video' | 'other';
+};
+
+export function listNewsMediaFiles(): NewsMediaFileInfo[] {
+  ensure();
+  if (!fs.existsSync(MEDIA_DIR)) return [];
+  const out: NewsMediaFileInfo[] = [];
+  for (const name of fs.readdirSync(MEDIA_DIR)) {
+    if (name.startsWith('.')) continue;
+    const full = path.join(MEDIA_DIR, name);
+    try {
+      const st = fs.statSync(full);
+      if (!st.isFile()) continue;
+      const ext = path.extname(name).toLowerCase();
+      let type: 'image' | 'video' | 'other' = 'other';
+      if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) type = 'image';
+      else if (['.mp4', '.webm', '.ogg', '.mov', '.m4v'].includes(ext)) type = 'video';
+      out.push({
+        name,
+        url: `/api/news/media/${encodeURIComponent(name)}`,
+        size: st.size,
+        mtime: st.mtime.toISOString(),
+        type,
+      });
+    } catch {
+      /* */
+    }
+  }
+  out.sort((a, b) => b.mtime.localeCompare(a.mtime));
+  return out;
+}
+
 export function resolveMediaPath(name: string): string | null {
   ensure();
   const safe = path.basename(name);

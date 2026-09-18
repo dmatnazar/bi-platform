@@ -266,19 +266,19 @@ function LiveWidgetInner({
       return;
     }
 
-    // Manual refresh: parent token or local retry button
+    // Manual refresh only when parent token / local retry bumps
     const parentTok = typeof refreshToken === 'number' ? refreshToken : 0;
     const parentForce = parentTok > 0 && parentTok !== lastRefreshHandled.current;
-    // localRefresh is bumped by center "Täzele" — always force when it changes via dep
-    const force = parentForce || lastFetchedKey.current === '' || Boolean(error);
     if (parentForce) lastRefreshHandled.current = parentTok;
+    // localRefresh > 0 and changed → force (handled via dep); empty mount must NOT force
+    const force = parentForce;
 
-    // Same query already in component state (no error, not forced)
+    // Same query already in this instance
     if (!force && lastFetchedKey.current === queryKey && hasRowsRef.current) {
       return;
     }
 
-    // TTL cache hit (skip network) — still respect force refresh
+    // Shared client cache — fullscreen mounts reuse grid data (no re-fetch)
     if (!force) {
       const cached = cacheGet(queryKey);
       if (cached) {

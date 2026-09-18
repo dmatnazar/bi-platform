@@ -105,6 +105,16 @@ export default function ProfilePage() {
       }
       setSelectedAvatar(data.selected);
       setPickerOpen(false);
+      try {
+        window.dispatchEvent(
+          new CustomEvent('bi-avatar-changed', {
+            detail: {
+              avatarId: data.selected,
+              avatarUrl: data.selected ? `/avatars/${encodeURIComponent(data.selected)}` : null,
+            },
+          })
+        );
+      } catch { /* */ }
       toastSuccess('Avatar saýlandy');
     } finally {
       setSavingAvatar(false);
@@ -116,6 +126,9 @@ export default function ProfilePage() {
     try {
       await fetch('/api/profile/avatars', { method: 'DELETE' });
       setSelectedAvatar(null);
+      try {
+        window.dispatchEvent(new CustomEvent('bi-avatar-changed', { detail: { avatarId: null, avatarUrl: null } }));
+      } catch { /* */ }
       toastSuccess('Avatar aýryldy');
     } finally {
       setSavingAvatar(false);

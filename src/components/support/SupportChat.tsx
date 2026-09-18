@@ -17,6 +17,10 @@ import {
   CircleDot,
   Paperclip,
   Image as ImageIcon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ChevronDown,
+  Filter,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -55,11 +59,16 @@ const STATUS_TABS: { key: 'all' | SupportTicketStatus; label: string }[] = [
 
 interface Props {
   mode: 'user' | 'admin';
+  /** FAB popup içinde — kompakt ýokarylyk */
+  embedded?: boolean;
+  /** Parent (FAB) dolandyrýan sanaw — mobile-da hemişe sagda icon */
+  listOpen?: boolean;
+  onListOpenChange?: (open: boolean) => void;
 }
 
 type TicketListItem = SupportTicket & { messageCount?: number };
 
-export function SupportChat({ mode }: Props) {
+export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, onListOpenChange }: Props) {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [active, setActive] = useState<SupportTicket | null>(null);
@@ -72,6 +81,46 @@ export function SupportChat({ mode }: Props) {
   const [reply, setReply] = useState('');
   const [pendingFiles, setPendingFiles] = useState<{ file: File; preview?: string; compressed?: boolean }[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | SupportTicketStatus>('all');
+  const [listOpenLocal, setListOpenLocal] = useState(true);
+  const listOpen = listOpenProp !== undefined ? listOpenProp : listOpenLocal;
+  const setListOpen = (v: boolean | ((p: boolean) => boolean)) => {
+    const next = typeof v === 'function' ? v(listOpen) : v;
+    setListOpenLocal(next);
+    onListOpenChange?.(next);
+  };
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
+  const draftKey = `bi-support-draft-${mode}`;
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw);
+      if (d.activeId) setActiveId(String(d.activeId));
+      if (typeof d.reply === 'string') setReply(d.reply);
+      if (d.composing) setComposing(true);
+      if (typeof d.subject === 'string') setSubject(d.subject);
+      if (typeof d.body === 'string') setBody(d.body);
+      if (d.category) setCategory(d.category);
+      if (typeof d.listOpen === 'boolean' && listOpenProp === undefined) setListOpenLocal(d.listOpen);
+    } catch {
+      /* */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({ activeId, reply, composing, subject, body, category, listOpen })
+      );
+    } catch {
+      /* */
+    }
+  }, [draftKey, activeId, reply, composing, subject, body, category, listOpen]);
+
   const fileRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -103,6 +152,40 @@ export function SupportChat({ mode }: Props) {
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }, 280);
   }, []);
+
+  useEffect(() => {
+    onListOpenChange?.(listOpen);
+  }, [listOpen, onListOpenChange]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/support/avatar-map');
+        const data = await res.json();
+        if (alive && res.ok) setAvatarMap(data.map || {});
+      } catch {
+        /* */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function resolveAvatar(authorId?: string, authorName?: string) {
+    const keys = [authorId, authorName, (authorName || '').toLowerCase()]
+      .filter(Boolean)
+      .map((k) => String(k).toLowerCase());
+    for (const k of keys) {
+      if (avatarMap[k]) return avatarMap[k];
+    }
+    // map keys are usernames lowercased
+    for (const [k, url] of Object.entries(avatarMap)) {
+      if (authorName && k.includes(String(authorName).toLowerCase())) return url;
+    }
+    return null;
+  }
 
   const loadList = useCallback(async () => {
     const res = await fetch('/api/support/tickets');
@@ -328,95 +411,150 @@ export function SupportChat({ mode }: Props) {
     mode === 'admin' ? t.unreadForAdmin || 0 : t.unreadForUser || 0;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-2 sm:gap-4 h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-8rem)] min-h-[360px] sm:min-h-[420px]">
+    <div
+      className={cn(
+        'min-h-0 gap-2 sm:gap-3',
+        embedded ? 'h-full flex flex-row' : 'flex flex-col lg:flex-row h-[calc(100dvh-7rem)] sm:h-[calc(100dvh-8rem)] min-h-[360px] sm:min-h-[420px]'
+      )}
+    >
       {/* List */}
       <div
         className={cn(
-          'lg:w-80 shrink-0 flex flex-col rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden',
-          activeId || composing ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'
+          'flex flex-col rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden transition-all',
+          embedded
+            ? listOpen
+              ? 'w-[min(280px,42%)] shrink-0'
+              : 'hidden'
+            : cn(
+                'lg:w-80 shrink-0',
+                activeId || composing ? 'hidden lg:flex' : 'flex flex-1 lg:flex-none'
+              ),
+          !embedded && listOpen === false && 'lg:hidden'
         )}
       >
         <div className="p-2.5 sm:p-3 border-b border-slate-800 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
             <MessageCircle className="h-4 w-4 text-indigo-400 shrink-0" />
             <h2 className="text-sm font-semibold text-white truncate">
-              {mode === 'admin' ? 'Goldaw ticketleri' : 'Meniň ýüzlenmelerim'}
+              {mode === 'admin' ? 'Ticketler' : 'Ýüzlenmeler'}
             </h2>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {mode === 'user' && (
-              <label
-                className="inline-flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] text-slate-400 cursor-pointer select-none rounded-lg border border-slate-700 bg-slate-950/60 px-1.5 sm:px-2 py-1 sm:py-1.5 hover:border-slate-600"
-                title={statusFilter === 'open' ? 'Diňe açyk' : 'Ählisi'}
-              >
-                <input
-                  type="checkbox"
-                  className="rounded border-slate-600"
-                  checked={statusFilter === 'open'}
-                  onChange={(e) => {
-                    setStatusFilter(e.target.checked ? 'open' : 'all');
-                    setActiveId(null);
-                    setActive(null);
-                  }}
-                />
-                <span className="whitespace-nowrap">
-                  {statusFilter === 'open' ? 'Açyk' : 'Ählisi'}
-                </span>
-              </label>
-            )}
-            {mode === 'user' && (
-              <Button size="sm" onClick={() => setComposing(true)} className="h-8 px-2 sm:px-3">
-                <Plus className="h-3.5 w-3.5" />
-                <span className="hidden xs:inline sm:inline">Täze</span>
-              </Button>
-            )}
-          </div>
+          {!embedded && mode === 'user' && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setComposing(true);
+                setActiveId(null);
+              }}
+              className="h-8 px-2"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
 
-        {/* Admin: full status tabs (incl. Pozulanlar). User: no tabs — checkbox above */}
-        {mode === 'admin' && (
-          <div className="px-2 pt-2 pb-1 border-b border-slate-800/80 flex flex-wrap gap-1">
-            {STATUS_TABS.map((tab) => {
-              const count =
-                tab.key === 'all'
+        {/* Status filter — dropdown (admin + user) */}
+        <div className="px-2 pt-2 pb-2 border-b border-slate-800/80 relative">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setStatusMenuOpen((v) => !v)}
+              className="flex-1 min-w-0 flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/80 px-2.5 py-2 text-left hover:border-slate-600"
+            >
+              <Filter className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span className="flex-1 text-[11px] text-slate-200 truncate">
+                {STATUS_TABS.find((t) => t.key === statusFilter)?.label || 'Filter'}
+              </span>
+              <span className="text-[10px] font-bold text-indigo-300 bg-indigo-500/15 px-1.5 py-0.5 rounded-full">
+                {statusFilter === 'all'
                   ? statusCounts.all - (statusCounts.trashed || 0)
-                  : statusCounts[tab.key] || 0;
-              const active = statusFilter === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter(tab.key);
-                    setActiveId(null);
-                    setActive(null);
-                  }}
-                  className={cn(
-                    'text-[10px] px-2 py-1 rounded-lg border transition-colors inline-flex items-center gap-1',
-                    active
-                      ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-200'
-                      : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-                  )}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={cn(
-                      'min-w-[1.1rem] h-4 px-1 rounded-full text-[9px] font-bold inline-flex items-center justify-center',
-                      active ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
-                    )}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+                  : statusCounts[statusFilter] || 0}
+              </span>
+              <ChevronDown className={cn('h-3.5 w-3.5 text-slate-500 transition-transform', statusMenuOpen && 'rotate-180')} />
+            </button>
+            {mode === 'user' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setComposing(true);
+                  setActiveId(null);
+                  setActive(null);
+                }}
+                className="h-9 w-9 shrink-0 rounded-xl border border-indigo-500/40 bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/25 flex items-center justify-center"
+                title="Täze ýüzlenme"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            )}
           </div>
-        )}
+          {statusMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
+              <div className="absolute left-2 right-2 top-full mt-1 z-20 rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1 max-h-56 overflow-y-auto">
+                {STATUS_TABS.filter((tab) => mode === 'admin' || tab.key !== 'trashed' || true).map((tab) => {
+                  // user: hide trashed optional — show all for consistency
+                  const count =
+                    tab.key === 'all'
+                      ? statusCounts.all - (statusCounts.trashed || 0)
+                      : statusCounts[tab.key] || 0;
+                  const active = statusFilter === tab.key;
+                  if (mode === 'user' && tab.key === 'trashed') return null;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter(tab.key);
+                        setActiveId(null);
+                        setActive(null);
+                        setStatusMenuOpen(false);
+                      }}
+                      className={cn(
+                        'w-full flex items-center gap-2 px-3 py-2 text-[12px] text-left',
+                        active ? 'bg-indigo-500/15 text-indigo-200' : 'text-slate-300 hover:bg-slate-800'
+                      )}
+                    >
+                      <span className="flex-1">{tab.label}</span>
+                      <span className="text-[10px] font-bold text-slate-400">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
 
         <div className="flex-1 overflow-y-auto">
+          {/* Garalama — tamamlanmadyk täze ýüzlenme */}
+          {(subject.trim() || body.trim()) && (
+            <button
+              type="button"
+              onClick={() => {
+                setComposing(true);
+                setActiveId(null);
+                setActive(null);
+              }}
+              className={cn(
+                'w-full text-left px-3 py-2.5 border-b border-amber-500/20 hover:bg-amber-500/10 transition-colors',
+                composing && !activeId && 'bg-amber-500/15'
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wide text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded">
+                  Garalama
+                </span>
+                <p className="text-sm font-medium text-amber-100/90 truncate flex-1">
+                  {subject.trim() || 'Täze ýüzlenme'}
+                </p>
+              </div>
+              {body.trim() && (
+                <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{body}</p>
+              )}
+            </button>
+          )}
           {loading ? (
             <p className="p-4 text-sm text-slate-500">Ýüklenýär...</p>
-          ) : visibleTickets.length === 0 ? (
+          ) : visibleTickets.length === 0 && !(subject.trim() || body.trim()) ? (
             <div className="p-6 text-center text-sm text-slate-500">
               {statusFilter === 'trashed'
                 ? 'Pozulan ticket ýok'
@@ -435,7 +573,10 @@ export function SupportChat({ mode }: Props) {
               >
                 <button
                   type="button"
-                  onClick={() => setActiveId(t.id)}
+                  onClick={() => {
+                      setActiveId(t.id);
+                      setComposing(false);
+                    }}
                   className="w-full text-left px-3 py-3"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -483,8 +624,12 @@ export function SupportChat({ mode }: Props) {
       {/* Thread / compose */}
       <div
         className={cn(
-          'flex-1 flex flex-col rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/40 min-w-0 overflow-hidden min-h-0',
-          !activeId && !composing ? 'hidden lg:flex' : 'flex'
+          'flex-1 flex flex-col rounded-xl sm:rounded-2xl border border-slate-800 bg-slate-900/40 min-w-0 overflow-hidden min-h-0 relative',
+          embedded
+            ? 'flex'
+            : !activeId && !composing
+              ? 'hidden lg:flex'
+              : 'flex'
         )}
       >
         {composing ? (
@@ -535,11 +680,21 @@ export function SupportChat({ mode }: Props) {
                 />
               </div>
             </div>
-            <div className="shrink-0 flex gap-2 justify-end px-4 sm:px-5 py-3 border-t border-slate-800 bg-slate-900/90 backdrop-blur-sm">
-              <Button variant="ghost" size="sm" onClick={() => setComposing(false)}>
+            <div className="shrink-0 flex gap-2 px-4 sm:px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-slate-800 bg-slate-900 sticky bottom-0 z-20">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="flex-1 min-h-12 text-sm font-semibold"
+                onClick={() => setComposing(false)}
+              >
                 Ýatyr
               </Button>
-              <Button size="sm" loading={sending} onClick={createTicket}>
+              <Button
+                size="sm"
+                className="flex-1 min-h-12 text-sm font-semibold"
+                loading={sending}
+                onClick={createTicket}
+              >
                 Iber
               </Button>
             </div>
@@ -615,11 +770,24 @@ export function SupportChat({ mode }: Props) {
               {active.messages.map((m) => {
                 const mine =
                   mode === 'admin' ? m.isStaffReply : !m.isStaffReply;
+                const av = resolveAvatar(m.authorId, m.authorName);
                 return (
                   <div
                     key={m.id}
-                    className={cn('flex', mine ? 'justify-end' : 'justify-start')}
+                    className={cn('flex items-end gap-1.5', mine ? 'justify-end' : 'justify-start')}
                   >
+                    {!mine && (
+                      <div className="h-7 w-7 rounded-full overflow-hidden bg-slate-700 border border-slate-600 shrink-0 mb-0.5">
+                        {av ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={av} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-[10px] text-slate-400 font-bold">
+                            {(m.authorName || '?').slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <div
                       className={cn(
                         'max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2.5 text-sm',
@@ -674,6 +842,18 @@ export function SupportChat({ mode }: Props) {
                         {new Date(m.createdAt).toLocaleString()}
                       </p>
                     </div>
+                    {mine && (
+                      <div className="h-7 w-7 rounded-full overflow-hidden bg-indigo-800 border border-indigo-400/30 shrink-0 mb-0.5">
+                        {av ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={av} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-[10px] text-indigo-200 font-bold">
+                            {(m.authorName || '?').slice(0, 1).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -752,11 +932,21 @@ export function SupportChat({ mode }: Props) {
                   </div>
                   <textarea
                     value={reply}
-                    onChange={(e) => setReply(e.target.value)}
+                    onChange={(e) => {
+                      setReply(e.target.value);
+                      const el = e.target;
+                      el.style.height = 'auto';
+                      el.style.height = `${Math.min(Math.max(el.scrollHeight, 42), 160)}px`;
+                    }}
                     rows={1}
                     placeholder={mode === 'admin' ? 'Jogap ýazyň...' : 'Adminlere ýazyň...'}
-                    className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950/80 px-2.5 sm:px-3 py-2.5 sm:py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none max-h-28"
-                    onFocus={(e) => scrollFocusedIntoView(e.currentTarget)}
+                    className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950/80 px-2.5 sm:px-3 py-2.5 sm:py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none min-h-[42px] max-h-40 overflow-y-auto"
+                    onFocus={(e) => {
+                      scrollFocusedIntoView(e.currentTarget);
+                      const el = e.currentTarget;
+                      el.style.height = 'auto';
+                      el.style.height = `${Math.min(Math.max(el.scrollHeight, 42), 160)}px`;
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();

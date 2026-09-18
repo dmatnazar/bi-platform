@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { Wallet, Sparkles, Send, X, AlertTriangle, Check, Info, Clock, Zap } from 'lucide-react';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Button } from '@/components/ui/Button';
@@ -178,10 +178,25 @@ export function BalanceBadge({
   const [sending, setSending] = useState(false);
   const [activePanel, setActivePanel] = useState(0);
 
+  const stopped = useRef(false);
+
+  useEffect(() => {
+    const stop = () => {
+      stopped.current = true;
+    };
+    window.addEventListener('bi-logged-out', stop);
+    return () => window.removeEventListener('bi-logged-out', stop);
+  }, []);
+
   const load = useCallback(async () => {
+    if (stopped.current) return;
     if (!companySlug && !(tenantSlugs && tenantSlugs.length)) return;
     try {
       const res = await fetch('/api/billing?action=my-wallet');
+      if (res.status === 401) {
+        stopped.current = true;
+        return;
+      }
       const data = await res.json();
       if (!res.ok) return;
       const list: WalletEntry[] = Array.isArray(data.wallets)

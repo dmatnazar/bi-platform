@@ -564,11 +564,19 @@ html.theme-transitioning::view-transition-old(root) {
   pointer-events: none;
   will-change: clip-path;
   clip-path: circle(0px at var(--theme-x, 90%) var(--theme-y, 40px));
-  /* linear-ish expand — bökmez / ortada durmaz */
-  transition: clip-path 1.65s cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: clip-path 0.85s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .theme-circle-overlay--expand {
   clip-path: circle(160vmax at var(--theme-x, 90%) var(--theme-y, 40px));
+}
+.theme-circle-overlay--fade {
+  opacity: 0;
+  transition: opacity 0.25s ease-out;
+}
+@media (min-width: 769px) {
+  .theme-circle-overlay {
+    transition: clip-path 1.65s cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
 }
 
 /* ── Light: sidebar nav + filters + modals contrast ── */

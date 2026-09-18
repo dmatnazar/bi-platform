@@ -1194,6 +1194,26 @@ export function WidgetConfigPanel({
                           />
                           Prosent (%)
                         </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer col-span-full">
+                      <input
+                        type="checkbox"
+                        checked={!!widget.config?.pieDataLabelsBottom}
+                        onChange={(e) =>
+                          onChange({
+                            ...widget,
+                            config: {
+                              ...widget.config,
+                              pieDataLabelsBottom: e.target.checked,
+                              // Aşakda açylanda dilim label-lary öçür
+                              ...(e.target.checked ? { showDataLabels: false } : {}),
+                            },
+                          })
+                        }
+                      />
+                      <span className="text-[11px] text-slate-300">
+                        Data labels aşakda (legenda ýaly, mobil)
+                      </span>
+                    </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"

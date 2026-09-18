@@ -270,6 +270,8 @@ export interface DashboardWidget {
     smooth?: boolean;
     /** Show value labels on points/bars */
     showDataLabels?: boolean;
+    /** Pie: data labels as bottom vertical legend (mobile-friendly) */
+    pieDataLabelsBottom?: boolean;
     /** Pie: show percentage in labels */
     showPercent?: boolean;
     /** Pie: show numeric value in slice labels */

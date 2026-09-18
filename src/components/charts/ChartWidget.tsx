@@ -710,7 +710,11 @@ function TableWidgetBody({
   );
 
   return (
-    <div className={cn('h-full max-h-full flex flex-col min-h-0 overflow-hidden gap-1.5', className)}>
+    <div
+      data-no-expand
+      className={cn('h-full max-h-full flex flex-col min-h-0 overflow-hidden gap-1.5', className)}
+      onClick={(e) => e.stopPropagation()}
+    >
       {/* Toolbar — same style as global/table search */}
       <div className="shrink-0 flex items-center gap-1.5 w-full">
           {enableSearch ? (
@@ -1070,7 +1074,7 @@ function TableWidgetBody({
       */}
       <div className="hidden md:block flex-1 min-h-0 overflow-x-auto overflow-y-auto -mx-0.5 px-0.5 [overscroll-behavior:auto]">
         <table className="w-full text-sm min-w-[280px] border-separate border-spacing-0">
-          <thead>
+          <thead className="bi-table-head" data-no-expand>
             <tr className="text-left text-slate-400">
               {visibleCols.map((c) => (
                 <th
@@ -1087,7 +1091,10 @@ function TableWidgetBody({
                     <GripVertical className="h-3 w-3 text-slate-600 shrink-0" />
                     <button
                       type="button"
-                      onClick={(e) => toggleSort(c, e.shiftKey || e.metaKey || e.ctrlKey)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSort(c, e.shiftKey || e.metaKey || e.ctrlKey);
+                      }}
                       className="inline-flex items-center gap-1 hover:text-slate-200 min-w-0"
                       title="Sort · Shift+klik = multi · Sütüni süýşürip tertip çalyş"
                     >
@@ -2232,10 +2239,12 @@ export function ChartWidget({ widget, data, className, globalFilters, zoomEnable
         theme,
         [color, ...THEME_DEFAULTS.palette[theme].slice(1)]
       );
-      const showLabels = widget.config?.showDataLabels !== false;
+      const labelsBottom = !!widget.config?.pieDataLabelsBottom;
+      // Aşakda legenda görnüşli sanaw açyk bolsa dilimleriň üstündäki label öçürilýär
+      const showLabels = !labelsBottom && widget.config?.showDataLabels !== false;
       const showPercent = widget.config?.showPercent !== false;
       const showValueInLabel = !!widget.config?.showValueInLabel;
-      const labelInside = widget.config?.labelInside !== false;
+      const labelInside = labelsBottom ? false : widget.config?.labelInside !== false;
       const centerAgg = widget.config?.pieCenterAgg || 'sum';
       // Task 13: which column to aggregate in donut center (default = pie value field)
       const centerField = widget.config?.pieCenterField || valKey;
@@ -2292,7 +2301,7 @@ export function ChartWidget({ widget, data, className, globalFilters, zoomEnable
       if (showPercent) labelParts.push('{d}%');
       const labelFmt = labelParts.join('\n');
 
-      const pieCenterY = showLegend ? '48%' : '50%';
+      const pieCenterY = labelsBottom ? '34%' : showLegend ? '48%' : '50%';
       const graphics: any[] = [];
       if (rows.length === 0) {
         graphics.push({
@@ -2346,26 +2355,70 @@ export function ChartWidget({ widget, data, className, globalFilters, zoomEnable
                 return parts.filter(Boolean).join(': ').replace(': (', ' (');
               },
             },
-        legend: showLegend
+        legend: labelsBottom
           ? {
-              bottom: 4,
+              // Data labels → legenda ýaly aşakda, her setirde bir
+              orient: 'vertical',
+              left: 'center',
+              bottom: 2,
               type: 'scroll',
-              itemGap: 8,
+              height: '36%',
+              itemGap: 6,
               itemHeight: 10,
               itemWidth: 12,
-              padding: [2, 4],
-              textStyle: { color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]), fontSize: 11 },
-              pageTextStyle: { color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]) },
+              padding: [4, 8],
+              textStyle: {
+                color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]),
+                fontSize: widget.config?.labelFontSize || 11,
+                lineHeight: 16,
+              },
+              pageTextStyle: {
+                color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]),
+              },
+              formatter: (name: string) => {
+                const d = pieData.find((x) => x.name === name);
+                if (!d) return name;
+                const total = pieData.reduce((s, x) => s + (Number.isFinite(x.value) ? x.value : 0), 0);
+                const val = Number.isFinite(d.value) ? d.value : 0;
+                const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0';
+                const parts = [name];
+                if (showValueInLabel || showPercent) {
+                  const tail: string[] = [];
+                  if (showValueInLabel) tail.push(String(val));
+                  if (showPercent) tail.push(`${pct}%`);
+                  if (tail.length) parts.push(tail.join(' · '));
+                } else {
+                  parts.push(`${pct}%`);
+                }
+                return parts.join('  ');
+              },
             }
-          : undefined,
+          : showLegend
+            ? {
+                bottom: 4,
+                type: 'scroll',
+                itemGap: 8,
+                itemHeight: 10,
+                itemWidth: 12,
+                padding: [2, 4],
+                textStyle: { color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]), fontSize: 11 },
+                pageTextStyle: { color: resolveThemeColor(widget.config?.labelColor, theme, THEME_DEFAULTS.legend[theme]) },
+              }
+            : undefined,
         series: [
           {
             type: 'pie',
-            // Fill more of the widget — only small edge margin for labels
-            radius: labelInside
-              ? (showLegend ? ['38%', '64%'] : ['42%', '72%'])
-              : (showLegend ? ['36%', '60%'] : ['40%', '68%']),
-            center: ['50%', pieCenterY],
+            // Data labels öçük → widget gyrasyna çenli; labelsBottom → aşakda ýer
+            radius: (() => {
+              if (labelsBottom) return ['28%', '50%'];
+              // Data labels öçük + legenda ýok → widget gyrasyna çenli
+              if (!showLabels && !showLegend) return ['0%', '92%'];
+              if (!showLabels && showLegend) return ['34%', '72%'];
+              return labelInside
+                ? (showLegend ? ['38%', '64%'] : ['42%', '72%'])
+                : (showLegend ? ['36%', '60%'] : ['40%', '68%']);
+            })(),
+            center: ['50%', labelsBottom ? '34%' : pieCenterY],
             data: pieData,
             avoidLabelOverlap: true,
             minShowLabelAngle: 0,

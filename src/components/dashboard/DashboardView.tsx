@@ -475,6 +475,32 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
     window.setTimeout(() => setRefreshingAll(false), 800);
   }
 
+  // Catalog / dashboard auto-refresh: only while this dashboard page is open & visible
+  useEffect(() => {
+    let sec = 0;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/public');
+        const data = await res.json().catch(() => ({}));
+        sec = Math.max(0, Number(data.catalogSyncIntervalSec) || 0);
+      } catch {
+        sec = 0;
+      }
+      if (!alive || sec < 15) return; // 0 = diňe el bilen
+      timer = setInterval(() => {
+        if (document.visibilityState !== 'visible') return;
+        window.dispatchEvent(new CustomEvent('bi-dashboard-refresh-all'));
+      }, sec * 1000);
+    })();
+    return () => {
+      alive = false;
+      if (timer) clearInterval(timer);
+    };
+  }, []);
+
+
   async function handleExitEdit() {
     if (!dirty) {
       setEditMode(false);

@@ -11,5 +11,6 @@ export async function GET() {
     modalAnimations: s.modalAnimations !== false,
     /** Login «Hasaba al» link — default on */
     registrationEnabled: s.registrationEnabled !== false,
+    catalogSyncIntervalSec: Math.max(0, Number(s.catalogSyncIntervalSec) || 0),
   });
 }

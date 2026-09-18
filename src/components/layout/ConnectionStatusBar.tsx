@@ -122,6 +122,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
     setLoading(true);
     try {
       const res = await fetch('/api/status');
+      if (res.status === 401) return;
       const data = await res.json();
       if (res.ok) setStatus(data);
     } catch {
@@ -132,9 +133,23 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 30_000);
-    return () => clearInterval(id);
+    let alive = true;
+    const wrapped = async () => {
+      if (!alive) return;
+      await load();
+    };
+    void wrapped();
+    const id = setInterval(wrapped, 30_000);
+    const onOut = () => {
+      alive = false;
+      clearInterval(id);
+    };
+    window.addEventListener('bi-logged-out', onOut);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      window.removeEventListener('bi-logged-out', onOut);
+    };
   }, [load]);
 
   useEffect(() => {

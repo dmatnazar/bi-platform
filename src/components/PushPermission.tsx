@@ -5,14 +5,11 @@ import { Bell, BellOff, X } from 'lucide-react';
 import { requestPushToken, listenForegroundPush, ensurePushServiceWorker } from '@/lib/firebase-client';
 import { toastInfo, toastSuccess, toastError } from '@/components/ui/Toast';
 
-const LS_DISMISS = 'bi-push-dismiss-v2';
-const LS_SECURE_HINT = 'bi-push-http-hint-v1';
+const LS_ASKED = 'bi-push-prompt-done-v3';
 
 /**
- * Login soň push rugsady.
- * - granted → diňe token täzele, panel ýok
- * - HTTP (isSecureContext=false) → FCM işlemez; bir gezek gysga düşündiriş, soň soramaz
- * - default → Allow (brauzer dialog)
+ * Wagtlaýyn push: bir gezek soráýar (Allow ýa-da Soň).
+ * Her login-de gaýtalamaýar. granted bolsa diňe token täzelenýär.
  */
 export function PushPermission() {
   const [show, setShow] = useState(false);
@@ -28,7 +25,6 @@ export function PushPermission() {
 
     async function boot() {
       const secure = window.isSecureContext === true;
-      // localhost HTTP käwagt secure hasaplanýar; LAN IP http://192.x — däl
       const perm = Notification.permission;
 
       if (perm === 'granted') {
@@ -37,13 +33,14 @@ export function PushPermission() {
         return;
       }
 
-      // HTTP + rugsat ýok → FCM/token işlemeýär; hemişe sorama
+      // Eýýäm sorapdyk / Soň basypdyk — indiki login-de sorama
+      try {
+        if (localStorage.getItem(LS_ASKED) === '1') return;
+      } catch {
+        /* */
+      }
+
       if (!secure) {
-        try {
-          if (localStorage.getItem(LS_SECURE_HINT) === '1') return;
-        } catch {
-          /* */
-        }
         if (!cancelled) {
           setHttpHint(true);
           setShow(true);
@@ -51,20 +48,17 @@ export function PushPermission() {
         return;
       }
 
-      try {
-        if (localStorage.getItem(LS_DISMISS) === '1' && perm === 'denied') return;
-      } catch {
-        /* */
-      }
-
       void ensurePushServiceWorker();
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 1000));
       if (cancelled) return;
       if (Notification.permission === 'granted') {
         await enable(true);
         return;
       }
-      if (!cancelled) setShow(true);
+      if (!cancelled) {
+        setHttpHint(false);
+        setShow(true);
+      }
     }
 
     void boot();
@@ -86,6 +80,14 @@ export function PushPermission() {
     return () => unsub();
   }, []);
 
+  function markAsked() {
+    try {
+      localStorage.setItem(LS_ASKED, '1');
+    } catch {
+      /* */
+    }
+  }
+
   async function enable(silent = false) {
     if (started.current && !silent) return;
     started.current = true;
@@ -93,12 +95,11 @@ export function PushPermission() {
     try {
       if (typeof window !== 'undefined' && !window.isSecureContext) {
         if (!silent) {
-          toastError(
-            'HTTPS gerek',
-            'Push diňe HTTPS ýa-da localhost-da işleýär. LAN IP (http://192…) goldanmaýar.'
-          );
+          toastError('HTTPS gerek', 'Push diňe HTTPS ýa-da localhost-da işleýär.');
         }
         started.current = false;
+        markAsked();
+        setShow(false);
         return;
       }
 
@@ -115,31 +116,19 @@ export function PushPermission() {
         } else if (!silent) {
           toastError('Bildiriş', res.error || 'Token alynmady (VAPID)');
         }
-        setShow(false);
-        try {
-          localStorage.removeItem(LS_DISMISS);
-        } catch {
-          /* */
-        }
-        return;
-      }
-
-      if (res.permission === 'denied') {
-        try {
-          localStorage.setItem(LS_DISMISS, '1');
-        } catch {
-          /* */
-        }
-        if (!silent) {
-          toastError('Rugsat ýapyk', 'Site settings → Notifications → Allow, soň täzeläň.');
-        }
-        started.current = false;
+        markAsked();
         setShow(false);
         return;
       }
 
-      if (!silent) toastError('Bildiriş', res.error || 'Rugsat berilmedi');
+      markAsked();
+      if (res.permission === 'denied' && !silent) {
+        toastError('Rugsat ýapyk', 'Site settings → Notifications → Allow.');
+      } else if (!silent) {
+        toastError('Bildiriş', res.error || 'Rugsat berilmedi');
+      }
       started.current = false;
+      setShow(false);
     } catch (e) {
       if (!silent) toastError('Bildiriş', e instanceof Error ? e.message : String(e));
       started.current = false;
@@ -149,14 +138,8 @@ export function PushPermission() {
   }
 
   function dismiss() {
+    markAsked();
     setShow(false);
-    if (httpHint) {
-      try {
-        localStorage.setItem(LS_SECURE_HINT, '1');
-      } catch {
-        /* */
-      }
-    }
   }
 
   if (!show) return null;
@@ -175,16 +158,9 @@ export function PushPermission() {
             {httpHint ? 'Bildiriş — HTTPS gerek' : 'Bildirişlere rugsat'}
           </p>
           <p className="text-xs text-slate-400 mt-0.5">
-            {httpHint ? (
-              <>
-                Siz <span className="text-amber-300">http://</span> bilen girýärsiňiz (mysal: 192.168…).
-                Brauzer push rugsadyny durnukly saklamaýar / FCM işlemeýär. Çözgüt:{' '}
-                <span className="text-emerald-300">HTTPS</span> ýa-da kompýuterde{' '}
-                <span className="text-emerald-300">localhost</span>.
-              </>
-            ) : (
-              <>«Allow» → brauzeriň öz tassyklamasy. Bir gezek berseňiz indiki login-de soramaz.</>
-            )}
+            {httpHint
+              ? 'Push üçin HTTPS ýa-da localhost gerek. Bu duýduryş bir gezek görkezilýär.'
+              : 'Bir gezek «Allow» ýa-da «Soň». Indiki login-de gaýtalanmaýar.'}
           </p>
         </div>
         <button type="button" className="p-1 text-slate-500 hover:text-white" onClick={dismiss}>
