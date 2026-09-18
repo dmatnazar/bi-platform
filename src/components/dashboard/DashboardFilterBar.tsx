@@ -936,14 +936,28 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
     }
 
     setSaving(true);
-    const def: GlobalFilterDef = {
-      key,
-      label: label.trim(),
-      type: 'multiselect',
-      placeholder: 'Saýla…',
-      optionsSource,
-      options: staticOptions,
-    };
+    const isDateCol =
+      /date|time|sene|begin|end|datetime/i.test(valueCol || '') ||
+      /date|time|sene|begin|end|datetime/i.test(labelCol || '');
+    const scopedWidgetId = sourceMode === 'widget' && widgetId ? widgetId : undefined;
+    const def: GlobalFilterDef = isDateCol
+      ? {
+          key: /begin|start|from/i.test(key) ? key : key,
+          endKey: /end|until|to$/i.test(key) ? key : `end${key.charAt(0).toUpperCase()}${key.slice(1)}`,
+          label: label.trim(),
+          type: 'daterange',
+          placeholder: 'Sene aralygy',
+          widgetId: scopedWidgetId,
+        }
+      : {
+          key,
+          label: label.trim(),
+          type: 'multiselect',
+          placeholder: 'Saýla…',
+          optionsSource,
+          options: staticOptions,
+          widgetId: scopedWidgetId,
+        };
 
     if (editingKey) {
       onChange(filters.map((f) => (f.key === editingKey ? def : f)));

@@ -41,19 +41,27 @@ export function formatDate(iso: string): string {
 }
 
 
-/** Local datetime as YYYY-MM-DD HH:mm:ss (browser timezone) */
+/** Display date/time as day.month.year [HH:mm] */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
     let s = String(iso).trim();
-    // SQLite / legacy rows sometimes store "YYYY-MM-DD HH:mm:ss" without Z — treat as UTC
-    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) {
-      s = s.replace(' ', 'T') + 'Z';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      const [y, m, d] = s.split('-');
+      return `${d}.${m}.${y}`;
+    }
+    // "YYYY-MM-DD HH:mm:ss" without Z — parse as local wall clock
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s) && !/[zZ]|[+\-]\d{2}:?\d{2}$/.test(s)) {
+      s = s.replace(' ', 'T');
     }
     const d = new Date(s);
     if (Number.isNaN(d.getTime())) return String(iso);
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    const hasTime = /[T ]\d{2}:\d{2}/.test(String(iso));
+    if (hasTime) {
+      return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`;
   } catch {
     return String(iso);
   }
@@ -66,18 +74,19 @@ export function formatCellValue(value: unknown): string {
   }
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}`;
+    return `${pad(value.getDate())}.${pad(value.getMonth() + 1)}.${value.getFullYear()} ${pad(value.getHours())}:${pad(value.getMinutes())}`;
   }
   const s = String(value).trim();
-  // 2026-09-05T15:38:40.203Z / 2026-09-05 15:38:40 / with offset
   const m = s.match(
-    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/i
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|[+\-]\d{2}:?\d{2})?$/i
   );
   if (m) {
-    // Display wall-clock from the string (no extra TZ shift) → YYYY-MM-DD HH:mm
-    return `${m[1]} ${m[2]}:${m[3]}`;
+    // day.month.year hours:minute (wall clock from string)
+    return `${m[3]}.${m[2]}.${m[1]} ${m[4]}:${m[5]}`;
   }
-  // date only
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^(\d{4})-(\d{2})-(\d{2})$/.test(s)) {
+    const [, y, mo, d] = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)!;
+    return `${d}.${mo}.${y}`;
+  }
   return s;
 }

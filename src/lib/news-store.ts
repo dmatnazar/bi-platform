@@ -251,6 +251,29 @@ export function markAllRead(username: string, ids: string[]): void {
   writeReads(f);
 }
 
+/** Näçe adam şu habary okady */
+export function countReaders(newsId: string): number {
+  const f = readReads();
+  let n = 0;
+  for (const ids of Object.values(f.reads || {})) {
+    if (Array.isArray(ids) && ids.includes(newsId)) n += 1;
+  }
+  return n;
+}
+
+export function viewCountsMap(ids: string[]): Record<string, number> {
+  const f = readReads();
+  const out: Record<string, number> = {};
+  for (const id of ids) out[id] = 0;
+  for (const list of Object.values(f.reads || {})) {
+    if (!Array.isArray(list)) continue;
+    for (const id of list) {
+      if (id in out) out[id] += 1;
+    }
+  }
+  return out;
+}
+
 export function unreadCount(username: string): number {
   const published = listNews({ includeDrafts: false });
   const read = new Set(getReadIds(username));

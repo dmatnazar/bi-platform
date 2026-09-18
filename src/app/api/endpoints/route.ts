@@ -18,6 +18,7 @@ const schema = z.object({
   method: z.string().min(1).optional(),
   dbKey: z.string().optional(),
   sqlQuery: z.string().optional(),
+  testDefaults: z.record(z.any()).optional(),
   paramsSchema: z.any().optional(),
   responseSchema: z.any().optional(),
   cacheTtlSec: z.number().optional(),

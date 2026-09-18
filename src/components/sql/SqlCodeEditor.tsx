@@ -77,6 +77,13 @@ function ensureHintStyles() {
     .bi-hint-kw { color: #c4b5fd; }
     .bi-hint-tbl { color: #6ee7b7; }
     .bi-hint-col { color: #93c5fd; }
+    /* SQL comments — material-darker-da gaty gara / görünmeýär */
+    .cm-s-material-darker .cm-comment,
+    .CodeMirror .cm-comment {
+      color: #86efac !important;
+      opacity: 1 !important;
+      font-style: italic;
+    }
     .CodeMirror-hint-active .bi-hint-kw,
     .CodeMirror-hint-active .bi-hint-tbl,
     .CodeMirror-hint-active .bi-hint-col { color: #fff; }

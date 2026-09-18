@@ -210,9 +210,12 @@ function ApisPageInner() {
 
 
   function extractSqlParamNames(sql: string): string[] {
-    const found = [...(sql || '').matchAll(/@([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
-    // also :name style
-    const pathStyle = [...(sql || '').matchAll(/(?:^|[^:\w]):([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
+    // Kommentariýadaky @param-lary hasaplama
+    let s = sql || '';
+    s = s.replace(/\/\*[\s\S]*?\*\//g, ' '); // /* ... */
+    s = s.replace(/--[^\n]*/g, ' '); // -- line
+    const found = [...s.matchAll(/@([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
+    const pathStyle = [...s.matchAll(/(?:^|[^:\w]):([A-Za-z_][A-Za-z0-9_]*)/g)].map((m) => m[1]);
     return [...new Set([...found, ...pathStyle])];
   }
 
@@ -657,6 +660,24 @@ function ApisPageInner() {
         return;
       }
     }
+    // Required parametrler — test input boş bolsa save ýok
+    {
+      const missingTest = editParams
+        .filter((x) => x.required && x.name.trim())
+        .filter((x) => {
+          const v = testParamValues[x.name];
+          return v === undefined || v === null || String(v).trim() === '';
+        })
+        .map((x) => x.name.trim());
+      if (missingTest.length) {
+        toastError(
+          'Test bahalar gerek',
+          `Required parametrler boş: ${missingTest.map((m) => '@' + m).join(', ')}. ` +
+            `Aşakdaky "Test bahalar" meýdançalaryny dolduryň — soň save edip bilersiňiz.`
+        );
+        return;
+      }
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/endpoints', {
@@ -674,6 +695,9 @@ function ApisPageInner() {
           cacheTtlSec: editCache,
           maxRows: editMaxRows > 0 ? editMaxRows : 1000,
           authRequired: editAuth,
+          testDefaults: Object.fromEntries(
+            Object.entries(testParamValues || {}).filter(([, v]) => v !== '' && v != null)
+          ),
           paramsSchema: {
             urlParams: editParams.filter((x) => x.source === 'url' && x.name.trim()).map((x) => ({
               name: x.name.trim(),

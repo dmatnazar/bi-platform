@@ -40,6 +40,7 @@ const updateSchema = z.object({
   description: z.string().optional(),
   widgets: z.array(z.any()).optional(),
   globalFilters: z.array(z.any()).optional(),
+  tabs: z.array(z.any()).optional(),
   sharedWith: z.array(z.string()).optional(),
   isPublic: z.boolean().optional(),
   /** Super-admin: move dashboard to another company */
@@ -94,6 +95,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
         (parsed.data.globalFilters as GlobalFilterDef[] | undefined) ??
         dash.globalFilters ??
         [],
+      tabs: (parsed.data.tabs as any) ?? (dash as any).tabs ?? [],
       updatedAt: new Date().toISOString(),
     };
 

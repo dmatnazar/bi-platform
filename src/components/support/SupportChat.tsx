@@ -93,6 +93,9 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
   };
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
+  const [companies, setCompanies] = useState<{ id: string; slug: string; name: string }[]>([]);
+  const [composeCompanyId, setComposeCompanyId] = useState('');
+  const [firmFilter, setFirmFilter] = useState<string | null>(null);
   const draftKey = `bi-support-draft-${mode}`;
 
   useEffect(() => {
@@ -191,11 +194,18 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
   }
 
   const loadList = useCallback(async () => {
-    const res = await fetch('/api/support/tickets');
+    const q = firmFilter ? `?companyId=${encodeURIComponent(firmFilter)}` : '';
+    const res = await fetch(`/api/support/tickets${q}`);
     const data = await res.json();
-    if (res.ok) setTickets(data.tickets || []);
+    if (res.ok) {
+      setTickets(data.tickets || []);
+      if (Array.isArray(data.companies)) {
+        setCompanies(data.companies);
+        setComposeCompanyId((prev) => prev || (data.companies[0]?.id ?? ''));
+      }
+    }
     setLoading(false);
-  }, []);
+  }, [firmFilter]);
 
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = {
@@ -244,7 +254,8 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
   }, [mode]);
 
   useEffect(() => {
-    loadList();
+    setLoading(true);
+    void loadList();
   }, [loadList]);
 
   useEffect(() => {
@@ -270,7 +281,12 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
       const res = await fetch('/api/support/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, category, body }),
+        body: JSON.stringify({
+          subject,
+          category,
+          body,
+          companyId: composeCompanyId || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Şowsuz');
@@ -439,21 +455,40 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
           <div className="flex items-center gap-1.5 min-w-0">
             <MessageCircle className="h-4 w-4 text-indigo-400 shrink-0" />
             <h2 className="text-sm font-semibold text-white truncate">
-              {mode === 'admin' ? 'Ticketler' : 'Ýüzlenmeler'}
+              {firmFilter
+                ? companies.find((c) => c.id === firmFilter)?.name || 'Firma'
+                : mode === 'admin'
+                  ? 'Ticketler'
+                  : 'Ýüzlenmeler'}
             </h2>
           </div>
-          {!embedded && mode === 'user' && (
-            <Button
-              size="sm"
-              onClick={() => {
-                setComposing(true);
-                setActiveId(null);
-              }}
-              className="h-8 px-2"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {firmFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFirmFilter(null);
+                  setActiveId(null);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                title="Firmalara dolan"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            )}
+            {!embedded && mode === 'user' && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  setComposing(true);
+                  setActiveId(null);
+                }}
+                className="h-8 px-2"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Status filter — dropdown (admin + user) */}
@@ -555,7 +590,36 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
               )}
             </button>
           )}
-          {loading ? (
+          {mode === 'admin' && !firmFilter && companies.length > 0 ? (
+            <div className="p-2 space-y-1">
+              <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500">Firmalar</p>
+              {companies.map((c) => {
+                const cnt = tickets.filter((t) => t.companyId === c.id && !t.isGroupChat).length;
+                const gUnread = tickets
+                  .filter((t) => t.companyId === c.id)
+                  .reduce((s, t) => s + (mode === 'admin' ? t.unreadForAdmin || 0 : t.unreadForUser || 0), 0);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setFirmFilter(c.id)}
+                    className="w-full text-left px-3 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 flex items-center gap-2"
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm text-slate-100 truncate">{c.name}</span>
+                      <span className="block text-[10px] text-slate-500 truncate">{c.slug}</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400">{cnt} ticket</span>
+                    {gUnread > 0 && (
+                      <span className="min-w-[1.1rem] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">
+                        {gUnread}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ) : loading ? (
             <p className="p-4 text-sm text-slate-500">Ýüklenýär...</p>
           ) : visibleTickets.length === 0 && !(subject.trim() || body.trim()) ? (
             <div className="p-6 text-center text-sm text-slate-500">
@@ -583,7 +647,16 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                   className="w-full text-left px-3 py-3"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium text-slate-100 truncate">{t.subject}</p>
+                    <p className="text-sm font-medium text-slate-100 truncate">
+                      {t.isGroupChat ? (
+                        <span className="text-emerald-300">Umumy chat</span>
+                      ) : (
+                        t.subject
+                      )}
+                    </p>
+                    {(t.companyName || t.companySlug) && !firmFilter && (
+                      <p className="text-[10px] text-slate-500 truncate">{t.companyName || t.companySlug}</p>
+                    )}
                     {unread(t) > 0 && (
                       <span className="shrink-0 h-5 min-w-5 px-1 rounded-full bg-indigo-500 text-[10px] font-bold text-white flex items-center justify-center">
                         {unread(t)}
@@ -657,6 +730,22 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
               <p className="text-xs text-slate-500">
                 Bu hat diňe adminlere gidýär. Teklip, maslahat, säwlik ýa-da sorag ýazyň.
               </p>
+              {companies.length > 0 && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-400">Firma *</label>
+                  <select
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
+                    value={composeCompanyId}
+                    onChange={(e) => setComposeCompanyId(e.target.value)}
+                  >
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <Input
                 label="Tema"
                 value={subject}

@@ -17,12 +17,30 @@ function isSupportStaff(user: any) {
 }
 
 function canAccess(
-  user: { id: string; role: string; companyId: string; isSuperAdmin?: boolean },
-  ticket: { userId: string; companyId: string }
+  user: {
+    id: string;
+    role: string;
+    companyId: string;
+    companySlug?: string;
+    tenantSlugs?: string[];
+    isSuperAdmin?: boolean;
+  },
+  ticket: { userId: string; companyId: string; isGroupChat?: boolean; companySlug?: string }
 ) {
   if (isSuperAdmin(user as any) || user.role === 'super_admin') return true;
-  if (isSupportStaff(user) && ticket.companyId === user.companyId) return true;
+  if (isSupportStaff(user)) {
+    // support staff: same company or any if super handled above
+    if (ticket.companyId === user.companyId) return true;
+    if (user.tenantSlugs?.length && ticket.companySlug && user.tenantSlugs.includes(ticket.companySlug))
+      return true;
+  }
   if (ticket.userId === user.id) return true;
+  // Umumy chat — firma bagly ähli user
+  if (ticket.isGroupChat) {
+    if (ticket.companyId === user.companyId) return true;
+    if (ticket.companySlug && user.companySlug === ticket.companySlug) return true;
+    if (ticket.companySlug && user.tenantSlugs?.includes(ticket.companySlug)) return true;
+  }
   return false;
 }
 

@@ -34,6 +34,7 @@ type NewsItem = {
   published: boolean;
   pinned?: boolean;
   unread?: boolean;
+  viewCount?: number;
 };
 
 type LibFile = {
@@ -155,9 +156,27 @@ export default function NewsPage() {
     setSelected(item);
     if (!item.unread) return;
     // Optimistic UI
-    setItems((prev) => prev.map((n) => (n.id === item.id ? { ...n, unread: false } : n)));
+    setItems((prev) =>
+      prev.map((n) =>
+        n.id === item.id
+          ? {
+              ...n,
+              unread: false,
+              viewCount: item.unread ? (n.viewCount || 0) + 1 : n.viewCount,
+            }
+          : n
+      )
+    );
     setUnreadCount((c) => Math.max(0, c - 1));
-    setSelected((s) => (s && s.id === item.id ? { ...s, unread: false } : s));
+    setSelected((s) =>
+      s && s.id === item.id
+        ? {
+            ...s,
+            unread: false,
+            viewCount: item.unread ? (s.viewCount || 0) + 1 : s.viewCount,
+          }
+        : s
+    );
     try {
       await fetch(`/api/news/${item.id}`, { cache: 'no-store' });
     } catch {
@@ -573,6 +592,7 @@ export default function NewsPage() {
                   <p className="text-[11px] text-slate-500 mt-1">
                     {formatDateTime(item.createdAt)}
                     {item.createdBy ? <span className="text-slate-600"> · {item.createdBy}</span> : null}
+                    <span className="text-slate-600"> · {item.viewCount ?? 0} görüji</span>
                   </p>
                 </div>
               </div>
@@ -625,6 +645,7 @@ export default function NewsPage() {
               <p className="text-[11px] text-slate-500">
                 {formatDateTime(selected.createdAt)}
                 {selected.pinned ? ' · Pin' : ''}
+                {` · ${selected.viewCount ?? 0} görüji`}
               </p>
               {((selected.media && selected.media.length > 0) ||
                 (selected.images && selected.images.length > 0)) && (

@@ -19,6 +19,7 @@ const createSchema = z.object({
   description: z.string().optional(),
   widgets: z.array(z.any()).optional(),
   globalFilters: z.array(z.any()).optional(),
+  tabs: z.array(z.any()).optional(),
   companyId: z.string().optional(),
 });
 

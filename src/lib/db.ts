@@ -78,7 +78,7 @@ export async function ensureDemoUsers(): Promise<void> {
   // intentionally empty
 }
 
-async function getData(): Promise<DbSchema> {
+export async function getData(): Promise<DbSchema> {
   let data = readDb();
   data = await seedIfEmpty(data);
   return data;

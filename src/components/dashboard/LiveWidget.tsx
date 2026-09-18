@@ -106,32 +106,13 @@ function apiFilterValues(values: GlobalFilterValues): GlobalFilterValues {
   return out;
 }
 
-/**
- * Only global-filter keys that this widget actually binds to (paramBindings source=global).
- * Unrelated filter changes must not change queryKey / trigger fetch.
- */
 function boundGlobalFilters(
   all: GlobalFilterValues,
-  bindings?: ParamBinding[]
+  _bindings?: ParamBinding[],
+  _ds?: { paramsSchema?: import('@/lib/types').ParamsSchema; params?: Record<string, unknown> }
 ): GlobalFilterValues {
-  if (!bindings?.length) {
-    // No bindings declared → keep previous behavior (all API filters) for legacy widgets
-    return all;
-  }
-  const globalKeys = new Set(
-    bindings
-      .filter((b) => b.source === 'global' && b.globalKey)
-      .map((b) => String(b.globalKey))
-  );
-  if (globalKeys.size === 0) {
-    // Widget ignores global filters entirely
-    return {};
-  }
-  const out: GlobalFilterValues = {};
-  for (const k of globalKeys) {
-    if (k in all) out[k] = all[k];
-  }
-  return out;
+  // Täze global filter hem ähli weigetlere barýar (key = API param ady)
+  return all;
 }
 
 function LoadingOverlay({ active }: { active: boolean }) {
@@ -216,8 +197,8 @@ function LiveWidgetInner({
   const searchQuery = useMemo(() => getGlobalSearchQuery(globalFilters), [globalFilters]);
   const allApiFilters = useMemo(() => apiFilterValues(globalFilters), [globalFilters]);
   const apiFilters = useMemo(
-    () => boundGlobalFilters(allApiFilters, ds?.paramBindings),
-    [allApiFilters, ds?.paramBindings]
+    () => boundGlobalFilters(allApiFilters, ds?.paramBindings, ds),
+    [allApiFilters, ds?.paramBindings, ds]
   );
   const apiFiltersKey = useMemo(() => JSON.stringify(apiFilters), [apiFilters]);
 

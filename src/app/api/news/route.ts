@@ -6,6 +6,7 @@ import {
   getReadIds,
   unreadCount,
   markAllRead,
+  viewCountsMap,
 } from '@/lib/news-store';
 
 function newsVisibleTo(user: any, n: { tenantSlugs?: string[]; published?: boolean }) {
@@ -40,9 +41,11 @@ export async function GET() {
 
   const readIds = getReadIds(user.username);
   const readSet = new Set(readIds);
+  const views = viewCountsMap(items.map((n) => n.id));
   const withMeta = items.map((n) => ({
     ...n,
     unread: n.published && !readSet.has(n.id),
+    viewCount: views[n.id] || 0,
   }));
 
   return NextResponse.json({

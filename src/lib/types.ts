@@ -229,6 +229,8 @@ export interface DashboardWidget {
   id: string;
   type: WidgetType;
   title: string;
+  /** Haýsy tab-da görkezilýär (boş = ähli tablar / default) */
+  tabId?: string | null;
   /** Optional shorter title on small screens */
   mobileTitle?: string;
   /** react-grid-layout position */
@@ -388,6 +390,17 @@ export interface GlobalFilterDef {
   };
   /** placeholder */
   placeholder?: string;
+  /** diňe şu widget-e täsir (custom filter) */
+  widgetId?: string;
+  /** diňe şu tab-da görkez */
+  tabId?: string | null;
+}
+
+export interface DashboardTab {
+  id: string;
+  name: string;
+  /** default açylýan tab */
+  isDefault?: boolean;
 }
 
 export interface Dashboard {
@@ -405,6 +418,8 @@ export interface Dashboard {
    * Runtime values live in React state; defaults can be stored here.
    */
   globalFilters?: GlobalFilterDef[];
+  /** Dashboard tabs — widget.tabId bilen baglanyşyk */
+  tabs?: DashboardTab[];
   /** layout version for migrations */
   version: number;
   isPublic: boolean;
@@ -451,6 +466,11 @@ export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
 export interface SupportTicket {
   id: string;
   companyId: string;
+  /** firma slug (görkezmek üçin) */
+  companySlug?: string;
+  companyName?: string;
+  /** firma umumy chat */
+  isGroupChat?: boolean;
   /** creator (regular user) */
   userId: string;
   userName: string;
@@ -590,13 +610,25 @@ export function resolveWidgetParams(
       if (b.source === 'global' && b.globalKey) {
         const v = globalValues[b.globalKey];
         if (v !== undefined) {
-          out[b.paramName] = v === '' || v === '__ALL__' ? null : (v as string | number | boolean | null);
+          out[b.paramName] =
+            v === '' || v === '__ALL__' ? null : (v as string | number | boolean | null);
         }
-      } else if ((b.source === 'fixed' || b.source === 'widget') && b.value !== undefined && b.value !== null && b.value !== '') {
-        // diňe global bilen basylmadyk bolsa
-        if (out[b.paramName] === undefined) {
+      } else if (
+        (b.source === 'fixed' || b.source === 'widget') &&
+        b.value !== undefined &&
+        b.value !== null &&
+        b.value !== ''
+      ) {
+        // global basyp ýazan bolsa goýber
+        if (!(b.paramName in globalValues) && out[b.paramName] === undefined) {
           out[b.paramName] = b.value as string | number | boolean;
         }
+      }
+      // paramName bilen deň global filter key (täze filter, binding ýok)
+      if (b.paramName in globalValues && globalValues[b.paramName] !== undefined) {
+        const v = globalValues[b.paramName];
+        out[b.paramName] =
+          v === '' || v === '__ALL__' ? null : (v as string | number | boolean | null);
       }
     }
   }

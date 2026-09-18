@@ -150,11 +150,14 @@ export function WidgetConfigPanel({
           const raw = localStorage.getItem(storageKey);
           if (raw) savedParams = JSON.parse(raw) || {};
         } catch { /* */ }
+        const ep = endpoints.find((e) => e.id === ds.endpointId);
+        const testDefaults = ((ep as any)?.testDefaults || {}) as Record<string, string | number | boolean>;
         const probeParams: Record<string, string | number | boolean | null> = {
+          ...testDefaults,
           ...savedParams,
           ...(ds.params || {}),
         };
-        const schema = ds.paramsSchema || endpoints.find((e) => e.id === ds.endpointId)?.paramsSchema;
+        const schema = ds.paramsSchema || ep?.paramsSchema;
         const allDefs = schema
           ? [
             ...(schema.urlParams || []),
@@ -441,10 +444,17 @@ export function WidgetConfigPanel({
   }
 
   const globalKeys = useMemo(() => {
+    const seen = new Set<string>();
     const keys: { value: string; label: string }[] = [];
     for (const g of globalFilters) {
-      keys.push({ value: g.key, label: `${g.label} (${g.key})` });
-      if (g.endKey) keys.push({ value: g.endKey, label: `${g.label} gutar (${g.endKey})` });
+      if (g.key && !seen.has(g.key)) {
+        seen.add(g.key);
+        keys.push({ value: g.key, label: `${g.label} (${g.key})` });
+      }
+      if (g.endKey && !seen.has(g.endKey)) {
+        seen.add(g.endKey);
+        keys.push({ value: g.endKey, label: `${g.label} gutar (${g.endKey})` });
+      }
     }
     return keys;
   }, [globalFilters]);
@@ -581,15 +591,17 @@ export function WidgetConfigPanel({
                     label="Global key"
                     value={binding.globalKey || p.name}
                     onChange={(e) => updateBinding(p.name, { globalKey: e.target.value })}
-                    options={
-                      globalKeys.length
-                        ? globalKeys
-                        : [
-                          { value: p.name, label: p.name },
-                          { value: 'beginDate', label: 'beginDate' },
-                          { value: 'endDate', label: 'endDate' },
-                        ]
-                    }
+                    options={(() => {
+                      if (globalKeys.length) return globalKeys;
+                      const seen = new Set<string>();
+                      const opts: { value: string; label: string }[] = [];
+                      for (const v of [p.name, 'beginDate', 'endDate']) {
+                        if (!v || seen.has(v)) continue;
+                        seen.add(v);
+                        opts.push({ value: v, label: v });
+                      }
+                      return opts;
+                    })()}
                   />
                 ) : (
                   <Input
@@ -726,7 +738,8 @@ export function WidgetConfigPanel({
         )}
       </div>
 
-      {/* Multi-select Value fields + per-column Y axis index */}
+      {/* Multi-select Value fields — tablo üçin gerek däl */}
+      {widget.type !== 'table' && (
       <div className="space-y-1.5">
         <label className="text-[11px] font-medium text-slate-400">
           Value field (birnäçe saýlap bolýar)
@@ -853,6 +866,7 @@ export function WidgetConfigPanel({
           </p>
         )}
       </div>
+      )}
 
 
       {widget.type === 'table' && sampleColumns.length > 0 && (
@@ -1899,19 +1913,6 @@ export function WidgetConfigPanel({
       {widget.type === 'table' && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
           <p className="text-xs font-semibold text-slate-300">Tablo sazlamalary</p>
-
-          <Input
-            label="Sütünler (csv)"
-            value={(ds?.columns || []).join(', ')}
-            onChange={(e) => {
-              const cols = e.target.value
-                .split(',')
-                .map((s) => s.trim())
-                .filter(Boolean);
-              patchDs({ columns: cols.length ? cols : undefined });
-            }}
-            placeholder="id, name, total"
-          />
 
           {sampleColumns.length > 0 && (
             <div className="space-y-2">

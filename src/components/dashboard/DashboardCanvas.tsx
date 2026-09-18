@@ -18,6 +18,8 @@ interface Props {
   onConfigureWidget?: (id: string) => void;
   cols?: number;
   globalFilters?: GlobalFilterValues;
+  /** filter definitions — widget-scoped filterleri weiget üstünde ulanylýar */
+  filterDefs?: import('@/lib/types').GlobalFilterDef[];
 }
 
 export function DashboardCanvas({
@@ -27,6 +29,7 @@ export function DashboardCanvas({
   onConfigureWidget,
   cols = 12,
   globalFilters = {},
+  filterDefs = [],
 }: Props) {
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {

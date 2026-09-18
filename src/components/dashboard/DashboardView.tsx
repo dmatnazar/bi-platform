@@ -20,7 +20,7 @@ import { WidgetPalette } from './WidgetPalette';
 import { WidgetConfigPanel } from './WidgetConfigPanel';
 import { DashboardFilterBar, GlobalFiltersEditor } from './DashboardFilterBar';
 import { Button } from '@/components/ui/Button';
-import { generateId } from '@/lib/utils';
+import { generateId, cn } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
 import { ArrowLeft, Save, Pencil, Eye, ChevronDown, ChevronRight, RefreshCw, GripHorizontal, X } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
@@ -237,7 +237,26 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
     window.addEventListener('pointerup', onUp);
   }
 
-  const filterDefs = dashboard.globalFilters || [];
+  const tabs = dashboard.tabs || [];
+  const [activeTabId, setActiveTabId] = useState<string | null>(() => {
+    const def = (initial.tabs || []).find((x) => x.isDefault) || (initial.tabs || [])[0];
+    return def?.id || null;
+  });
+  const loadedTabsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (activeTabId) loadedTabsRef.current.add(activeTabId);
+  }, [activeTabId]);
+
+  const filterDefs = (dashboard.globalFilters || []).filter((f) => {
+    if (f.widgetId) return false; // widget-scoped — weiget üstünde
+    if (f.tabId && activeTabId && f.tabId !== activeTabId) return false;
+    return true;
+  });
+  const visibleWidgets = useMemo(() => {
+    const all = dashboard.widgets || [];
+    if (!tabs.length || !activeTabId) return all;
+    return all.filter((w) => !w.tabId || w.tabId === activeTabId);
+  }, [dashboard.widgets, tabs, activeTabId]);
   const [filterValues, setFilterValues] = useState<GlobalFilterValues>(() =>
     defaultFilterValues(initial.globalFilters || [])
   );
@@ -337,6 +356,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
       h: type === 'kpi' ? 2 : type === 'pivot' ? 5 : 4,
       staticValue: type === 'kpi' ? '0' : type === 'text' ? 'Tekst ýazyň...' : undefined,
       config: { color: '#6366f1', showLegend: true },
+      tabId: activeTabId || null,
     };
     updateWidgets([...dashboard.widgets, widget]);
   }
@@ -351,6 +371,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
           name: nameRef.current,
           widgets: dashboardRef.current.widgets,
           globalFilters: dashboardRef.current.globalFilters || [],
+          tabs: dashboardRef.current.tabs || [],
         }),
       });
       if (res.ok) {
@@ -649,6 +670,105 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
         </div>
       </div>
 
+      {/* Dashboard tabs */}
+      {(tabs.length > 0 || editMode) && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTabId(tab.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors',
+                activeTabId === tab.id
+                  ? 'bg-indigo-500/25 text-indigo-200 border-indigo-400/50'
+                  : 'bg-slate-900/60 text-slate-400 border-slate-700 hover:text-slate-200'
+              )}
+            >
+              {tab.name}
+              {tab.isDefault ? ' · default' : ''}
+            </button>
+          ))}
+          {editMode && (
+            <>
+              <button
+                type="button"
+                className="px-2.5 py-1.5 rounded-xl text-[11px] border border-dashed border-slate-600 text-slate-400 hover:text-white"
+                onClick={() => {
+                  const id = generateId();
+                  const name = `Tab ${(tabs.length || 0) + 1}`;
+                  setDashboard((d) => ({
+                    ...d,
+                    tabs: [...(d.tabs || []), { id, name, isDefault: !(d.tabs || []).length }],
+                  }));
+                  setActiveTabId(id);
+                  setDirty(true);
+                }}
+              >
+                + Tab
+              </button>
+              {activeTabId && (
+                <>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded-lg text-[11px] text-slate-400 hover:text-white border border-slate-700"
+                    onClick={() => {
+                      const n = window.prompt('Tab ady', tabs.find((x) => x.id === activeTabId)?.name || '');
+                      if (!n?.trim()) return;
+                      setDashboard((d) => ({
+                        ...d,
+                        tabs: (d.tabs || []).map((x) =>
+                          x.id === activeTabId ? { ...x, name: n.trim() } : x
+                        ),
+                      }));
+                      setDirty(true);
+                    }}
+                  >
+                    At
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded-lg text-[11px] text-slate-400 hover:text-indigo-300 border border-slate-700"
+                    onClick={() => {
+                      setDashboard((d) => ({
+                        ...d,
+                        tabs: (d.tabs || []).map((x) => ({
+                          ...x,
+                          isDefault: x.id === activeTabId,
+                        })),
+                      }));
+                      setDirty(true);
+                    }}
+                  >
+                    Default
+                  </button>
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded-lg text-[11px] text-rose-400 hover:text-rose-300 border border-slate-700"
+                    onClick={() => {
+                      setDashboard((d) => ({
+                        ...d,
+                        tabs: (d.tabs || []).filter((x) => x.id !== activeTabId),
+                        widgets: (d.widgets || []).map((w) =>
+                          w.tabId === activeTabId ? { ...w, tabId: null } : w
+                        ),
+                      }));
+                      setActiveTabId((prev) => {
+                        const rest = tabs.filter((x) => x.id !== prev);
+                        return rest[0]?.id || null;
+                      });
+                      setDirty(true);
+                    }}
+                  >
+                    Poz
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Global filter bar — always visible when filters exist or in edit mode */}
       {(filterDefs.length > 0 || editMode) && (
         <DashboardFilterBar
@@ -676,7 +796,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
             style={{ width: '100%', maxWidth: '100%', minWidth: 0 }}
           >
             <DashboardCanvas
-              dashboard={{ ...dashboard, name }}
+              dashboard={{ ...dashboard, name, widgets: visibleWidgets }}
               editable={editMode}
               onChange={updateWidgets}
               onConfigureWidget={(id) => {
@@ -689,6 +809,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 setPanelOpen((p) => ({ ...p, config: true }));
               }}
               globalFilters={effectiveFilterValues}
+              filterDefs={dashboard.globalFilters || []}
             />
           </div>
         {editMode && (
