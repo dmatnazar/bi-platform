@@ -828,13 +828,18 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                         </div>
                       )}
                       {mine && (
-                        <div className="mt-1 flex justify-end text-[10px] opacity-80">
+                        <div className="mt-1 flex justify-end items-center gap-0.5 text-[10px]" title={
+                          m.readAt ? 'Okaldy (chat açyldy)' : m.deliveredAt ? 'Baryp ýetdi' : 'Ugradyldy'
+                        }>
                           {m.readAt ? (
-                            <span className="text-sky-300" title="Okaldy">✓✓</span>
+                            // Okaldy — tegelek
+                            <Circle className="h-3 w-3 fill-sky-400 text-sky-400" strokeWidth={0} />
                           ) : m.deliveredAt ? (
-                            <span title="Baryp ýetdi">✓✓</span>
+                            // Baryp ýetdi — iki ptichka
+                            <CheckCheck className="h-3.5 w-3.5 text-slate-300" />
                           ) : (
-                            <span title="Ugradyldy">✓</span>
+                            // Ugradyldy — bir ptichka
+                            <Check className="h-3.5 w-3.5 text-slate-400" />
                           )}
                         </div>
                       )}

@@ -746,7 +746,7 @@ export default function StaffPage() {
         <ModalPortal open={Boolean(modal)}>
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center p-0 sm:p-3">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]" onClick={() => setModal(false)} />
-          <div className={`relative w-full sm:max-w-3xl rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/15 flex flex-col max-h-[min(92vh,720px)]${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
+          <div className={`relative w-full sm:max-w-3xl rounded-t-2xl sm:rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 shadow-2xl shadow-indigo-500/15 flex flex-col max-h-[min(92vh,720px)] min-h-0${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
             <div className="shrink-0 px-4 pt-3.5 pb-2.5 border-b border-slate-800/80">
               <div className="flex items-center gap-2.5">
                 <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/20">
@@ -847,7 +847,7 @@ export default function StaffPage() {
             </label>
             </div>
             {/* Sag panel: firmalar + gözleg */}
-            <div className="sm:w-64 shrink-0 flex flex-col border-t sm:border-t-0 sm:border-l border-slate-800 pt-2 sm:pt-0 sm:pl-3 min-h-[12rem]">
+            <div className="sm:w-64 shrink-0 flex flex-col border-t sm:border-t-0 sm:border-l border-slate-800 pt-2 sm:pt-0 sm:pl-3 min-h-0 max-h-[40vh] sm:max-h-none sm:h-full overflow-hidden">
               <label className="text-[11px] font-medium text-slate-400 mb-1">
                 Firmalar
                 {(form.tenantSlugs || []).length > 0 && (
@@ -861,7 +861,7 @@ export default function StaffPage() {
                 onChange={(e) => setFirmSearch(e.target.value)}
                 className="mb-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600"
               />
-              <div className="flex-1 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950/80 p-1 space-y-0.5 max-h-48 sm:max-h-none">
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain rounded-lg border border-slate-700 bg-slate-950/80 p-1 space-y-0.5 max-h-48 sm:max-h-none">
                 {(() => {
                   const q = firmSearch.trim().toLowerCase();
                   const list = visibleCompanies.filter((c) => {
