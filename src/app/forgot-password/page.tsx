@@ -7,8 +7,12 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useTheme } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { useLocale } from '@/components/LocaleProvider';
 
 export default function ForgotPasswordPage() {
+  const { t } = useLocale();
+
   const { theme } = useTheme();
   const isLight = theme === 'light';
   const [value, setValue] = useState('');
@@ -33,10 +37,10 @@ export default function ForgotPasswordPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Şowsuz');
+        setError(data.error || t('failed'));
         return;
       }
-      setDone(data.message || 'E-poçta iberildi (eger hasap bar bolsa).');
+      setDone(data.message || t('emailSentIfExists'));
       if (data.emailMasked) setEmailMasked(String(data.emailMasked));
       setSentToGmail(!!data.sentToGmail || String(data.emailDomain || '').toLowerCase().endsWith('gmail.com'));
     } catch (err) {
@@ -48,15 +52,15 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: isLight ? '#f1f5f9' : '#020617' }}>
-      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
+      <div className="fixed top-3 right-3 z-20 flex items-center gap-2"><ThemeToggle compact /><LanguageToggle compact /></div>
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">Paroly ýatdan çykardyňyzmy?</h1>
+          <h1 className="text-base sm:text-xl font-bold text-white truncate leading-tight">{t('forgotPasswordTitle')}</h1>
           <p className="text-sm text-slate-400">
-            Login ýa-da e-poçtaňyzy ýazyň. Gmail arkaly 15 minutlyk täzeleme baglanyşygy iberiler.
+            {t('forgotPasswordHint')}
           </p>
         </div>
 
@@ -77,7 +81,7 @@ export default function ForgotPasswordPage() {
               </div>
               {emailMasked ? (
                 <p className="text-xs text-slate-300 pl-6">
-                  Ugradylan poçta:{' '}
+                  {t('sentToEmail')}:{' '}
                   <span className="font-mono text-emerald-200">{emailMasked}</span>
                 </p>
               ) : null}
@@ -89,7 +93,7 @@ export default function ForgotPasswordPage() {
                   className="ml-6 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 hover:bg-emerald-500/20"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Gmail Inbox aç
+                  {t('openGmailInbox')}
                 </a>
               )}
               {emailMasked && !emailMasked.toLowerCase().includes('@gmail.com') && (
@@ -100,28 +104,28 @@ export default function ForgotPasswordPage() {
                   className="ml-6 inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Poçta sahypasyny aç
+                  {t('openMailSite')}
                 </a>
               )}
             </div>
           )}
           <Input
-            label="Login ýa-da e-poçta"
+            label={t('loginOrEmail')}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="username ýa-da name@gmail.com"
+            placeholder={t('usernameOrGmail')}
             autoComplete="username"
             required
           />
           <Button type="submit" className="w-full" loading={loading}>
-            Baglanyşyk iber
+            {t('sendLink')}
           </Button>
           <Link
             href="/login"
             className="flex items-center justify-center gap-1 text-xs text-slate-400 hover:text-indigo-300"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Login sahypasyna gaýt
+            {t('backToLogin')}
           </Link>
         </form>
       </div>

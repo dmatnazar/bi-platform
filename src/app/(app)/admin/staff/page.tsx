@@ -11,6 +11,7 @@ import { formatDate } from '@/lib/utils';
 import { toastSuccess, toastError, toastInfo } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { useModalAnimations } from '@/lib/use-modal-animations';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface StaffRow {
   id: string;
@@ -45,6 +46,8 @@ function phoneLocal(p?: string) {
 }
 
 export default function StaffPage() {
+  const { t } = useLocale();
+
   const modalAnimOn = useModalAnimations();
   const [staff, setStaff] = useState<StaffRow[]>([]);
   const [regs, setRegs] = useState<Reg[]>([]);
@@ -84,6 +87,7 @@ export default function StaffPage() {
   const [meRole, setMeRole] = useState<string>('viewer');
   const [meTenantSlugs, setMeTenantSlugs] = useState<string[]>([]);
   const [meIsSuper, setMeIsSuper] = useState(false);
+  const [meReady, setMeReady] = useState(false);
   const [canInvite, setCanInvite] = useState(false);
 
   // Invite modal
@@ -144,8 +148,11 @@ export default function StaffPage() {
         setCanInvite(
           Boolean(u.isSuperAdmin || role === 'super_admin' || role === 'admin' || role === 'editor')
         );
+        setMeReady(true);
       })
-      .catch(() => {});
+      .catch(() => {
+        setMeReady(true);
+      });
   }, []);
 
   useEffect(() => {
@@ -196,7 +203,7 @@ export default function StaffPage() {
     const seats = Math.max(1, Math.min(50, parseInt(inviteSeats, 10) || 1));
     const ttlMinutes = Math.max(1, Math.min(180, parseInt(inviteTtlMinutes, 10) || seats * 3));
     if (!inviteSlugs.length) {
-      toastError('Firma saýlaň');
+      toastError(t('selectCompany'));
       return;
     }
     setInviteBusy(true);
@@ -213,7 +220,7 @@ export default function StaffPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Invite şowsuz', data.error);
+        toastError(t('inviteFailed'), data.error);
         return;
       }
       setInviteResult({
@@ -225,9 +232,9 @@ export default function StaffPage() {
         tenantSlugs: data.tenantSlugs,
       });
       setInviteLeft(data.expiresInSec || ttlMinutes * 60);
-      toastSuccess('Invite döredildi', `${seats} işgär · ${Math.floor((data.expiresInSec || 0) / 60)} min möhlet`);
+      toastSuccess(t('inviteCreated'), `${seats} işgär · ${Math.floor((data.expiresInSec || 0) / 60)} min möhlet`);
     } catch (e: any) {
-      toastError('Invite şowsuz', String(e));
+      toastError(t('inviteFailed'), String(e));
     } finally {
       setInviteBusy(false);
     }
@@ -250,7 +257,7 @@ export default function StaffPage() {
     }
     try {
       await navigator.clipboard.writeText(inviteResult.url);
-      toastInfo('Link göçürildi', 'Clipboard — islän messengeriňize goýuň');
+      toastInfo(t('linkCopied'), t('clipboardPasteMessenger'));
     } catch {
       toastInfo('Link', inviteResult.url);
     }
@@ -260,9 +267,9 @@ export default function StaffPage() {
     if (!inviteResult?.url) return;
     try {
       await navigator.clipboard.writeText(inviteResult.url);
-      toastSuccess('Göçürildi', 'Invite link clipboard-da');
+      toastSuccess(t('copied'), 'Invite link clipboard-da');
     } catch {
-      toastError('Göçürip bolmady');
+      toastError(t('copyFailed'));
     }
   }
 
@@ -307,19 +314,19 @@ export default function StaffPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(obj);
-      toastSuccess('QR ýüklendi', 'PNG faýl');
+      toastSuccess(t('qrLoaded'), t('pngFile'));
     } catch (e: any) {
       // fallback: open in new tab
       window.open(qrUrl, '_blank');
-      toastInfo('QR', 'Täze tab-da açyldy — saklaň');
+      toastInfo('QR', t('openedNewTabSave'));
     }
   }
 
   async function deleteInvite(token: string) {
     const ok = await confirmDialog({
-      title: 'Invite pozulsynmy?',
-      message: 'Link we QR indi işlemeginden galýar.',
-      confirmLabel: 'Poz',
+      title: t('inviteConfirmDelete'),
+      message: t('linkQrNoLongerWork'),
+      confirmLabel: t('delete'),
       danger: true,
     });
     if (!ok) return;
@@ -330,10 +337,10 @@ export default function StaffPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Pozup bolmady', data.error);
+        toastError(t('deleteFailedLong'), data.error);
         return;
       }
-      toastSuccess('Invite pozuldy');
+      toastSuccess(t('inviteDeleted'));
       if (inviteResult?.token === token) {
         setInviteResult(null);
         setInviteLeft(0);
@@ -355,10 +362,10 @@ export default function StaffPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Uzatmak şowsuz', data.error);
+        toastError(t('extendFailed'), data.error);
         return;
       }
-      toastSuccess('Möhlet uzadyldy', `+${mins} min · galýan ${fmtInviteLeft(data.expiresInSec || 0)}`);
+      toastSuccess(t('deadlineExtended'), `+${mins} min · galýan ${fmtInviteLeft(data.expiresInSec || 0)}`);
       if (inviteResult?.token === token && data.invite) {
         setInviteLeft(data.expiresInSec || 0);
         setInviteResult((prev) =>
@@ -420,8 +427,9 @@ export default function StaffPage() {
   }, [meId, meUsername, meRole, meIsSuper]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!meReady) return;
+    void load();
+  }, [load, meReady]);
 
   useEffect(() => {
     fetch('/api/companies')
@@ -461,7 +469,7 @@ export default function StaffPage() {
   function openEdit(row: StaffRow) {
     // Editor may only open/edit viewer staff
     if (meRole === 'editor' && String(row.role || '').toLowerCase() !== 'viewer') {
-      toastError('Rugsat ýok', 'Editor diňe viewer işgärleri üýtgedip bilýär');
+      toastError(t('noPermission'), t('editorViewerOnly'));
       return;
     }
     // Admin may not open admin / super_admin
@@ -470,7 +478,7 @@ export default function StaffPage() {
       !meIsSuper &&
       ['admin', 'super_admin'].includes(String(row.role || '').toLowerCase())
     ) {
-      toastError('Rugsat ýok', 'Admin diňe viewer we editor işgärleri üýtgedip bilýär');
+      toastError(t('noPermission'), t('adminEditRolesOnly'));
       return;
     }
     setEditing(row);
@@ -518,17 +526,17 @@ export default function StaffPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Saklamak şowsuz');
-        toastError('Saklamak şowsuz', data.error);
+        setError(data.error || t('saveFailedLong'));
+        toastError(t('saveFailedLong'), data.error);
         return;
       }
       setModal(false);
       if (data.warning) {
-        toastInfo(editing ? 'Işgär üýtgedildi' : 'Işgär goşuldy', String(data.warning));
+        toastInfo(editing ? t('staffUpdated') : t('staffAdded'), String(data.warning));
       } else {
         toastSuccess(
-          editing ? 'Işgär üýtgedildi' : 'Işgär goşuldy',
-          'VPS bilen sync edildi · Electron awto-çekip biler'
+          editing ? t('staffUpdated') : t('staffAdded'),
+          t('syncedWithVps')
         );
       }
       await load();
@@ -539,9 +547,9 @@ export default function StaffPage() {
 
   async function remove(row: StaffRow) {
     const ok = await confirmDialog({
-      title: 'Işgäri poz',
+      title: t('deleteStaff'),
       message: `"${row.fullName}" (@${row.username}) pozulsynmy?\nBu amal VPS-e hem ýazylar.`,
-      confirmLabel: 'Poz',
+      confirmLabel: t('delete'),
       danger: true,
     });
     if (!ok) return;
@@ -551,10 +559,10 @@ export default function StaffPage() {
     );
     const data = await res.json();
     if (!res.ok) {
-      toastError('Pozmak şowsuz', data.error);
+      toastError(t('deleteFailedLong'), data.error);
       return;
     }
-    toastSuccess('Pozuldy', 'VPS bilen sync edildi');
+    toastSuccess(t('deleted'), 'VPS bilen sync edildi');
     await load();
   }
 
@@ -567,7 +575,7 @@ export default function StaffPage() {
         body: JSON.stringify({ id, action, role: 'viewer' }),
       });
       if (!res.ok) {
-        toastError('Amal şowsuz');
+        toastError(t('actionFailed'));
         return;
       }
       toastSuccess(action === 'approve' ? 'Tassyklanyldy' : 'Ret edildi');
@@ -581,7 +589,7 @@ export default function StaffPage() {
     setSyncing(true);
     try {
       await load();
-      toastInfo('Täzelendi', 'VPS catalog-dan işgärler çekildi');
+      toastInfo(t('refreshed'), t('staffPulledFromVps'));
     } finally {
       setSyncing(false);
     }
@@ -591,7 +599,7 @@ export default function StaffPage() {
     () => [
       {
         id: 'fullName',
-        header: 'Ady',
+        header: t('name'),
         mobilePrimary: true,
         accessor: (r) => r.fullName,
         cell: (r) => <span className="font-medium text-white">{r.fullName}</span>,
@@ -604,7 +612,7 @@ export default function StaffPage() {
       },
       {
         id: 'company',
-        header: 'Firma',
+        header: t('company'),
         accessor: (r) => r.companyName || r.tenantSlug || '',
         cell: (r) => (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/20">
@@ -612,11 +620,11 @@ export default function StaffPage() {
           </span>
         ),
       },
-      { id: 'phone', header: 'Telefon', accessor: (r) => r.phone || '' },
+      { id: 'phone', header: t('phone'), accessor: (r) => r.phone || '' },
       { id: 'email', header: 'Email', accessor: (r) => r.email || '' },
       {
         id: 'role',
-        header: 'Rol',
+        header: t('role'),
         accessor: (r) => r.role,
         cell: (r) => (
           <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300">
@@ -626,17 +634,17 @@ export default function StaffPage() {
       },
       {
         id: 'active',
-        header: 'Status',
+        header: t('status'),
         accessor: (r) => (r.active ? 1 : 0),
         cell: (r) => (
           <span className={r.active ? 'text-emerald-400 text-xs' : 'text-slate-500 text-xs'}>
-            {r.active ? 'Işjeň' : 'Öçürilen'}
+            {r.active ? t('activeAlt') : t('deletedAdj')}
           </span>
         ),
       },
       {
         id: 'actions',
-        header: 'Amal',
+        header: t('actions'),
         sortable: false,
         accessor: () => '',
         cell: (r) => (
@@ -688,7 +696,7 @@ export default function StaffPage() {
           )}
           <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4" />
-            <span className="text-xs sm:text-sm">Täze işgär</span>
+            <span className="text-xs sm:text-sm">{t('newStaff')}</span>
           </Button>
         </div>
       </div>
@@ -737,8 +745,8 @@ export default function StaffPage() {
         rows={staff}
         rowKey={(r) => r.id}
         storageKey="bi-staff"
-        searchPlaceholder="Gözle..."
-        emptyMessage={loading ? 'Ýüklenýär...' : 'Işgär ýok'}
+        searchPlaceholder={t('search')}
+        emptyMessage={!meReady || loading ? t('loading') : t('staffEmpty')}
         onRowClick={openEdit}
       />
 
@@ -754,7 +762,7 @@ export default function StaffPage() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-white leading-tight">
-                    {editing ? 'Işgäri üýtget' : 'Täze işgär'}
+                    {editing ? t('editStaff') : t('newStaff')}
                   </h3>
                   <p className="text-[11px] text-slate-500 truncate">VPS bilen sync bolýar</p>
                 </div>
@@ -783,7 +791,7 @@ export default function StaffPage() {
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <label className="text-[11px] font-medium text-slate-400">
-                  Parol {editing ? '(üýtget)' : '*'}
+                  Parol {editing ? t('editParen') : '*'}
                 </label>
                 <div className="relative">
                   <input
@@ -830,7 +838,7 @@ export default function StaffPage() {
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
               <Select
-                label="Rol"
+                label={t('role')}
                 value={form.role}
                 onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
                 options={roleOptions}
@@ -856,7 +864,7 @@ export default function StaffPage() {
               </label>
               <input
                 type="search"
-                placeholder="Firma gözle…"
+                placeholder={t('searchFirm')}
                 value={firmSearch}
                 onChange={(e) => setFirmSearch(e.target.value)}
                 className="mb-1.5 w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-600"
@@ -874,7 +882,7 @@ export default function StaffPage() {
                   if (!list.length) {
                     return (
                       <div className="px-2 py-2 text-[11px] text-slate-500">
-                        {visibleCompanies.length ? 'Gözleg boýunça ýok' : 'Firma tapylmady'}
+                        {visibleCompanies.length ? t('noSearchResults') : t('companyNotFound')}
                       </div>
                     );
                   }
@@ -921,9 +929,7 @@ export default function StaffPage() {
               <Button className="flex-1 h-9 text-sm" loading={saving} onClick={save}>
                 Ýatda sakla
               </Button>
-              <Button variant="ghost" className="h-9 text-sm" onClick={() => setModal(false)}>
-                Ýatyr
-              </Button>
+              <Button variant="ghost" className="h-9 text-sm" onClick={() => setModal(false)}>{t('cancel')}</Button>
             </div>
             </div>
           </div>
@@ -1112,7 +1118,7 @@ export default function StaffPage() {
                 <button
                   type="button"
                   className="p-1.5 text-slate-400 hover:text-white"
-                  title="Täzele"
+                  title={t('refresh')}
                   onClick={() => void loadInvitesList()}
                 >
                   <RefreshCw className={`h-4 w-4 ${invitesLoading ? 'animate-spin' : ''}`} />
@@ -1125,7 +1131,7 @@ export default function StaffPage() {
 
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
               {invitesLoading && invitesList.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">Ýüklenýär...</p>
+                <p className="text-sm text-slate-500 text-center py-8">{t('loading')}</p>
               ) : invitesList.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-8">
                   Active invite ýok. «Invite» bilen dörediň.
@@ -1166,7 +1172,7 @@ export default function StaffPage() {
                             {fmtInviteLeft(row.expiresInSec)}
                           </span>
                         ) : (
-                          'möhleti gutardy'
+                          t('deadlineExpired')
                         )}
                       </span>
                     </div>
@@ -1199,7 +1205,7 @@ export default function StaffPage() {
                         onClick={async () => {
                           try {
                             await navigator.clipboard.writeText(row.url);
-                            toastSuccess('Link göçürildi');
+                            toastSuccess(t('linkCopied'));
                           } catch {
                             toastInfo('Link', row.url);
                           }
@@ -1215,9 +1221,7 @@ export default function StaffPage() {
                         loading={inviteActionToken === row.token}
                         onClick={() => void deleteInvite(row.token)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Poz
-                      </Button>
+                        <Trash2 className="h-3.5 w-3.5" />{t('delete')}</Button>
                     </div>
 
                     <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
@@ -1230,7 +1234,7 @@ export default function StaffPage() {
                         onChange={(e) =>
                           setTopUpMinutes((prev) => ({ ...prev, [row.token]: e.target.value }))
                         }
-                        title="Goşuljak minut"
+                        title={t('minutesToAdd')}
                       />
                       <span className="text-[11px] text-slate-500">min</span>
                       <Button
@@ -1240,7 +1244,7 @@ export default function StaffPage() {
                         onClick={() => void topUpInvite(row.token)}
                       >
                         <Clock className="h-3.5 w-3.5" />
-                        {row.expired ? 'Täzeden aç (+min)' : 'Top-up'}
+                        {row.expired ? t('reopenPlusMin') : 'Top-up'}
                       </Button>
                     </div>
                   </div>

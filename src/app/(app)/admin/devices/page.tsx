@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
 import {
   Server,
   RefreshCw,
@@ -20,9 +21,12 @@ import { ModalPortal } from '@/components/ui/ModalPortal';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { useModalAnimations } from '@/lib/use-modal-animations';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Device {
   id: string;
+  /** some payloads may use deviceId alias */
+  deviceId?: string;
   name?: string;
   hostname?: string;
   osPlatform?: string;
@@ -67,7 +71,7 @@ const onlineStyle = {
   offline: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
 } as const;
 
-const onlineLabel = { online: 'Online', offline: 'Offline' } as const;
+const onlineLabelKeys = { online: 'online', offline: 'offline' } as const;
 
 const statusStyle: Record<string, string> = {
   pending: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
@@ -76,11 +80,16 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function DevicesPage() {
+  const { t } = useLocale();
+
   const modalAnimOn = useModalAnimations();
   const [devices, setDevices] = useState<Device[]>([]);
   const [tenants, setTenants] = useState<TenantOpt[]>([]);
   const [canApprove, setCanApprove] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [deviceStatusFilter, setDeviceStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [onlineFilter, setOnlineFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [deviceSearch, setDeviceSearch] = useState('');
   const [acting, setActing] = useState<string | null>(null);
   const [approveId, setApproveId] = useState<string | null>(null);
   const [selectedSlugs, setSelectedSlugs] = useState<string[]>([]);
@@ -186,7 +195,7 @@ export default function DevicesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Buýruk', data.error || 'şowsuz');
+        toastError(t('command'), data.error || t('failedLower'));
         return;
       }
       if (data.delivered) {
@@ -196,12 +205,12 @@ export default function DevicesPage() {
         );
       } else {
         toastWarning(
-          'Enjam offline?',
-          data.message || 'Device-events bagly däl — Electron açyk we online bolmaly'
+          t('deviceOffline'),
+          data.message || t('deviceEventsOffline')
         );
       }
     } catch (e) {
-      toastError('Buýruk', e instanceof Error ? e.message : String(e));
+      toastError(t('command'), e instanceof Error ? e.message : String(e));
     } finally {
       setCmdActing(null);
     }
@@ -222,10 +231,10 @@ export default function DevicesPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak şowsuz', data.error);
+        toastError(t('saveFailedLong'), data.error);
         return;
       }
-      toastSuccess('Firma sazlamalary saklandy', 'VPS + Electron sync');
+      toastSuccess(t('companySettingsSaved'), 'VPS + Electron sync');
       setSettingsDevice(null);
     } finally {
       setSettingsSaving(false);
@@ -238,7 +247,7 @@ export default function DevicesPage() {
       const res = await fetch('/api/devices');
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Enjamlar', data?.error || 'Ýüklenmedi');
+        toastError(t('devices'), data?.error || t('loadFailedCap'));
         setDevices([]);
         return;
       }
@@ -246,7 +255,7 @@ export default function DevicesPage() {
       setTenants(Array.isArray(data.tenants) ? data.tenants : []);
       setCanApprove(Boolean(data.canApprove));
     } catch (e: any) {
-      toastError('Enjamlar', e?.message || 'Network error');
+      toastError(t('devices'), e?.message || 'Network error');
       setDevices([]);
     } finally {
       setLoading(false);
@@ -261,6 +270,20 @@ export default function DevicesPage() {
     () => devices.filter((d) => d.status === 'pending').length,
     [devices]
   );
+
+  const filteredDevices = useMemo(() => {
+    return devices.filter((d) => {
+      if (deviceStatusFilter !== 'all' && d.status !== deviceStatusFilter) return false;
+      const o = isDeviceOnline(d.lastSeenAt);
+      if (onlineFilter !== 'all' && o !== onlineFilter) return false;
+      if (deviceSearch.trim()) {
+        const q = deviceSearch.trim().toLowerCase();
+        const hay = `${d.name || ''} ${d.hostname || ''} ${d.id || ''} ${d.deviceId || ''} ${d.tenantSlug || ''} ${(d.companySlugs || []).join(' ')}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [devices, deviceStatusFilter, onlineFilter, deviceSearch]);
 
   function openApprove(d: Device) {
     setApproveId(d.id);
@@ -295,7 +318,7 @@ export default function DevicesPage() {
 
   async function saveCreateFirm() {
     if (!createFirmName.trim()) {
-      toastError('Ady gerek', 'Firma adyny ýazyň');
+      toastError('Ady gerek', t('needCompanyName'));
       return;
     }
     const slug =
@@ -306,13 +329,13 @@ export default function DevicesPage() {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-|-$/g, '');
     if (!slug) {
-      toastError('Slug gerek', 'Slug boş bolup bilmez');
+      toastError('Slug gerek', t('slugCannotBeEmpty'));
       return;
     }
     const exists = tenants.find((t) => t.slug.toLowerCase() === slug.toLowerCase());
     if (exists) {
       toastError(
-        'Slug eýýäm bar',
+        t('slugExists'),
         `«${slug}» slug «${exists.name}» firmasynda ulanylýar. Başga slug saýlaň.`
       );
       return;
@@ -332,12 +355,12 @@ export default function DevicesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Firma goşulmady', data.error || data.message || 'şowsuz');
+        toastError(t('companyAddFailed'), data.error || data.message || t('failedLower'));
         return;
       }
       const newSlug = String(data.tenant?.slug || data.company?.slug || data.slug || slug);
       const newName = String(data.tenant?.name || data.company?.name || createFirmName.trim());
-      toastSuccess('Firma goşuldy', newName);
+      toastSuccess(t('companyAdded'), newName);
       // Refresh tenant list and select the new firm
       try {
         const cat = await fetch('/api/catalog?refresh=1').then((r) => r.json());
@@ -360,7 +383,7 @@ export default function DevicesPage() {
       }
       setCreateFirmOpen(false);
     } catch (e) {
-      toastError('Firma goşulmady', String(e));
+      toastError(t('companyAddFailed'), String(e));
     } finally {
       setCreateFirmSaving(false);
     }
@@ -368,7 +391,7 @@ export default function DevicesPage() {
 
   async function submitApprove() {
     if (!approveId || selectedSlugs.length === 0) {
-      toastError('Firma saýla', 'Iň az bir firma saýlamaly');
+      toastError(t('selectFirm'), t('selectAtLeastOneCompany'));
       return;
     }
     setActing(approveId);
@@ -380,7 +403,7 @@ export default function DevicesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Tassyklama', data?.error || 'Şowsuz');
+        toastError('Tassyklama', data?.error || t('failed'));
         return;
       }
       toastSuccess('Tassyklanyldy', selectedSlugs.join(', '));
@@ -401,10 +424,10 @@ export default function DevicesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Status', data?.error || 'Şowsuz');
+        toastError(t('status'), data?.error || t('failed'));
         return;
       }
-      toastSuccess('Status üýtgedildi', status);
+      toastSuccess(t('statusUpdated'), status);
       await load();
     } finally {
       setActing(null);
@@ -413,9 +436,9 @@ export default function DevicesPage() {
 
   async function removeDevice(d: Device) {
     const ok = await confirmDialog({
-      title: 'Enjamy poz',
+      title: t('deleteDevice'),
       message: `«${d.hostname || d.id}» enjamy pozulsynmy? Tunnel we baglanyşyk ýitýär.`,
-      confirmLabel: 'Poz',
+      confirmLabel: t('delete'),
       danger: true,
     });
     if (!ok) return;
@@ -428,10 +451,10 @@ export default function DevicesPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Pozmak', data?.error || 'Şowsuz');
+        toastError(t('confirmDeleteTitle'), data?.error || t('failed'));
         return;
       }
-      toastSuccess('Pozuldy', d.hostname || d.id);
+      toastSuccess(t('deleted'), d.hostname || d.id);
       await load();
     } finally {
       setActing(null);
@@ -462,8 +485,48 @@ export default function DevicesPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-500 text-sm">Ýüklenýär...</p>
-      ) : devices.length === 0 ? (
+        <p className="text-slate-500 text-sm">{t('loading')}</p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <input
+              type="search"
+              value={deviceSearch}
+              onChange={(e) => setDeviceSearch(e.target.value)}
+              placeholder={t('searchNameHost')}
+              className="h-9 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100 min-w-[160px]"
+            />
+            {(['all', 'online', 'offline'] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setOnlineFilter(k)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] border ${
+                  onlineFilter === k
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-slate-900 text-slate-400 border-slate-700'
+                }`}
+              >
+                {k === 'all' ? t('allShort') : k === 'online' ? t('online') : t('offline')}
+              </button>
+            ))}
+            {(['all', 'pending', 'approved', 'rejected'] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setDeviceStatusFilter(k)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] border ${
+                  deviceStatusFilter === k
+                    ? 'bi-filter-chip-active bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                    : 'bg-slate-900 text-slate-400 border-slate-700'
+                }`}
+              >
+                {k === 'all' ? t('statusAll') : k}
+              </button>
+            ))}
+            <span className="text-[11px] text-slate-500 ml-auto">{filteredDevices.length} / {devices.length}</span>
+          </div>
+      {filteredDevices.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-700 px-6 py-14 text-center">
           <Server className="h-9 w-9 text-slate-600 mx-auto mb-2" />
           <p className="text-slate-400">Enjam ýok</p>
@@ -472,154 +535,113 @@ export default function DevicesPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {devices.map((d) => {
-            const slugs = d.companySlugs?.length
-              ? d.companySlugs
-              : d.tenantSlug
-                ? [d.tenantSlug]
-                : [];
-            const names = d.companyNames?.length
-              ? d.companyNames
-              : d.companyName
-                ? [d.companyName]
-                : [];
-            return (
-              <div
-                key={d.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-semibold text-white truncate">
-                        {d.hostname || d.name || d.id}
-                      </p>
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${
-                          statusStyle[d.status] || 'bg-slate-800 text-slate-300 border-slate-700'
-                        }`}
-                      >
-                        {d.status}
-                      </span>
-                      {(() => {
-                        const o = isDeviceOnline(d.lastSeenAt);
-                        return (
-                          <span className="inline-flex flex-col sm:flex-row sm:items-center gap-1">
-                            <span
-                              className={`text-[11px] px-2 py-0.5 rounded-md border font-medium inline-flex items-center gap-1 ${onlineStyle[o]}`}
-                              title={d.lastSeenAt || 'lastSeen ýok'}
-                            >
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full ${
-                                  o === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'
-                                }`}
-                              />
-                              {onlineLabel[o]}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {formatLastSync(d.lastSeenAt)}
-                            </span>
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    <p className="text-xs font-mono text-slate-500 break-all">{d.id}</p>
-                    <div className="flex flex-wrap gap-3 text-[11px] text-slate-400 mt-1">
-                      {d.osPlatform && (
-                        <span className="inline-flex items-center gap-1">
-                          <Cpu className="h-3 w-3" />
-                          {d.osPlatform} {d.osRelease || ''}
-                        </span>
-                      )}
-                      {d.ramGb != null && (
-                        <span className="inline-flex items-center gap-1">
-                          <HardDrive className="h-3 w-3" />
-                          {d.ramGb} GB
-                        </span>
-                      )}
-                      {d.ipAddress && (
-                        <span className="inline-flex items-center gap-1">
-                          <Globe className="h-3 w-3" />
-                          {d.ipAddress}
-                        </span>
-                      )}
-                      {d.appVersion && <span>v{d.appVersion}</span>}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                      <Building2 className="h-3.5 w-3.5 text-indigo-400" />
-                      {slugs.length === 0 ? (
-                        <span className="text-xs text-amber-400">Firma baglanmadyk</span>
-                      ) : (
-                        slugs.map((s, i) => (
-                          <span
-                            key={s}
-                            className="text-[11px] px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 font-mono"
-                          >
-                            {names[i] || s} ({s})
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 shrink-0">
-                    {canApprove && (d.status === 'pending' || d.status === 'blocked' || slugs.length === 0) && (
-                      <Button
-                        size="sm"
-                        onClick={() => openApprove(d)}
-                        disabled={acting === d.id}
-                      >
-                        <Check className="h-3.5 w-3.5 mr-1" />
-                        Tassykla / Firma
-                      </Button>
-                    )}
-                    {d.status === 'approved' && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => openApprove(d)}
-                        disabled={acting === d.id}
-                      >
-                        <Building2 className="h-3.5 w-3.5 mr-1" />
-                        Firmalary üýtget
-                      </Button>
-                    )}
-                    {d.status !== 'blocked' && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void setStatus(d.id, 'blocked')}
-                        disabled={acting === d.id}
-                      >
-                        <Ban className="h-3.5 w-3.5 mr-1" />
-                        Duruz
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => void removeDevice(d)}
-                      disabled={acting === d.id}
-                      className="text-rose-300"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      title="Firma Sazlamalary"
-                      onClick={() => openFirmaSazlamalary(d)}
-                      disabled={acting === d.id}
-                    >
-                      <Settings className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+        <DataTable
+          columns={[
+            {
+              id: 'name',
+              header: t('deviceOne'),
+              mobilePrimary: true,
+              accessor: (d) => d.name || d.hostname || d.deviceId || d.id,
+              cell: (d) => (
+                <div>
+                  <p className="font-medium text-slate-100">{d.name || d.hostname || t('deviceOne')}</p>
+                  <p className="text-[10px] text-slate-500 font-mono truncate max-w-[160px]">{d.deviceId || d.id}</p>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              ),
+            },
+            {
+              id: 'online',
+              header: t('online'),
+              accessor: (d) => isDeviceOnline(d.lastSeenAt),
+              cell: (d) => {
+                const o = isDeviceOnline(d.lastSeenAt);
+                return (
+                  <span className={`text-[11px] px-2 py-0.5 rounded-md border font-medium ${onlineStyle[o]}`}>
+                    {t(onlineLabelKeys[o])}
+                  </span>
+                );
+              },
+            },
+            {
+              id: 'status',
+              header: t('status'),
+              accessor: (d) => d.status,
+            },
+            {
+              id: 'firms',
+              header: t('companies'),
+              accessor: (d) => (d.companySlugs || []).join(', ') || d.tenantSlug || '—',
+            },
+            {
+              id: 'actions',
+              header: t('actions'),
+              sortable: false,
+              accessor: () => '',
+              cell: (d) => (
+                <div className="flex flex-wrap gap-0.5" onClick={(e) => e.stopPropagation()}>
+                  {(d.status === 'pending' || d.status === 'blocked' || !(d.companySlugs || []).length) && (
+                    <button
+                      type="button"
+                      title="Tassykla / Firma"
+                      disabled={acting === d.id}
+                      onClick={() => openApprove(d)}
+                      className="bi-action-icon bi-action-ok p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-40"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                  )}
+                  {d.status === 'approved' && (
+                    <button
+                      type="button"
+                      title={t('editFirms')}
+                      disabled={acting === d.id}
+                      onClick={() => openApprove(d)}
+                      className="bi-action-icon bi-action-primary p-1.5 rounded-lg text-indigo-300 hover:bg-indigo-500/15 disabled:opacity-40"
+                    >
+                      <Building2 className="h-4 w-4" />
+                    </button>
+                  )}
+                  {d.status !== 'blocked' && (
+                    <button
+                      type="button"
+                      title="Duruz"
+                      disabled={acting === d.id}
+                      onClick={() => void setStatus(d.id, 'blocked')}
+                      className="bi-action-icon bi-action-warn p-1.5 rounded-lg text-amber-300 hover:bg-amber-500/15 disabled:opacity-40"
+                    >
+                      <Ban className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    title={t('companySettings')}
+                    disabled={acting === d.id}
+                    onClick={() => openFirmaSazlamalary(d)}
+                    className="bi-action-icon bi-action-muted p-1.5 rounded-lg text-slate-300 hover:bg-slate-700/80 disabled:opacity-40"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title={t('delete')}
+                    disabled={acting === d.id}
+                    onClick={() => void removeDevice(d)}
+                    className="bi-action-icon bi-action-danger p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/15 disabled:opacity-40"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ),
+            },
+          ]}
+          rows={filteredDevices}
+          rowKey={(d) => d.id}
+          storageKey="bi-devices-v1"
+          searchPlaceholder={t('search')}
+          emptyMessage={t('noDevices')}
+        />
+      )}
+        </>
       )}
 
       {/* Approve modal */}
@@ -632,15 +654,13 @@ export default function DevicesPage() {
               Saýlanan firmalar üçin Electron tunnel we sync açylýar. BI hasabatlary şol firmalar bilen işleýär.
             </p>
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] uppercase tracking-wide text-slate-500">Firmalar</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">{t('companies')}</p>
               <button
                 type="button"
                 onClick={openCreateFirm}
                 className="inline-flex items-center gap-1 text-xs font-medium text-indigo-300 hover:text-indigo-200"
               >
-                <Plus className="h-3.5 w-3.5" />
-                Täze firma
-              </button>
+                <Plus className="h-3.5 w-3.5" />{t('newCompany')}</button>
             </div>
             {tenants.length === 0 ? (
               <div className="rounded-xl border border-dashed border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
@@ -676,9 +696,7 @@ export default function DevicesPage() {
                 size="sm"
                 variant="secondary"
                 onClick={() => setApproveId(null)}
-              >
-                Ýatyr
-              </Button>
+              >{t('cancel')}</Button>
               <Button
                 size="sm"
                 loading={acting === approveId}
@@ -701,9 +719,7 @@ export default function DevicesPage() {
             <div className={`relative w-full sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-4 shadow-2xl${modalAnimOn ? ' animate-in slide-in-from-bottom-4 duration-200' : ''}`}>
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-indigo-400" />
-                  Täze firma
-                </h3>
+                  <Building2 className="h-4 w-4 text-indigo-400" />{t('newCompany')}</h3>
                 <button type="button" className="p-1.5 text-slate-400 hover:text-white" onClick={() => setCreateFirmOpen(false)}>
                   <X className="h-4 w-4" />
                 </button>
@@ -751,9 +767,7 @@ export default function DevicesPage() {
                 </div>
               </div>
               <div className="flex gap-2 justify-end pt-1">
-                <Button size="sm" variant="secondary" onClick={() => setCreateFirmOpen(false)}>
-                  Ýatyr
-                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setCreateFirmOpen(false)}>{t('cancel')}</Button>
                 <Button size="sm" loading={createFirmSaving} onClick={() => void saveCreateFirm()}>
                   <Plus className="h-3.5 w-3.5" />
                   Goş we saýla
@@ -780,9 +794,9 @@ export default function DevicesPage() {
                 <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Başlatmak</p>
                 <div className="space-y-1 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
                   {([
-                    ['autostart', 'Autostart (Windows bilen açylsyn)'],
-                    ['startMinimized', 'Minimized başlat'],
-                    ['trayMinimize', 'Ýapylanda tray-e düşsün'],
+                    ['autostart', t('autostartWindows')],
+                    ['startMinimized', t('startMinimized')],
+                    ['trayMinimize', t('minimizeToTray')],
                     ['autoLogin', 'Awto login'],
                   ] as const).map(([key, label]) => (
                     <label key={key} className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1.5">
@@ -919,9 +933,7 @@ export default function DevicesPage() {
                 <Button className="flex-1" loading={settingsSaving} onClick={saveFirmaSazlamalary}>
                   Ýatda sakla
                 </Button>
-                <Button variant="ghost" onClick={() => setSettingsDevice(null)}>
-                  Ýatyr
-                </Button>
+                <Button variant="ghost" onClick={() => setSettingsDevice(null)}>{t('cancel')}</Button>
               </div>
             </div>
           </div>

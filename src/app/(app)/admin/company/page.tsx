@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Building2, Save } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Form = {
   name: string;
@@ -44,6 +45,8 @@ const empty: Form = {
 };
 
 export default function CompanyPage() {
+  const { t } = useLocale();
+
   const [form, setForm] = useState<Form>(empty);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,20 +96,20 @@ export default function CompanyPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setErr(data.error || 'Saklamak şowsuz');
+        setErr(data.error || t('saveFailedLong'));
         return;
       }
       setMsg(
         data.gatewaySynced
-          ? 'Saklandy (ýerli + VPS)'
-          : 'Ýerli saklandy (VPS offline bolsa diňe local)'
+          ? t('savedLocalAndVps')
+          : t('savedLocalOnly')
       );
     } finally {
       setSaving(false);
     }
   }
 
-  if (loading) return <p className="text-slate-500 text-sm">Ýüklenýär...</p>;
+  if (loading) return <p className="text-slate-500 text-sm">{t('loading')}</p>;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -135,17 +138,17 @@ export default function CompanyPage() {
           <Input label="Slug" value={form.slug} disabled />
           <Input label="Kanuny ady" value={form.legalName} onChange={(e) => set('legalName', e.target.value)} />
           <Input label="Salgyt belgisi" value={form.taxId} onChange={(e) => set('taxId', e.target.value)} />
-          <Input label="Hasaba alyş №" value={form.registrationNumber} onChange={(e) => set('registrationNumber', e.target.value)} />
-          <Input label="Ugur / industriýa" value={form.industry} onChange={(e) => set('industry', e.target.value)} />
-          <Input label="Ýurt" value={form.country} onChange={(e) => set('country', e.target.value)} />
-          <Input label="Şäher" value={form.city} onChange={(e) => set('city', e.target.value)} />
+          <Input label={t('regNumber')} value={form.registrationNumber} onChange={(e) => set('registrationNumber', e.target.value)} />
+          <Input label={t('industry')} value={form.industry} onChange={(e) => set('industry', e.target.value)} />
+          <Input label={t('country')} value={form.country} onChange={(e) => set('country', e.target.value)} />
+          <Input label={t('city')} value={form.city} onChange={(e) => set('city', e.target.value)} />
         </div>
         <Input label="Salgy" value={form.address} onChange={(e) => set('address', e.target.value)} />
         <div className="grid sm:grid-cols-2 gap-3">
-          <Input label="Telefon" value={form.phone} onChange={(e) => set('phone', e.target.value)} />
+          <Input label={t('phone')} value={form.phone} onChange={(e) => set('phone', e.target.value)} />
           <Input label="Email" value={form.email} onChange={(e) => set('email', e.target.value)} />
           <Input label="Website" value={form.website} onChange={(e) => set('website', e.target.value)} />
-          <Input label="Kontakt şahsy" value={form.contactPerson} onChange={(e) => set('contactPerson', e.target.value)} />
+          <Input label={t('contactPerson')} value={form.contactPerson} onChange={(e) => set('contactPerson', e.target.value)} />
           <Input label="Kontakt telefon" value={form.contactPhone} onChange={(e) => set('contactPhone', e.target.value)} />
           <Input label="Kontakt email" value={form.contactEmail} onChange={(e) => set('contactEmail', e.target.value)} />
         </div>

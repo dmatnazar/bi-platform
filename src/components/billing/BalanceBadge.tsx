@@ -1,10 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+
 import { Wallet, Sparkles, Send, X, AlertTriangle, Check, Info, Clock, Zap } from 'lucide-react';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
+import { shouldShowBalanceWarn, balanceWarnKey } from '@/lib/balance-warn';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Tariff {
   id: string;
@@ -76,16 +79,17 @@ function fmtTmt(n: number | null | undefined) {
 }
 
 function TariffCard({
-  t,
+  tariff,
   selected,
   current,
   onSelect,
 }: {
-  t: Tariff;
+  tariff: Tariff;
   selected?: boolean;
   current?: boolean;
   onSelect?: () => void;
 }) {
+  const { t } = useLocale();
   return (
     <button
       type="button"
@@ -102,42 +106,38 @@ function TariffCard({
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-semibold text-white flex items-center gap-1.5">
-            {t.name}
+            {tariff.name}
             {current && (
               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
-                häzirki
+                {t('currentBadge')}
               </span>
             )}
             {selected && !current && (
               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
-                saýlanan
+                {t('selected')}
               </span>
             )}
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{t.description || '—'}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">{tariff.description || '—'}</p>
         </div>
         <div className="text-right shrink-0">
           <p className="text-sm font-bold text-indigo-300">
-            {t.priceMonthly === 0 ? 'Mugt' : `${t.priceMonthly} TMT`}
+            {tariff.priceMonthly === 0 ? t('freePlan') : `${tariff.priceMonthly} TMT`}
           </p>
-          {t.priceMonthly > 0 && <p className="text-[9px] text-slate-500">aýda</p>}
+          {tariff.priceMonthly > 0 && <p className="text-[9px] text-slate-500">{t('perMonth')}</p>}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] text-slate-300 pt-2 border-t border-slate-800/80">
         <span className="flex items-center gap-1">
           <Wallet className="h-3 w-3 text-emerald-400" />
-          Aýda <strong className="text-white">{t.includedCredits.toLocaleString()}</strong> REQ (sorag)
+          {t('monthReq').replace('{n}', tariff.includedCredits.toLocaleString())}
         </span>
         <span className="flex items-center gap-1">
           <Zap className="h-3 w-3 text-amber-400" />
-          Günde max <strong className="text-white">{t.maxApiCallsDay}</strong> REQ (sorag)
+          {t('dayMaxReq').replace('{n}', String(tariff.maxApiCallsDay))}
         </span>
-        <span>
-          Max <strong className="text-white">{t.maxStaff}</strong> işgär
-        </span>
-        <span>
-          Max <strong className="text-white">{t.maxConnections}</strong> DB baglanyşyk
-        </span>
+        <span>{t('maxStaffN').replace('{n}', String(tariff.maxStaff))}</span>
+        <span>{t('maxDbN').replace('{n}', String(tariff.maxConnections))}</span>
       </div>
     </button>
   );
@@ -164,6 +164,8 @@ export function BalanceBadge({
   /** admin / super_admin — REQ hasaplanýar, free */
   role?: string;
 }) {
+  const { t } = useLocale();
+
   const isAdminFree =
     role === 'admin' ||
     role === 'super_admin' ||
@@ -217,23 +219,31 @@ export function BalanceBadge({
       setWallets(list);
       if (list[0]?.wallet) {
         setWallet(list[0].wallet);
-        const w = list[0].wallet;
-        if (w.level === 'empty' || w.level === 'critical') {
-          try {
-            const key = `bal-warn-${list[0].tenantSlug}-${w.level}`;
-            const last = sessionStorage.getItem(key);
-            const now = Date.now();
-            if (!last || now - Number(last) > 10 * 60 * 1000) {
-              sessionStorage.setItem(key, String(now));
+      }
+      // Bir gezek (badge + billing sahypa deňleşdirilen)
+      try {
+        if (typeof window !== 'undefined' && window.location.pathname.includes('/admin/billing')) {
+          // billing page özüni görkezýär
+        } else {
+          const bad = list.filter(
+            (e) => e.wallet && (e.wallet.level === 'empty' || e.wallet.level === 'critical')
+          );
+          if (bad.length) {
+            const key = balanceWarnKey(bad.map((e) => e.tenantSlug));
+            if (shouldShowBalanceWarn(key)) {
+              const names = bad.map((e) => e.tenantName || e.tenantSlug).join(', ');
               toastWarning(
-                w.level === 'empty' ? 'Balans gutardy' : 'Balans critiki pes',
-                `${fmtTmt(w.balanceCredits)} galdy — top-up ýa-da tarif üýtgetme gerek bolup biler`
+                t('balanceWarning'),
+                (bad.length === 1
+                  ? `${names}: top-up ýa-da tarif üýtgetme gerek`
+                  : `${bad.length} firma: ${names}`) + t('clickFirms'),
+                '/admin/billing?alert=1'
               );
             }
-          } catch {
-            /* */
           }
         }
+      } catch {
+        /* */
       }
       if (Array.isArray(data.tariffs)) setTariffs(data.tariffs.filter((t: Tariff) => t.isActive !== false));
     } catch {
@@ -246,6 +256,14 @@ export function BalanceBadge({
     const t = setInterval(() => void load(), 5000);
     return () => clearInterval(t);
   }, [load]);
+
+  const alertFirms = useMemo(
+    () =>
+      wallets.filter(
+        (e) => e.wallet && (e.wallet.level === 'empty' || e.wallet.level === 'critical')
+      ),
+    [wallets]
+  );
 
   const colors = useMemo(() => {
     if (!wallet) return { text: 'text-slate-400', bg: 'bg-slate-800/60', ring: 'ring-slate-700/40', bar: 'bg-slate-600' };
@@ -260,9 +278,9 @@ export function BalanceBadge({
     if (!end) return null;
     const ms = Date.parse(end) - Date.now();
     if (Number.isNaN(ms)) return null;
-    if (ms <= 0) return 'Döwür gutardy — täze döwür / top-up gerek';
+    if (ms <= 0) return t('periodEndedNeedTopup');
     const days = Math.ceil(ms / (24 * 3600 * 1000));
-    return `Tarif döwri ~${days} gün galdy`;
+    return t('periodDaysLeft').replace('{n}', String(days));
   }, [wallet?.subscription?.periodEnd]);
 
   /** Sum REQ + approx TMT across all linked companies */
@@ -285,7 +303,7 @@ export function BalanceBadge({
 
   async function sendRequest() {
     if (!selectedTariffId) {
-      toastError('Tarif saýlaň', 'Indiki tarifi saýlap, soň sorag ugradyň');
+      toastError(t('selectTariff'), t('pickNextTariffThenRequest'));
       return;
     }
     setSending(true);
@@ -307,12 +325,12 @@ export function BalanceBadge({
       }
       toastSuccess(
         'Sorag ugradyldy',
-        'Admin tassyklansoň tarif üýtgär. Galan REQ balansyňyz ýitmeýär — täze tarife geçýär.'
+        t('tariffChangeNote')
       );
       setOpen(false);
       setMessage('');
     } catch (e) {
-      toastError('Şowsuz', String(e));
+      toastError(t('failed'), String(e));
     } finally {
       setSending(false);
     }
@@ -323,7 +341,7 @@ export function BalanceBadge({
   if (isAdminFree) {
     return (
       <div
-        title="Administrator — REQ hasaplanmaýar (free)"
+        title={t('adminFreeReq')}
         className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 ring-1 ring-emerald-500/30 bg-emerald-500/10"
       >
         <Wallet className="h-3.5 w-3.5 text-emerald-400" />
@@ -339,17 +357,26 @@ export function BalanceBadge({
 
   return (
     <>
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
           setOpen(true);
           void load();
         }}
-        title="Balans (REQ) we tarif"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(true);
+            void load();
+          }
+        }}
+        title={t('balanceAndTariff')}
         className={`
-          group flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-left transition-all duration-500
+          group flex items-center gap-1.5 rounded-xl px-2 py-1.5 text-left transition-all duration-500 cursor-pointer
           ring-1 ${colors.ring} ${colors.bg} shadow-lg hover:brightness-110
           ${wallet?.level === 'empty' /* REQ gutardy — tarif teklip */ || wallet?.level === 'critical' ? 'animate-pulse' : ''}
         `}
@@ -401,7 +428,7 @@ export function BalanceBadge({
             );
           })()}
         </div>
-      </button>
+      </div>
 
       {open && (
         <ModalPortal open>
@@ -415,9 +442,15 @@ export function BalanceBadge({
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <h3 className="text-lg font-semibold text-white">
-                    {totals.multi ? 'Balans we tarif (ähli firmalar)' : 'Balans we tarif'}
+                    {totals.multi ? t('balanceTariffAll') : t('balanceAndTariff')}
+                  {alertFirms.length > 0 && (
+                    <p className="text-[11px] text-amber-300 mt-1">
+                      Duýduryş: {alertFirms.map((e) => e.tenantName || e.tenantSlug).join(', ')} —
+                      aşakda tarif / top-up
+                    </p>
+                  )}
                   </h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Ähli sanlar REQ bilen · aňsat düşündiriş</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{t('allNumbersReq')}</p>
                 </div>
                 <button type="button" className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-800" onClick={() => setOpen(false)}>
                   <X className="h-4 w-4" />
@@ -441,8 +474,8 @@ export function BalanceBadge({
                       if (!Number.isNaN(ms)) {
                         left =
                           ms <= 0
-                            ? 'Döwür gutardy'
-                            : `Tarif döwri ~${Math.ceil(ms / (24 * 3600 * 1000))} gün galdy`;
+                            ? t('periodEnded')
+                            : t('periodDaysLeft').replace('{n}', String(Math.ceil(ms / (24 * 3600 * 1000))));
                       }
                     }
                     return (
@@ -457,13 +490,13 @@ export function BalanceBadge({
                         }}
                       >
                         <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">
-                          Balans we tarif ({e.tenantName || e.tenantSlug})
+                          {t('balanceAndTariff')} ({e.tenantName || e.tenantSlug})
                         </p>
                         <p className="text-[10px] text-slate-500 text-center mt-0.5">
-                          Ähli sanlar REQ bilen · aňsat düşündiriş
+                          {t('allNumbersReq')}
                         </p>
                         <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center mt-3">
-                          Firmanyň gaby
+                          {t('firmWallet')}
                         </p>
                         <p className={`text-2xl font-bold tabular-nums text-center mt-1 ${c.text}`}>
                           {pair.primary}
@@ -494,7 +527,7 @@ export function BalanceBadge({
                 </div>
               ) : (
               <div className={`rounded-xl border border-slate-700/80 p-4 ${colors.bg}`}>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">Firmanyň gaby</p>
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 text-center">{t('firmWallet')}</p>
                 <p className={`text-3xl font-bold tabular-nums text-center mt-1 ${colors.text}`}>
                   {bal == null
                     ? '—'
@@ -524,28 +557,16 @@ export function BalanceBadge({
               <div className="rounded-xl border border-slate-700/60 bg-slate-900/50 p-3.5 space-y-2">
                 <p className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
                   <Info className="h-3.5 w-3.5 text-sky-400" />
-                  Bu näme we nähili azalýar?
+                  {t('whatIsThis')}
                 </p>
                 <ul className="text-[11px] text-slate-400 space-y-1.5 leading-relaxed list-disc pl-4">
                   <li>
-                    <strong className="text-slate-300">Balans</strong> — firmanyň hasabyndaky sorag birligi (REQ).
+                    {t('helpBalans')}
                   </li>
-                  <li>
-                    Her <strong className="text-slate-300">API sorag</strong> (hasabat, maglumat çekmek) gapdan
-                    aýrylýar. Häzir: <strong className="text-slate-300">1 API sorag = 1 REQ</strong>.
-                  </li>
-                  <li>
-                    Tarif aýda <strong className="text-slate-300">mugt REQ</strong> berýär (mysal: Free = 500 REQ).
-                    Döwür gutanda admin täzeleýär ýa-da top-up edýär.
-                  </li>
-                  <li>
-                    Balans <strong className="text-amber-300">peselse reňk üýtgeýär</strong> (ýaşyl → sary → gyzyl).
-                    0 bolanda hyzmat çäklener.
-                  </li>
-                  <li>
-                    Tarif üýtgese <strong className="text-emerald-300">galan REQ ýitmeýär</strong> — täze tarife
-                    geçýär.
-                  </li>
+                  <li>{t('helpApiCost')}</li>
+                  <li>{t('helpTariffMonth')}</li>
+                  <li>{t('helpColor')}</li>
+                  <li>{t('helpKeepReq')}</li>
                 </ul>
               </div>
 
@@ -553,29 +574,27 @@ export function BalanceBadge({
               <div className="space-y-2">
                 <p className="text-[11px] uppercase tracking-wide text-slate-500 flex items-center gap-1">
                   <Sparkles className="h-3.5 w-3.5 text-violet-400" />
-                  Häzirki tarif
+                  {t('currentTariff')}
                 </p>
                 {wallet?.tariff ? (
-                  <TariffCard t={wallet.tariff} current />
+                  <TariffCard tariff={wallet.tariff} current />
                 ) : (
-                  <p className="text-sm text-slate-500 px-1">Tarif bellenmedik — admin bilen habarlaşyň</p>
+                  <p className="text-sm text-slate-500 px-1">{t('noTariffSet')}</p>
                 )}
               </div>
 
               {/* Change request */}
               <div className="space-y-2 border-t border-slate-800 pt-3">
-                <p className="text-sm font-medium text-slate-200">Başga tarife geçmek isleýärsiňizmi?</p>
+                <p className="text-sm font-medium text-slate-200">{t('wantOtherTariff')}</p>
                 <p className="text-[11px] text-slate-500">
-                  Aşakdan tarifi saýlaň — ähli şertler görner. Soň «Sorag ugrat». Admin tassyklansoň üýtgeýär.
+                  {t('pickTariffHint')}
                 </p>
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
                   {otherTariffs.length === 0 && (
-                    <p className="text-xs text-slate-500">Başga aktiv tarif ýok</p>
+                    <p className="text-xs text-slate-500">{t('noOtherTariff')}</p>
                   )}
                   {otherTariffs.map((t) => (
-                    <TariffCard
-                      key={t.id}
-                      t={t}
+                    <TariffCard key={t.id} tariff={t}
                       selected={selectedTariffId === t.id}
                       onSelect={() => setSelectedTariffId(t.id)}
                     />
@@ -586,29 +605,26 @@ export function BalanceBadge({
                   <div className="rounded-lg bg-indigo-500/10 border border-indigo-500/30 p-3 text-[11px] text-indigo-100/90 space-y-1">
                     <p className="font-semibold text-indigo-200 flex items-center gap-1">
                       <Check className="h-3.5 w-3.5" />
-                      Indiki: {selectedTariff.name}
+                      {t('nextLabel')}: {selectedTariff.name}
                     </p>
                     <p>
-                      Aýlyk: {selectedTariff.priceMonthly === 0 ? 'Mugt' : `${selectedTariff.priceMonthly} TMT`} ·
-                      Berilýän: {selectedTariff.includedCredits.toLocaleString()} REQ · Günde{' '}
-                      {selectedTariff.maxApiCallsDay} REQ
+                      {selectedTariff.priceMonthly === 0 ? t('freePlan') : `${selectedTariff.priceMonthly} TMT`} · {t('monthReq').replace('{n}', selectedTariff.includedCredits.toLocaleString())} · {t('dayMaxReq').replace('{n}', String(selectedTariff.maxApiCallsDay))}
                     </p>
                     <p className="text-indigo-200/70">
-                      Tassyklananda: häzirki <strong>{fmtTmt(bal)}</strong> saklanýar + tarifiň aýlyk
-                      berilýän REQ-si goşulyp bilner.
+                      {t('helpKeepReq')}
                     </p>
                   </div>
                 )}
 
                 <textarea
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white min-h-[56px]"
-                  placeholder="Näme üçin üýtgetmek isleýärsiňiz? (islege görä)"
+                  placeholder={t('whyChangeOptional')}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                 />
                 <Button className="w-full" loading={sending} disabled={!selectedTariffId} onClick={() => void sendRequest()}>
                   <Send className="h-4 w-4" />
-                  Tarif üýtgetme soragyny ugrat
+                  {t('sendTariffRequest')}
                 </Button>
               </div>
             </div>

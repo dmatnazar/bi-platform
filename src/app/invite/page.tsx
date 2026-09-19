@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { BarChart3, Clock, Eye, EyeOff, CheckCircle2, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useLocale } from '@/components/LocaleProvider';
 
 type MemberForm = {
   fullName: string;
@@ -26,6 +27,7 @@ const emptyMember = (): MemberForm => ({
 });
 
 function InviteForm() {
+  const { t } = useLocale();
   const search = useSearchParams();
   const router = useRouter();
   const token = search.get('token') || '';
@@ -50,7 +52,7 @@ function InviteForm() {
 
   useEffect(() => {
     if (!token) {
-      setMeta({ error: 'Token ýok' });
+      setMeta({ error: t('noToken') });
       setLoading(false);
       return;
     }
@@ -58,7 +60,7 @@ function InviteForm() {
       .then((r) => r.json())
       .then((d) => {
         if (!d.ok) {
-          setMeta({ error: d.error || 'Nädogry invite' });
+          setMeta({ error: d.error || t('invalidInvite') });
         } else {
           setMeta(d);
           setLeft(d.expiresInSec || 0);
@@ -94,9 +96,9 @@ function InviteForm() {
     const m = members[step];
     if (!m.fullName.trim() || m.fullName.trim().length < 2) return 'Ady azyndan 2 belgi';
     if (!m.username.trim() || m.username.trim().length < 3) return 'Login azyndan 3 belgi';
-    if (!/^[A-Za-z0-9._-]+$/.test(m.username.trim())) return 'Login: diňe latyn, san, . _ -';
-    if (m.password.length < 6) return 'Parol azyndan 6 belgi';
-    if (m.password !== m.password2) return 'Parollar gabat gelenok';
+    if (!/^[A-Za-z0-9._-]+$/.test(m.username.trim())) return t('loginCharsetHint');
+    if (m.password.length < 6) return t('passwordMin6Short');
+    if (m.password !== m.password2) return t('passwordsMismatch');
     // unique username among steps
     const u = m.username.trim().toLowerCase();
     for (let i = 0; i < members.length; i++) {
@@ -144,7 +146,7 @@ function InviteForm() {
       }
     }
     if (left <= 0) {
-      setError('Möhleti gutardy — täze invite soraň');
+      setError(t('expiredRequestNewInvite'));
       return;
     }
     setSaving(true);
@@ -169,7 +171,7 @@ function InviteForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Şowsuz');
+        setError(data.error || t('failed'));
         return;
       }
       setCreatedCount(data.count || members.length);
@@ -272,7 +274,7 @@ function InviteForm() {
           label="Doly ady"
           value={current.fullName}
           onChange={(e) => patchCurrent({ fullName: e.target.value })}
-          placeholder="Ady Familiýasy"
+          placeholder={t('fullName')}
           required
         />
         <Input
@@ -285,7 +287,7 @@ function InviteForm() {
         />
         <div className="relative">
           <Input
-            label="Parol"
+            label={t('password')}
             type={showPw ? 'text' : 'password'}
             value={current.password}
             onChange={(e) => patchCurrent({ password: e.target.value })}
@@ -301,7 +303,7 @@ function InviteForm() {
           </button>
         </div>
         <Input
-          label="Paroly gaýtala"
+          label={t('repeatPassword')}
           type={showPw ? 'text' : 'password'}
           value={current.password2}
           onChange={(e) => patchCurrent({ password2: e.target.value })}
@@ -327,7 +329,7 @@ function InviteForm() {
           </div>
         </div>
         <Input
-          label="Email (islege görä)"
+          label={t('emailOptional')}
           type="email"
           value={current.email}
           onChange={(e) => patchCurrent({ email: e.target.value })}
@@ -363,6 +365,8 @@ function InviteForm() {
 }
 
 export default function InvitePage() {
+  const { t } = useLocale();
+
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md space-y-6">
@@ -370,7 +374,7 @@ export default function InvitePage() {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 mx-auto">
             <BarChart3 className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-bold text-white">Täze işgär</h1>
+          <h1 className="text-xl font-bold text-white">{t('newStaff')}</h1>
           <p className="text-sm text-slate-400">Invite arkaly hasaba alyş</p>
         </div>
         <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl">

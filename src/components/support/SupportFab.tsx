@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { MessageCircle, X, GripHorizontal, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { SupportChat } from '@/components/support/SupportChat';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 const STORAGE_KEY = 'bi-support-fab-pos';
 const PANEL_POS_KEY = 'bi-support-panel-pos';
@@ -33,6 +34,8 @@ function saveJson(key: string, v: unknown) {
  * Ticket sanawy açylanda panel giňelýär.
  */
 export function SupportFab() {
+  const { t } = useLocale();
+
   const pathname = usePathname();
   const [count, setCount] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -279,14 +282,14 @@ export function SupportFab() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">Goldaw</p>
                   <p className="text-[10px] text-slate-500 truncate">
-                    {isAdmin ? 'Admin ticketler' : 'Tehniki goldaw'}
-                    {!isMobile && ' · süýşürip bolýar'}
+                    {isAdmin ? 'Admin ticketler' : t('techSupport')}
+                    {!isMobile && t('draggableHint')}
                   </p>
                 </div>
                 <button
                   type="button"
                   className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
-                  title={listOpen ? 'Sanawy ýygna' : 'Sanawy aç'}
+                  title={listOpen ? t('collapseList') : t('expandList')}
                   onClick={(e) => {
                     e.stopPropagation();
                     setListOpen((v) => !v);
@@ -346,7 +349,7 @@ export function SupportFab() {
           }}
           style={{ width: size, height: size }}
           className={cn(
-            'flex cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl',
+            'bi-support-fab flex cursor-grab active:cursor-grabbing items-center justify-center rounded-2xl',
             'bg-indigo-600/45 text-white/90 shadow-lg shadow-indigo-900/20',
             'hover:bg-indigo-600/70 hover:text-white backdrop-blur-sm border border-indigo-400/20',
             'transition-colors relative',

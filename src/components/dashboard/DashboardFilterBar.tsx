@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Calendar, Filter, RotateCcw, Search, X, Network, Check, Loader2, ChevronDown, ChevronUp, GripVertical } from 'lucide-react';
 import { cn, formatCellValue } from '@/lib/utils';
 import { ApiPickerModal } from '@/components/ApiPickerModal';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   filters: GlobalFilterDef[];
@@ -45,17 +46,19 @@ function toDateInputValue(v: unknown): string {
   return m ? m[1] : s;
 }
 
-const PRESETS: { label: string; begin: () => string; end: () => string }[] = [
-  { label: 'Bugün', begin: () => todayISO(), end: () => todayISO() },
-  { label: 'Soňky 2 gün', begin: () => daysAgoISO(1), end: () => todayISO() },
-  { label: 'Soňky 7 gün', begin: () => daysAgoISO(6), end: () => todayISO() },
-  { label: 'Soňky 30 gün', begin: () => daysAgoISO(29), end: () => todayISO() },
-  { label: 'Bu aý', begin: () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-  }, end: () => todayISO() },
-  { label: 'Bu ýyl', begin: () => `${new Date().getFullYear()}-01-01`, end: () => todayISO() },
-];
+function getPresets(t: (k: string) => string): { label: string; begin: () => string; end: () => string }[] {
+  return [
+    { label: t('today'), begin: () => todayISO(), end: () => todayISO() },
+    { label: t('last2Days'), begin: () => daysAgoISO(1), end: () => todayISO() },
+    { label: t('last7Days'), begin: () => daysAgoISO(6), end: () => todayISO() },
+    { label: t('last30Days'), begin: () => daysAgoISO(29), end: () => todayISO() },
+    { label: t('thisMonth'), begin: () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    }, end: () => todayISO() },
+    { label: t('thisYear'), begin: () => `${new Date().getFullYear()}-01-01`, end: () => todayISO() },
+  ];
+}
 
 
 function MultiselectFilter({
@@ -67,6 +70,7 @@ function MultiselectFilter({
   value: string | number | boolean | null | undefined;
   onChange: (v: string) => void;
 }) {
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [opts, setOpts] = useState<{ value: string; label: string }[]>(filter.options || []);
   const [loading, setLoading] = useState(false);
@@ -176,7 +180,7 @@ function MultiselectFilter({
     isAll || allChecked
       ? `Hemmesi (${opts.length})`
       : selected.length === 0
-        ? filter.placeholder || 'Sayla…'
+        ? filter.placeholder || t('selectEllipsis')
         : selected.length <= 2
           ? selected
               .map((v) => opts.find((o) => o.value === v)?.label || v)
@@ -193,7 +197,7 @@ function MultiselectFilter({
           ((selected.length > 0 || isAll) ? 'border-indigo-500/40 text-indigo-200' : '')
         }
       >
-        {loading ? 'Yuklenyar…' : label}
+        {loading ? t('loadingDots') : label}
       </button>
       {open && (
         <>
@@ -203,14 +207,14 @@ function MultiselectFilter({
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Gozle…"
+                placeholder={t('searchDots')}
                 className="w-full h-8 px-2 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-200 outline-none focus:ring-1 focus:ring-indigo-500/50"
               />
             </div>
             <div className="overflow-y-auto p-2 space-y-0.5 max-h-52">
               {opts.length === 0 ? (
                 <p className="text-[11px] text-slate-500 px-2 py-1.5">
-                  {loading ? 'Yuklenyar…' : 'Maglumat yok'}
+                  {loading ? t('loadingDots') : t('noDataAlt')}
                 </p>
               ) : (
                 <>
@@ -240,7 +244,7 @@ function MultiselectFilter({
                 className="w-full text-[11px] text-slate-400 hover:text-rose-300 py-1.5 border-t border-slate-800"
                 onClick={() => onChange('')}
               >
-                Arassala
+                {t('clearFilters')}
               </button>
             )}
           </div>
@@ -258,6 +262,8 @@ export function DashboardFilterBar({
   className,
   compact,
 }: Props) {
+  const { t } = useLocale();
+
   const [filtersOpen, setFiltersOpen] = useState(true);
 
   const hasFilters = filters.length > 0;
@@ -289,7 +295,7 @@ export function DashboardFilterBar({
     onChange(next);
   }
 
-  function isPresetActive(p: (typeof PRESETS)[0]) {
+  function isPresetActive(p: ReturnType<typeof getPresets>[0]) {
     const rangeFilter = filters.find((f) => f.type === 'daterange');
     if (!rangeFilter) return false;
     const b = toDateInputValue(values[rangeFilter.key]);
@@ -297,7 +303,7 @@ export function DashboardFilterBar({
     return b === p.begin() && e === p.end();
   }
 
-  function applyPreset(p: (typeof PRESETS)[0]) {
+  function applyPreset(p: ReturnType<typeof getPresets>[0]) {
     const rangeFilter = filters.find((f) => f.type === 'daterange');
     if (!rangeFilter) return;
     const next = { ...values };
@@ -323,7 +329,7 @@ export function DashboardFilterBar({
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-800 bg-slate-900/80 shadow-md shadow-black/15',
+        'bi-dash-filter-bar rounded-xl border border-slate-800 bg-slate-900/80 shadow-md shadow-black/15',
         compact ? 'p-2' : 'p-2.5',
         className
       )}
@@ -339,18 +345,18 @@ export function DashboardFilterBar({
           </div>
           <div className="text-left min-w-0">
             <p className="text-xs font-semibold text-white leading-tight flex items-center gap-1">
-              Filterler
+              {t('filters')}
               {filtersOpen ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" /> : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />}
             </p>
             <p className="text-[10px] text-slate-500 truncate hidden sm:block">
-              {activeCount > 0 ? `${activeCount} aktif` : 'Ähli widget-lere täsir edýär'}
+              {activeCount > 0 ? t('activeCount').replace('{n}', String(activeCount)) : t('affectsAllWidgets')}
             </p>
           </div>
         </button>
 
         {filters.some((f) => f.type === 'daterange') && (
           <div className="flex flex-wrap gap-1 sm:gap-1.5 ml-auto max-w-full justify-end">
-            {PRESETS.map((p) => {
+            {getPresets(t).map((p) => {
               const active = isPresetActive(p);
               return (
               <button
@@ -358,10 +364,10 @@ export function DashboardFilterBar({
                 type="button"
                 onClick={() => applyPreset(p)}
                 className={cn(
-                  'px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-medium border transition-colors whitespace-nowrap',
+                  'bi-filter-preset px-1.5 sm:px-2 py-0.5 rounded-md text-[9px] sm:text-[10px] font-medium border transition-colors whitespace-nowrap',
                   active
-                    ? 'bg-indigo-500/25 text-indigo-200 border-indigo-400/60 shadow-sm shadow-indigo-500/20'
-                    : 'bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border-slate-700/80'
+                    ? 'bi-filter-preset-active bg-indigo-500/25 text-indigo-200 border-indigo-400/60 shadow-sm shadow-indigo-500/20'
+                    : 'bi-filter-preset-idle bg-slate-800/80 text-slate-300 hover:bg-indigo-500/20 hover:text-indigo-300 border-slate-700/80'
                 )}
               >
                 {p.label}
@@ -378,8 +384,8 @@ export function DashboardFilterBar({
             return (
               <div key={f.key} className="w-full sm:w-auto flex flex-col sm:flex-row flex-wrap items-stretch sm:items-end gap-2 p-0 rounded-none bg-transparent border-0">
                 <div className="w-full sm:min-w-[100px] sm:min-w-[140px] sm:w-auto">
-                  <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
-                    {f.label} — başla
+                  <label className="bi-filter-field-label mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
+                    {`${f.label} — ${t('filterStart')}`}
                     {f.required && <span className="text-rose-400 ml-0.5">*</span>}
                   </label>
                   <div className="relative">
@@ -393,8 +399,8 @@ export function DashboardFilterBar({
                   </div>
                 </div>
                 <div className="w-full sm:min-w-[100px] sm:min-w-[140px] sm:w-auto">
-                  <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
-                    gutar
+                  <label className="bi-filter-field-label mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
+                    {t('filterEndDate')}
                   </label>
                   <div className="relative">
                     <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
@@ -417,7 +423,7 @@ export function DashboardFilterBar({
               /begin|start|from|end|gutar|to$|dateFrom|dateTo/i.test(f.key);
             return (
               <div key={f.key} className="min-w-[150px]">
-                <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
+                <label className="bi-filter-field-label mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                   {f.label}
                   {f.required && <span className="text-rose-400 ml-0.5">*</span>}
                 </label>
@@ -451,7 +457,7 @@ export function DashboardFilterBar({
           if (f.type === 'text') {
             return (
               <div key={f.key} className="min-w-[120px] sm:min-w-[180px] flex-1 max-w-xs">
-                <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
+                <label className="bi-filter-field-label mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                   {f.label}
                 </label>
                 <div className="relative">
@@ -471,7 +477,7 @@ export function DashboardFilterBar({
           if (f.type === 'number') {
             return (
               <div key={f.key} className="min-w-[120px]">
-                <label className="mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
+                <label className="bi-filter-field-label mb-0.5 block text-[10px] sm:text-[11px] font-medium text-slate-400">
                   {f.label}
                 </label>
                 <input
@@ -489,7 +495,7 @@ export function DashboardFilterBar({
           if (f.type === 'multiselect') {
             return (
               <div key={f.key} className="min-w-[110px] sm:min-w-[160px] space-y-1">
-                <label className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{f.label}</label>
+                <label className="bi-filter-field-label text-[10px] font-medium text-slate-500 uppercase tracking-wide">{f.label}</label>
                 <MultiselectFilter
                   filter={f}
                   value={values[f.key]}
@@ -506,7 +512,7 @@ export function DashboardFilterBar({
                   value={String(values[f.key] ?? '')}
                   onChange={(e) => setKey(f.key, e.target.value || null)}
                   options={[
-                    { value: '', label: '— ählisi —' },
+                    { value: '', label: t('allDash') },
                     ...f.options,
                   ]}
                 />
@@ -524,7 +530,7 @@ export function DashboardFilterBar({
                   onChange={(e) => setKey(f.key, e.target.checked)}
                   className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500"
                 />
-                <label htmlFor={`gf-${f.key}`} className="text-sm text-slate-300">
+                <label htmlFor={`gf-${f.key}`} className="bi-filter-field-label text-sm text-slate-300">
                   {f.label}
                 </label>
               </div>
@@ -538,7 +544,7 @@ export function DashboardFilterBar({
           {activeCount > 0 && (
             <Button type="button" variant="ghost" size="sm" onClick={reset} className="text-slate-400">
               <RotateCcw className="h-3.5 w-3.5" />
-              Arassala
+              {t('clearFilters')}
             </Button>
           )}
           {onApply && (
@@ -571,6 +577,7 @@ interface EndpointOpt {
 }
 
 export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorProps) {
+  const { t } = useLocale();
   const [customOpen, setCustomOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
@@ -621,6 +628,10 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
       let path = ep.pathTemplate || '';
       path = path.replace(/\{[^}]+\}/g, '');
       if (!path.startsWith('/')) path = '/' + path;
+      const testDefaults = ((ep as any).testDefaults || {}) as Record<
+        string,
+        string | number | boolean
+      >;
       const res = await fetch('/api/gateway/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -629,7 +640,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
           path,
           method: ep.method || 'GET',
           dbKey: ep.dbKey || 'primary',
-          params: {},
+          params: { ...testDefaults },
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -645,7 +656,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
             ? data
             : [];
       if (rows.length === 0) {
-        setError('API boş netije gaýtardy — column tapylmady');
+        setError(t('apiEmptyNoColumn'));
         return;
       }
       const cols = Object.keys(rows[0] || {});
@@ -703,7 +714,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
   async function loadFromWidget(id: string, paramOverrides?: Record<string, string>) {
     const w = widgets.find((x) => x.id === id);
     if (!w?.dataSource?.path) {
-      setError('Widget-de data source ýok');
+      setError(t('noDataSourceInWidget'));
       return;
     }
     setWidgetId(id);
@@ -795,7 +806,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
     if (filters.some((f) => f.key === key)) return;
     onChange([
       ...filters,
-      { key, label: key === 'search' ? 'Gözleg' : key, type: 'text', placeholder: 'Gözle...' },
+      { key, label: key === 'search' ? t('searchLabel') : key, type: 'text', placeholder: t('search') },
     ]);
   }
 
@@ -849,7 +860,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
             setLabel(f.label || f.key);
           });
         } else {
-          setError('API match tapylmady — el bilen saýlaň');
+          setError(t('apiMatchNotFound'));
         }
       })
       .catch(() => {});
@@ -874,7 +885,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
 
   function saveCustom() {
     if (!labelCol || !valueCol || !paramKey.trim()) {
-      setError('UI column, key column we filtr adyny dolduryň');
+      setError(t('fillUiKeyFilter'));
       return;
     }
     const key = paramKey.trim();
@@ -883,7 +894,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
       return;
     }
     if (!label.trim()) {
-      setError('Filter adyny ýazyň (UI-da görkezilýän at)');
+      setError(t('enterFilterName'));
       return;
     }
 
@@ -893,7 +904,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
     if (sourceMode === 'widget') {
       const w = widgets.find((x) => x.id === widgetId);
       if (!w?.dataSource?.path) {
-        setError('Widget saýlaň');
+        setError(t('selectWidget'));
         return;
       }
       const ds = w.dataSource;
@@ -919,7 +930,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
       }
     } else {
       if (!selectedEp) {
-        setError('API saýlaň');
+        setError(t('selectApi'));
         return;
       }
       let path = selectedEp.pathTemplate || '';
@@ -953,7 +964,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
           key,
           label: label.trim(),
           type: 'multiselect',
-          placeholder: 'Saýla…',
+          placeholder: t('selectEllipsis'),
           optionsSource,
           options: staticOptions,
           widgetId: scopedWidgetId,
@@ -1047,7 +1058,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                   type="button"
                   onClick={() => moveFilter(f.key, -1)}
                   className="px-1 py-0.5 text-[10px] rounded-md text-slate-500 hover:text-white hover:bg-slate-800"
-                  title="Ýokary"
+                  title={t('top')}
                 >
                   ↑
                 </button>
@@ -1055,7 +1066,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                   type="button"
                   onClick={() => moveFilter(f.key, 1)}
                   className="px-1 py-0.5 text-[10px] rounded-md text-slate-500 hover:text-white hover:bg-slate-800"
-                  title="Aşak"
+                  title={t('bottom')}
                 >
                   ↓
                 </button>
@@ -1064,10 +1075,8 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                     type="button"
                     onClick={() => openEdit(f)}
                     className="px-1.5 py-0.5 text-[10px] rounded-md text-violet-300 hover:bg-violet-500/15"
-                    title="Üýtget"
-                  >
-                    Üýtget
-                  </button>
+                    title={t('edit')}
+                  >{t('edit')}</button>
                 )}
                 <button
                   type="button"
@@ -1097,7 +1106,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                 </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm sm:text-base font-semibold text-white leading-tight">
-                    {editingKey ? 'Filter üýtget' : 'Custom filter (API)'}
+                    {editingKey ? t('editFilter') : 'Custom filter (API)'}
                   </h3>
                   <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug">
                     Ady UI-da · API column · key beýleki API-lara iberilýär
@@ -1161,7 +1170,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                   className="w-full h-10 rounded-xl bg-slate-950 border border-violet-500/30 px-3 text-sm text-white outline-none focus:ring-2 focus:ring-violet-500/40"
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Mysal: Satyjy, Sebit, Kategoriýa"
+                  placeholder={t('exampleSellerRegion')}
                 />
               </div>
 
@@ -1176,9 +1185,9 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                   <span className="truncate min-w-0">
                     {selectedEp
                       ? `${selectedEp.method} ${selectedEp.name} (${selectedEp.tenantSlug})`
-                      : '— API saýlaň —'}
+                      : t('selectApiDash')}
                   </span>
-                  <span className="text-[10px] text-violet-300 shrink-0">Saýla</span>
+                  <span className="text-[10px] text-violet-300 shrink-0">{t('selectBtn')}</span>
                 </button>
                 {selectedEp?.pathTemplate && (
                   <p className="text-[10px] font-mono text-slate-500 break-all">
@@ -1190,7 +1199,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                   onClose={() => setApiPickerOpen(false)}
                   endpoints={endpoints}
                   value={epId}
-                  title="Global filter üçin API saýlaň"
+                  title={t('selectApiForGlobalFilter')}
                   onSelect={(ep) => {
                     setApiPickerOpen(false);
                     void loadColumns(ep.id);
@@ -1409,9 +1418,7 @@ export function GlobalFiltersEditor({ filters, onChange, widgets = [] }: EditorP
                 type="button"
                 onClick={() => resetModal()}
                 className="h-11 sm:h-10 px-4 rounded-xl border border-slate-700 text-sm text-slate-300 hover:bg-slate-800"
-              >
-                Ýatyr
-              </button>
+              >{t('cancel')}</button>
             </div>
           </div>
         </div>

@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+import { useCallback, useEffect, useMemo, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { formatDateTime } from '@/lib/utils';
 import {
@@ -21,6 +23,8 @@ import {
 import { Button } from '@/components/ui/Button';
 import { ModalPortal } from '@/components/ui/ModalPortal';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
+import { shouldShowBalanceWarn, balanceWarnKey, markBalanceWarnShown } from '@/lib/balance-warn';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Tariff {
   id: string;
@@ -77,11 +81,11 @@ const levelStyle: Record<string, string> = {
   empty: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
 };
 
-const levelLabel: Record<string, string> = {
-  ok: 'Ýagdaý gowy',
-  low: 'Pes',
-  critical: 'Critiki',
-  empty: 'Gutardy',
+const levelLabelKeys: Record<string, string> = {
+  ok: 'statusGood',
+  low: 'levelLow',
+  critical: 'levelCritical',
+  empty: 'levelEmpty',
 };
 
 
@@ -207,13 +211,27 @@ function displayDevice(e: LedgerEntry): string {
   return s.length > 40 ? s.slice(0, 38) + '…' : s;
 }
 
-export default function BillingPage() {
+function BillingPageInner() {
+  const { t } = useLocale();
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [wallets, setWallets] = useState<WalletRow[]>([]);
+  const [alertOnly, setAlertOnly] = useState(false);
+  const searchParams = useSearchParams();
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   /** Main hub: cards → open section */
   const [hubPanel, setHubPanel] = useState<'home' | 'tariffs' | 'firms'>('home');
+  useEffect(() => {
+    if (searchParams.get('alert') === '1') {
+      setAlertOnly(true);
+      setHubPanel('firms');
+      // Warning gaýtalama — firms panelde toast ýok
+      markBalanceWarnShown('alert-route');
+      setTimeout(() => {
+        document.getElementById('billing-firms')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 200);
+    }
+  }, [searchParams]);
   const [ledgerModalOpen, setLedgerModalOpen] = useState(false);
   const [topupOpen, setTopupOpen] = useState(false);
   const [topdownOpen, setTopdownOpen] = useState(false);
@@ -268,7 +286,7 @@ export default function BillingPage() {
         fetch('/api/billing?action=ledger&limit=30').then((r) => r.json()),
       ]);
       if (ov.error) {
-        toastError('Ýüklenmedi', ov.error);
+        toastError(t('loadFailedCap'), ov.error);
         return;
       }
       setTariffs(scopedBilling ? [] : (ov.tariffs || []));
@@ -287,29 +305,42 @@ export default function BillingPage() {
       }
       setLedger(mapped);
 
-      // Beautiful warnings for low balances
-      const bad = (ov.wallets || []).filter(
+      // Bir gezek duýduryş — basanda şu sahypadaky problemaly firmalara
+      const bad = ws.filter(
         (w: WalletRow) => w.level === 'empty' || w.level === 'critical'
       );
       if (bad.length > 0) {
-        toastWarning(
-          'Balans duýduryşy',
-          `${bad.length} firma: ${bad
-            .slice(0, 3)
-            .map((w: WalletRow) => w.tenantName || w.tenantSlug)
-            .join(', ')}${bad.length > 3 ? '…' : ''}`
-        );
+        const key = balanceWarnKey(bad.map((w) => w.tenantSlug));
+        // Firmalar panelinde ýa-da ?alert=1 — toast ýok
+        const onFirms =
+          typeof window !== 'undefined' &&
+          (window.location.search.includes('alert=1') || hubPanel === 'firms');
+        if (!onFirms && shouldShowBalanceWarn(key)) {
+          const names = bad.map((w) => w.tenantName || w.tenantSlug).join(', ');
+          toastWarning(
+            t('balanceWarning'),
+            `${bad.length} firma: ${names} · basyň → firmalar`,
+            '/admin/billing?alert=1'
+          );
+        } else if (onFirms) {
+          markBalanceWarnShown(key);
+        }
       }
     } catch (e) {
-      toastError('Ýüklenmedi', String(e));
+      toastError(t('loadFailedCap'), String(e));
     } finally {
       setLoading(false);
     }
-  }, [scopedBilling, meTenantSlugs]);
+  }, [scopedBilling, meTenantSlugs, hubPanel]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const displayWallets = useMemo(() => {
+    if (!alertOnly) return wallets;
+    return wallets.filter((w) => w.level === 'empty' || w.level === 'critical');
+  }, [wallets, alertOnly]);
 
   const stats = useMemo(() => {
     const totalBal = wallets.reduce((s, w) => s + (w.balanceCredits || 0), 0);
@@ -322,7 +353,7 @@ export default function BillingPage() {
     if (!selected) return;
     const n = Number(amount);
     if (!n || n <= 0) {
-      toastError('Mukdar', 'Pozitiw san ýazyň');
+      toastError(t('amount'), t('positiveNumber'));
       return;
     }
     setSaving(true);
@@ -339,11 +370,11 @@ export default function BillingPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Top-up şowsuz', data.error);
+        toastError(t('topUpFailed'), data.error);
         return;
       }
       toastSuccess(
-        'REQ goşuldy',
+        t('reqAdded'),
         `${selected.tenantName || selected.tenantSlug}: +${n} → ${data.balanceAfter}`
       );
       setTopupOpen(false);
@@ -358,7 +389,7 @@ export default function BillingPage() {
     if (!selected) return;
     const n = Number(amount);
     if (!n || n <= 0) {
-      toastError('Mukdar', 'Pozitiw san ýazyň (aýryljak REQ)');
+      toastError(t('amount'), t('positiveReqToRemove'));
       return;
     }
     setSaving(true);
@@ -370,17 +401,17 @@ export default function BillingPage() {
           action: 'adjust',
           tenantSlug: selected.tenantSlug,
           amount: -Math.abs(n),
-          reason: reason || 'Admin top-down (REQ aýyrmak)',
+          reason: reason || t('adminTopDown'),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Top-down şowsuz', data.error || data.detail?.message);
+        toastError(t('topDownFailed'), data.error || data.detail?.message);
         return;
       }
       const after = data.balanceAfter ?? data.wallet?.balanceCredits ?? data.balance;
       toastSuccess(
-        'REQ aýryldy',
+        t('reqRemoved'),
         `${selected.tenantName || selected.tenantSlug}: −${n}${after != null ? ` → ${after}` : ''}`
       );
       setTopdownOpen(false);
@@ -407,7 +438,7 @@ export default function BillingPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Tarif', data.error);
+        toastError(t('tariff'), data.error);
         return;
       }
       toastSuccess(
@@ -447,10 +478,10 @@ export default function BillingPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Tarif saklanmady', data.error);
+        toastError(t('tariffSaveFailed'), data.error);
         return;
       }
-      toastSuccess('Tarif saklandy', data.tariff?.name);
+      toastSuccess(t('tariffSaved'), data.tariff?.name);
       setTariffOpen(false);
       setEditingTariffId(null);
       await load();
@@ -483,7 +514,7 @@ export default function BillingPage() {
       {/* Summary cards — always visible */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-xl border border-slate-700/80 bg-slate-900/80 p-4">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500">Firmalar</p>
+          <p className="text-[11px] uppercase tracking-wide text-slate-500">{t('companies')}</p>
           <p className="text-2xl font-semibold text-white mt-1">{stats.firms}</p>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
@@ -533,7 +564,7 @@ export default function BillingPage() {
               </div>
               <ChevronRight className="h-5 w-5 text-slate-600 group-hover:text-sky-300 transition-colors" />
             </div>
-            <p className="mt-3 text-base font-semibold text-white">Firmalar</p>
+            <p className="mt-3 text-base font-semibold text-white">{t('companies')}</p>
             <p className="text-xs text-slate-400 mt-1">{wallets.length} firma · balans we tarif bagla</p>
           </button>
 
@@ -583,9 +614,7 @@ export default function BillingPage() {
               });
               setTariffOpen(true);
             }}>
-              <Plus className="h-4 w-4" />
-              Täze tarif
-            </Button>
+              <Plus className="h-4 w-4" />{t('newTariff')}</Button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {tariffs.map((t) => (
@@ -640,7 +669,7 @@ export default function BillingPage() {
 
       {/* Panel: Firmalar (wallets) */}
       {hubPanel === 'firms' && (
-        <section className="space-y-3">
+        <section id="billing-firms" className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"
@@ -650,14 +679,30 @@ export default function BillingPage() {
               ← Yza
             </button>
             <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-sky-400" />
-              Firmalar
-            </h2>
-            <span className="text-xs text-slate-500">{wallets.length} firma</span>
+              <Building2 className="h-4 w-4 text-sky-400" />{t('companies')}</h2>
+            <span className="text-xs text-slate-500">{displayWallets.length}{alertOnly ? ` / ${wallets.length}` : ''} firma</span>
+            {alertOnly && (
+              <button
+                type="button"
+                className="text-[11px] text-indigo-300 hover:underline"
+                onClick={() => setAlertOnly(false)}
+              >
+                Ählisini görkez
+              </button>
+            )}
+            {!alertOnly && wallets.some((w) => w.level === 'empty' || w.level === 'critical') && (
+              <button
+                type="button"
+                className="text-[11px] text-amber-300 hover:underline"
+                onClick={() => setAlertOnly(true)}
+              >
+                Diňe duýduryş
+              </button>
+            )}
           </div>
 {/* Mobile cards */}
         <div className="sm:hidden space-y-3">
-          {wallets.map((w) => (
+          {displayWallets.map((w) => (
             <div key={w.tenantId} className="rounded-xl border border-slate-700/80 bg-slate-900/70 p-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -665,11 +710,11 @@ export default function BillingPage() {
                   <p className="text-[11px] font-mono text-slate-500">{w.tenantSlug}</p>
                 </div>
                 <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border shrink-0 ${levelStyle[w.level] || levelStyle.ok}`}>
-                  {levelLabel[w.level] || w.level}
+                  {t(levelLabelKeys[w.level]) || w.level}
                 </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-400">{w.tariff?.name || 'Tarif ýok'}</span>
+                <span className="text-slate-400">{w.tariff?.name || t('tariffEmpty')}</span>
                 <span className="font-semibold tabular-nums text-white">
                   {w.balanceCredits.toLocaleString()} <span className="text-[10px] text-slate-500">REQ</span>
                 </span>
@@ -678,21 +723,21 @@ export default function BillingPage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-emerald-500/15 text-emerald-300"
+                  className="bi-action-btn bi-action-ok flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-emerald-500/15 text-emerald-300"
                   onClick={() => { setSelected(w); setAmount('500'); setTopupOpen(true); }}
                 >
                   Top-up
                 </button>
                 <button
                   type="button"
-                  className="flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-rose-500/15 text-rose-300"
+                  className="bi-action-btn bi-action-danger flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-rose-500/15 text-rose-300"
                   onClick={() => { setSelected(w); setAmount(''); setTopdownOpen(true); }}
                 >
                   Top-down
                 </button>
                 <button
                   type="button"
-                  className="flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-indigo-500/15 text-indigo-300"
+                  className="bi-action-btn bi-action-primary flex-1 min-w-[4.5rem] text-[11px] px-2 py-2 rounded-lg bg-indigo-500/15 text-indigo-300"
                   onClick={() => { setSelected(w); setTariffId(w.tariff?.id || tariffs[0]?.id || ''); setAssignOpen(true); }}
                 >
                   Tarif
@@ -701,7 +746,7 @@ export default function BillingPage() {
               )}
             </div>
           ))}
-          {wallets.length === 0 && !loading && (
+          {displayWallets.length === 0 && !loading && (
             <p className="text-center text-slate-500 text-sm py-6">Firma ýok</p>
           )}
         </div>
@@ -720,7 +765,7 @@ export default function BillingPage() {
                 </tr>
               </thead>
               <tbody>
-                {wallets.map((w) => (
+                {displayWallets.map((w) => (
                   <tr key={w.tenantId} className="border-b border-slate-800/80 hover:bg-slate-900/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-white">{w.tenantName || w.tenantSlug}</p>
@@ -751,7 +796,7 @@ export default function BillingPage() {
                         ) : (
                           <AlertTriangle className="h-3 w-3" />
                         )}
-                        {levelLabel[w.level] || w.level}
+                        {t(levelLabelKeys[w.level]) || w.level}
                       </span>
                       {w.warning && (
                         <p className="text-[10px] text-amber-400/90 mt-0.5 max-w-[140px]">{w.warning}</p>
@@ -762,7 +807,7 @@ export default function BillingPage() {
                         {!scopedBilling && (
                         <button
                           type="button"
-                          className="text-[11px] px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+                          className="bi-action-btn bi-action-ok text-[11px] px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
                           onClick={() => {
                             setSelected(w);
                             setAmount('500');
@@ -775,7 +820,7 @@ export default function BillingPage() {
                         {!scopedBilling && (
                         <button
                           type="button"
-                          className="text-[11px] px-2 py-1 rounded-lg bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
+                          className="bi-action-btn bi-action-danger text-[11px] px-2 py-1 rounded-lg bg-rose-500/15 text-rose-300 hover:bg-rose-500/25"
                           onClick={() => {
                             setSelected(w);
                             setAmount('');
@@ -788,7 +833,7 @@ export default function BillingPage() {
                         {!scopedBilling && (
                         <button
                           type="button"
-                          className="text-[11px] px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25"
+                          className="bi-action-btn bi-action-primary text-[11px] px-2 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25"
                           onClick={() => {
                             setSelected(w);
                             setTariffId(w.tariff?.id || tariffs[0]?.id || '');
@@ -802,7 +847,7 @@ export default function BillingPage() {
                     </td>
                   </tr>
                 ))}
-                {wallets.length === 0 && !loading && (
+                {displayWallets.length === 0 && !loading && (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-slate-500 text-sm">
                       Firma ýok
@@ -936,16 +981,14 @@ export default function BillingPage() {
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Mysal: Aýlyk dolduryş"
+                  placeholder={t('exampleMonthlyTopup')}
                 />
               </div>
               <div className="flex gap-2 pt-1">
                 <Button className="flex-1" loading={saving} onClick={() => void doTopup()}>
                   Goş
                 </Button>
-                <Button variant="ghost" onClick={() => setTopupOpen(false)}>
-                  Ýatyr
-                </Button>
+                <Button variant="ghost" onClick={() => setTopupOpen(false)}>{t('cancel')}</Button>
               </div>
             </div>
           </div>
@@ -989,16 +1032,14 @@ export default function BillingPage() {
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Mysal: Ýalňyş top-up yzyna"
+                  placeholder={t('exampleWrongTopup')}
                 />
               </div>
               <div className="flex gap-2 pt-1">
                 <Button className="flex-1" variant="danger" loading={saving} onClick={() => void doTopdown()}>
                   Aýyr
                 </Button>
-                <Button variant="ghost" onClick={() => setTopdownOpen(false)}>
-                  Ýatyr
-                </Button>
+                <Button variant="ghost" onClick={() => setTopdownOpen(false)}>{t('cancel')}</Button>
               </div>
             </div>
           </div>
@@ -1032,9 +1073,7 @@ export default function BillingPage() {
                 <Button className="flex-1" loading={saving} onClick={() => void doAssign()}>
                   Belle
                 </Button>
-                <Button variant="ghost" onClick={() => setAssignOpen(false)}>
-                  Ýatyr
-                </Button>
+                <Button variant="ghost" onClick={() => setAssignOpen(false)}>{t('cancel')}</Button>
               </div>
             </div>
           </div>
@@ -1047,17 +1086,17 @@ export default function BillingPage() {
           <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setTariffOpen(false)} />
             <div className="relative w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-3 shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold text-white text-center">{editingTariffId ? 'Tarifi üýtget' : 'Täze tarif'}</h3>
+              <h3 className="text-lg font-semibold text-white text-center">{editingTariffId ? t('editTariff') : t('newTariff')}</h3>
               {(
                 [
                   ['code', 'Kod (free, starter…)', 'starter'],
-                  ['name', 'Ady', 'Starter'],
-                  ['description', 'Düşündiriş', ''],
-                  ['priceMonthly', 'Aýlyk baha (TMT)', '50'],
-                  ['includedCredits', 'Aýlyk REQ', '5000'],
-                  ['maxStaff', 'Max işgär', '10'],
-                  ['maxApiCallsDay', 'Günde max REQ (sorag)', '1000'],
-                  ['maxConnections', 'Max DB baglanyşyk', '3'],
+                  ['name', t('name'), 'Starter'],
+                  ['description', t('description'), ''],
+                  ['priceMonthly', t('monthlyPrice'), '50'],
+                  ['includedCredits', t('monthlyReq'), '5000'],
+                  ['maxStaff', t('maxStaff'), '10'],
+                  ['maxApiCallsDay', t('dailyMaxReq'), '1000'],
+                  ['maxConnections', t('maxDbConnections'), '3'],
                 ] as const
               ).map(([key, label, ph]) => (
                 <div key={key} className="space-y-1">
@@ -1071,17 +1110,24 @@ export default function BillingPage() {
                 </div>
               ))}
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1" loading={saving} onClick={() => void doSaveTariff()}>
-                  Sakla
-                </Button>
-                <Button variant="ghost" onClick={() => setTariffOpen(false)}>
-                  Ýatyr
-                </Button>
+                <Button className="flex-1" loading={saving} onClick={() => void doSaveTariff()}>{t('save')}</Button>
+                <Button variant="ghost" onClick={() => setTariffOpen(false)}>{t('cancel')}</Button>
               </div>
             </div>
           </div>
         </ModalPortal>
       )}
     </div>
+  );
+}
+
+
+export default function BillingPage() {
+  const { t } = useLocale();
+
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-slate-400">{t('loading')}</div>}>
+      <BillingPageInner />
+    </Suspense>
   );
 }

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Download, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 const DISMISS_KEY = 'bi-pwa-install-dismissed';
 const DISMISS_DAYS = 7;
@@ -51,6 +52,8 @@ function dismiss() {
  * (otherwise programmatic install is impossible).
  */
 export function InstallAppBanner({ className }: { className?: string }) {
+  const { t } = useLocale();
+
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
   const [installing, setInstalling] = useState(false);
 
@@ -114,7 +117,7 @@ export function InstallAppBanner({ className }: { className?: string }) {
         className="h-9 w-9 rounded-lg shrink-0 border border-white/10"
       />
       <p className="min-w-0 flex-1 text-xs sm:text-[13px] text-slate-200 leading-snug">
-        Programma hökmünde gurnaň
+        {t('installAsApp')}
       </p>
       <button
         type="button"
@@ -123,7 +126,7 @@ export function InstallAppBanner({ className }: { className?: string }) {
         className="shrink-0 inline-flex items-center gap-1 h-8 px-3 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-semibold disabled:opacity-60"
       >
         <Download className="h-3.5 w-3.5" />
-        {installing ? '…' : 'Install'}
+        {installing ? '…' : t('install')}
       </button>
       <button
         type="button"
@@ -132,7 +135,7 @@ export function InstallAppBanner({ className }: { className?: string }) {
           setDeferred(null);
         }}
         className="shrink-0 p-1 rounded-md text-slate-400 hover:text-white"
-        aria-label="Ýap"
+        aria-label={t('close')}
       >
         <X className="h-4 w-4" />
       </button>

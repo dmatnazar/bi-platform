@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/DataTable';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { useModalAnimations } from '@/lib/use-modal-animations';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Company {
   id: string;
@@ -92,6 +93,8 @@ function PhoneField({
 }
 
 export default function CompaniesPage() {
+  const { t } = useLocale();
+
   const modalAnimOn = useModalAnimations();
   const [list, setList] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,7 +251,7 @@ export default function CompaniesPage() {
     }
     const slugCheck = (form.slug || editing?.slug || '').trim().toLowerCase();
     if (!slugCheck) {
-      toastError('Slug gerek', 'Firma slug boş bolmaly däl');
+      toastError('Slug gerek', t('companySlugRequired'));
       return;
     }
     const conflict = list.find(
@@ -256,7 +259,7 @@ export default function CompaniesPage() {
     );
     if (conflict) {
       toastError(
-        'Slug eýýäm bar',
+        t('slugExists'),
         `«${slugCheck}» slug «${conflict.name}» firmasynda ulanylýar. Başga slug saýlaň.`
       );
       return;
@@ -292,10 +295,10 @@ export default function CompaniesPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak sowusuz', data.error);
+        toastError(t('saveFailedLong'), data.error);
         return;
       }
-      toastSuccess('Kompaniya saklandy', 'VPS bilen sync');
+      toastSuccess(t('companySaved'), 'VPS bilen sync');
       if (editing?.id) {
         void fetch('/api/company', {
           method: 'POST',
@@ -330,9 +333,9 @@ export default function CompaniesPage() {
       return;
     }
     const ok = await confirmDialog({
-      title: 'Kompaniýany poz',
+      title: t('deleteCompany'),
       message: `"${c.name}" (${c.slug}) doly pozulsynmy? Bu amal yzyna alynmaýar.`,
-      confirmLabel: 'Poz',
+      confirmLabel: t('delete'),
       danger: true,
     });
     if (!ok) return;
@@ -352,13 +355,13 @@ export default function CompaniesPage() {
         return;
       }
       if (!res.ok) {
-        toastError('Pozmak sowusuz', data.error || res.statusText);
+        toastError(t('deleteFailedLong'), data.error || res.statusText);
         return;
       }
-      toastSuccess('Kompaniýa pozuldy', 'VPS bilen sync');
+      toastSuccess(t('companyDeleted'), 'VPS bilen sync');
       await load();
     } catch (e) {
-      toastError('Pozmak sowusuz', String(e));
+      toastError(t('deleteFailedLong'), String(e));
     }
   }
 
@@ -366,7 +369,7 @@ export default function CompaniesPage() {
     () => [
       {
         id: 'name',
-        header: 'Ady',
+        header: t('name'),
         mobilePrimary: true,
         accessor: (r) => r.name,
         cell: (r) => (
@@ -389,7 +392,7 @@ export default function CompaniesPage() {
       
       {
         id: 'staffCount',
-        header: 'Işgär',
+        header: t('staffOne'),
         accessor: (r) => r.staffCount ?? 0,
         cell: (r) => (
           <span className="text-sm tabular-nums text-slate-300">{r.staffCount ?? 0}</span>
@@ -421,7 +424,7 @@ export default function CompaniesPage() {
       },
 {
         id: 'active',
-        header: 'Status',
+        header: t('status'),
         accessor: (r) => (r.isActive === false ? 0 : 1),
         cell: (r) => (
           <span
@@ -431,13 +434,13 @@ export default function CompaniesPage() {
                 : 'text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400'
             }
           >
-            {r.isActive === false ? 'Passiw' : 'Aktiw'}
+            {r.isActive === false ? t('inactive') : t('active')}
           </span>
         ),
       },
       {
         id: 'actions',
-        header: 'Amal',
+        header: t('actions'),
         sortable: false,
         accessor: () => '',
         cell: (r) => (
@@ -446,7 +449,7 @@ export default function CompaniesPage() {
               type="button"
               onClick={() => openEdit(r)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
-              title="Uytget"
+              title={t('edit')}
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -464,8 +467,8 @@ export default function CompaniesPage() {
                   (r.staffCount ?? 0) > 0 ||
                   (r.endpointCount ?? 0) > 0 ||
                   (r.connectionCount ?? 0) > 0
-                    ? 'Bagly işgär/API/DB bar — pozup bolmaýar'
-                    : 'Poz'
+                    ? t('hasLinkedData')
+                    : t('delete')
                 }
               >
                 <Trash2 className="h-4 w-4" />
@@ -511,7 +514,7 @@ export default function CompaniesPage() {
         rowKey={(r) => r.id || r.slug}
         storageKey="bi-companies"
         searchPlaceholder="Gozle..."
-        emptyMessage={loading ? 'Yuklenyar...' : 'Kompaniya yok'}
+        emptyMessage={loading ? t('loading') : 'Kompaniya yok'}
         onRowClick={openEdit}
       />
 
@@ -592,7 +595,7 @@ export default function CompaniesPage() {
                   <label className={labelCls}>Salgy</label>
                   <input className={inputCls} value={form.address} onChange={(e) => setField('address', e.target.value)} />
                 </div>
-                <PhoneField label="Telefon" value={form.phone} onChange={(v) => setField('phone', v)} />
+                <PhoneField label={t('phone')} value={form.phone} onChange={(v) => setField('phone', v)} />
                 <div className="space-y-1.5">
                   <label className={labelCls}>Email</label>
                   <input type="email" className={inputCls} value={form.email} onChange={(e) => setField('email', e.target.value)} />
@@ -611,7 +614,7 @@ export default function CompaniesPage() {
                   <label className={labelCls}>Ady we familyasy</label>
                   <input className={inputCls} value={form.contactPerson} onChange={(e) => setField('contactPerson', e.target.value)} />
                 </div>
-                <PhoneField label="Telefon" value={form.contactPhone} onChange={(v) => setField('contactPhone', v)} />
+                <PhoneField label={t('phone')} value={form.contactPhone} onChange={(v) => setField('contactPhone', v)} />
                 <div className="space-y-1.5">
                   <label className={labelCls}>Email</label>
                   <input type="email" className={inputCls} value={form.contactEmail} onChange={(e) => setField('contactEmail', e.target.value)} />
@@ -635,7 +638,7 @@ export default function CompaniesPage() {
                   onChange={(e) => setField('isActive', e.target.checked)}
                 />
                 <span className="text-sm text-slate-200">
-                  {form.isActive !== false ? 'Aktiw' : 'Passiw'}
+                  {form.isActive !== false ? t('active') : t('inactive')}
                 </span>
                 <span className="text-xs text-slate-500">
                   (Passiw bolsa sanawda gorkezilyar, yone isjen dal)
@@ -646,7 +649,7 @@ export default function CompaniesPage() {
 
             <div className="flex gap-2 pt-1 border-t border-slate-800">
               <Button className="flex-1" loading={saving} onClick={() => void save()}>
-                Yatda sakla Â· Sync
+                Ýatda sakla
               </Button>
               <Button
                 variant="ghost"
@@ -665,9 +668,7 @@ export default function CompaniesPage() {
                   }
                   setModal(false);
                 }}
-              >
-                Yatyr
-              </Button>
+              >{t('cancel')}</Button>
             </div>
           </div>
         </div>

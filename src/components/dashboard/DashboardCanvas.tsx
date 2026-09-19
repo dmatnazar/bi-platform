@@ -10,6 +10,7 @@ import { LiveWidget } from './LiveWidget';
 import { cn } from '@/lib/utils';
 import { GripVertical, Trash2, Settings2, RefreshCw, Maximize2, X, ChevronUp, ChevronDown, RotateCcw, Download, ArrowLeftRight, MoreVertical } from 'lucide-react';
 import { generateId } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   dashboard: Dashboard;
@@ -31,6 +32,8 @@ export function DashboardCanvas({
   globalFilters = {},
   filterDefs = [],
 }: Props) {
+  const { t, locale } = useLocale();
+
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 640px)');
@@ -46,7 +49,7 @@ export function DashboardCanvas({
   const bumpRefresh = (id: string) =>
     setRefreshTokens((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
 
-  // Dashboard "Täzele" — refresh every widget
+  // Dashboard t('refresh') — refresh every widget
   useEffect(() => {
     const onAll = () => {
       setRefreshTokens((prev) => {
@@ -395,7 +398,7 @@ export function DashboardCanvas({
 
   async function confirmTransfer() {
     if (!transferWidgetId || !selectedTargetId) {
-      setTransferMsg('Maksat dashboard saýlaň');
+      setTransferMsg(t('selectTargetDashboard'));
       return;
     }
     const src = dashboard.widgets.find((w) => w.id === transferWidgetId);
@@ -404,7 +407,7 @@ export function DashboardCanvas({
     if (!target) return;
 
     setTransferBusy(true);
-    setTransferMsg('Geçirilýär…');
+    setTransferMsg(t('transferring'));
     try {
       // Clone widget with new id; remap dbKey / tenant if needed
       const cloned: DashboardWidget = {
@@ -491,8 +494,8 @@ export function DashboardCanvas({
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Geçirmek şowsuz');
-      setTransferMsg('Üstünlikli geçirildi');
+      if (!res.ok) throw new Error(data.error || t('transferFailed'));
+      setTransferMsg(t('transferSuccess'));
       setTimeout(() => {
         setTransferWidgetId(null);
         setTransferMsg('');
@@ -552,7 +555,7 @@ export function DashboardCanvas({
         ref={containerRef}
         className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/30 px-6 py-20 text-center text-slate-500"
       >
-        Widget ýok. {editable ? 'Saga panelden goşuň.' : ''}
+        Widget ýok. {editable ? t('addFromRightPanel') : ''}
       </div>
     );
   }
@@ -693,12 +696,25 @@ export function DashboardCanvas({
               {editable && (
                 <button
                   type="button"
-                  className="drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 touch-none"
+                  className="bi-widget-chrome-icon drag-handle cursor-grab active:cursor-grabbing text-slate-500 hover:text-slate-300 p-0.5 touch-none"
                 >
                   <GripVertical className="h-4 w-4" />
                 </button>
               )}
-              <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 truncate">{widget.mobileTitle ? (<><span className="hidden sm:inline">{widget.title}</span><span className="sm:hidden">{widget.mobileTitle || widget.title}</span></>) : widget.title}</h4>
+              <h4 className="text-[11px] sm:text-sm font-medium text-slate-200 flex-1 min-w-0 leading-snug line-clamp-2 break-words">
+                {(() => {
+                  const main = locale === 'ru' && widget.titleRu ? widget.titleRu : widget.title;
+                  if (widget.mobileTitle) {
+                    return (
+                      <>
+                        <span className="hidden sm:inline">{main}</span>
+                        <span className="sm:hidden">{widget.mobileTitle || main}</span>
+                      </>
+                    );
+                  }
+                  return main;
+                })()}
+              </h4>
               
               {/* Toolbar: desktop full icons; mobile maximize + ⋮ menu */}
               <div className="flex items-center gap-0.5 shrink-0 ml-auto">
@@ -711,7 +727,7 @@ export function DashboardCanvas({
                       window.dispatchEvent(new CustomEvent('bi-widget-fullrefresh', { detail: { id: widget.id } }));
                     }}
                     className="p-1 rounded-lg text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors"
-                    title="Doly täzele (page refresh)"
+                    title={t('fullPageRefresh')}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />
                   </button>
@@ -741,7 +757,7 @@ export function DashboardCanvas({
                           )
                         }
                         className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
-                        title="PNG ýükle"
+                        title={t('uploadPng')}
                       >
                         <Download className="h-3.5 w-3.5" />
                       </button>
@@ -761,14 +777,14 @@ export function DashboardCanvas({
                         type="button"
                         onClick={() => void openTransfer(widget.id)}
                         className="p-1 rounded-lg text-slate-500 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
-                        title="Başga dashboarda geçir"
+                        title={t('moveToOtherDashboard')}
                       >
                         <ArrowLeftRight className="h-3.5 w-3.5" />
                       </button>
                       <button
                         type="button"
                         onClick={() => onConfigureWidget?.(widget.id)}
-                        className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
+                        className="bi-widget-cfg-btn p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors"
                         title="Sazla"
                       >
                         <Settings2 className="h-3.5 w-3.5" />
@@ -777,7 +793,7 @@ export function DashboardCanvas({
                         type="button"
                         onClick={() => removeWidget(widget.id)}
                         className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                        title="Poz"
+                        title={t('delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -791,8 +807,8 @@ export function DashboardCanvas({
                     type="button"
                     onClick={() => setMenuWidgetId(widget.id)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                    title="Menýu"
-                    aria-label="Widget menýu"
+                    title={t('menu')}
+                    aria-label={t('widgetMenu')}
                   >
                     <MoreVertical className="h-4 w-4" />
                   </button>
@@ -853,7 +869,7 @@ export function DashboardCanvas({
                   window.dispatchEvent(new CustomEvent('bi-widget-fullrefresh', { detail: { id } }));
                 }}
               >
-                <RefreshCw className="h-4 w-4 text-cyan-400" /> Täzele
+                <RefreshCw className="h-4 w-4 text-cyan-400" /> {t('refresh')}
               </button>
               {['bar', 'line', 'pie', 'area'].includes(
                 dashboard.widgets.find((w) => w.id === menuWidgetId)?.type || ''
@@ -967,8 +983,7 @@ export function DashboardCanvas({
                       if (id) removeWidget(id);
                     }}
                   >
-                    <Trash2 className="h-4 w-4" /> Poz
-                  </button>
+                    <Trash2 className="h-4 w-4" />{t('delete')}</button>
                 </>
               )}
               <button
@@ -1072,16 +1087,14 @@ export function DashboardCanvas({
                   disabled={transferBusy}
                   onClick={() => setTransferWidgetId(null)}
                   className="px-3 py-1.5 rounded-lg text-sm bg-slate-800 text-slate-200 hover:bg-slate-700"
-                >
-                  Ýatyr
-                </button>
+                >{t('cancel')}</button>
                 <button
                   type="button"
                   disabled={transferBusy || !selectedTargetId}
                   onClick={() => void confirmTransfer()}
                   className="px-3 py-1.5 rounded-lg text-sm bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
                 >
-                  {transferBusy ? '…' : 'Geçir'}
+                  {transferBusy ? '…' : t('transfer')}
                 </button>
               </div>
             </div>
@@ -1104,8 +1117,8 @@ export function DashboardCanvas({
                   type="button"
                   onClick={() => setExpandedMenuOpen((v) => !v)}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                  title="Menýu"
-                  aria-label="Menýu"
+                  title={t('menu')}
+                  aria-label={t('menu')}
                 >
                   <MoreVertical className="h-5 w-5" />
                 </button>
@@ -1116,7 +1129,7 @@ export function DashboardCanvas({
                     setExpandedId(null);
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                  title="Ýap"
+                  title={t('close')}
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -1130,7 +1143,7 @@ export function DashboardCanvas({
                         setExpandedMenuOpen(false);
                       }}
                     >
-                      <RefreshCw className="h-4 w-4 text-sky-400" /> Täzele
+                      <RefreshCw className="h-4 w-4 text-sky-400" /> {t('refresh')}
                     </button>
                     {['bar', 'line', 'pie', 'area'].includes(expandedWidget.type) && (
                       <>

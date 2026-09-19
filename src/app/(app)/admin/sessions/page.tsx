@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Monitor, RefreshCw, Trash2, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { toastError, toastSuccess } from '@/components/ui/Toast';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Sess {
   id: string;
@@ -19,6 +20,8 @@ interface Sess {
 }
 
 export default function AdminSessionsPage() {
+  const { t } = useLocale();
+
   const [list, setList] = useState<Sess[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,13 +38,13 @@ export default function AdminSessionsPage() {
         return;
       }
       if (!res.ok) {
-        toastError('Ýüklenmedi', data.error);
+        toastError(t('loadFailedCap'), data.error);
         return;
       }
       setList(data.sessions || []);
       setCurrentId(data.currentSessionId || null);
     } catch (e) {
-      toastError('Ýüklenmedi', String(e));
+      toastError(t('loadFailedCap'), String(e));
     } finally {
       setLoading(false);
     }
@@ -61,10 +64,10 @@ export default function AdminSessionsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Ýapylyp bilmedi', data.error);
+        toastError(t('couldNotClose'), data.error);
         return;
       }
-      toastSuccess('Seans ýapyldy');
+      toastSuccess(t('sessionClosed'));
       await load();
     } finally {
       setActing(null);
@@ -98,7 +101,7 @@ export default function AdminSessionsPage() {
       </div>
 
       {loading && list.length === 0 ? (
-        <p className="text-slate-500 text-sm">Ýüklenýär…</p>
+        <p className="text-slate-500 text-sm">{t('loading')}</p>
       ) : list.length === 0 ? (
         <p className="text-slate-500 text-sm">Aktiw seans ýok.</p>
       ) : (

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface CompanyBrief {
   id: string;
@@ -78,6 +79,8 @@ export function DashboardListClient({
   companyIdBySlug = {},
   userTenantSlugs = [],
 }: Props) {
+  const { t } = useLocale();
+
   const showAnyAction = canEdit || canCreate || canDelete || canExport || canManageAccess;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -113,7 +116,7 @@ export function DashboardListClient({
     setCompanyReady(true);
   }, [searchParams]);
 
-  // Soft restore: last opened dashboard id for "soňky" badge only (client-only).
+  // Soft restore: last opened dashboard id for t('latest') badge only (client-only).
   const [lastId, setLastId] = useState<string | null>(null);
   useEffect(() => {
     try {
@@ -287,9 +290,9 @@ export function DashboardListClient({
         body: JSON.stringify(patch),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Ýalňyşlyk');
+      if (!res.ok) throw new Error(data.error || t('error'));
       setItems((prev) => prev.map((d) => (d.id === id ? data.dashboard : d)));
-      flash('Ýatda saklandy');
+      flash(t('savedOk'));
       router.refresh();
       return data.dashboard as Dashboard;
     } catch (e) {
@@ -304,8 +307,8 @@ export function DashboardListClient({
   async function remove(id: string) {
     const ok = await confirmDialog({
       title: 'Dashboardy poz',
-      message: 'Bu dashboard we onuň widget-leri öçüriler. Amal yzyna alynmaýar.',
-      confirmLabel: 'Poz',
+      message: t('dashboardDeleteConfirm'),
+      confirmLabel: t('delete'),
       danger: true,
     });
     if (!ok) return;
@@ -314,10 +317,10 @@ export function DashboardListClient({
       const res = await fetch(`/api/dashboards/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Pozup bolmady');
+        throw new Error(data.error || t('deleteFailedLong'));
       }
       setItems((prev) => prev.filter((d) => d.id !== id));
-      flash('Pozuldy');
+      flash(t('deleted'));
       router.refresh();
     } catch (e) {
       flash(String(e));
@@ -351,7 +354,7 @@ export function DashboardListClient({
         });
       }
       setItems((prev) => [data.dashboard, ...prev]);
-      flash('Nusga döredildi');
+      flash(t('copyCreated'));
       router.refresh();
     } catch (e) {
       flash(String(e));
@@ -425,13 +428,13 @@ export function DashboardListClient({
           ? [xferCompanyId]
           : [];
     if (!xferTarget || targets.length === 0) {
-      flash('Maksat firma saýlaň');
+      flash(t('selectTargetFirm'));
       return;
     }
     // Analyze against first target (API policies apply per firm on confirm)
     const primaryTargetId = targets[0];
     setXferBusy(true);
-    setXferAnalyzeMsg('API-lar deňeşdirilýär…');
+    setXferAnalyzeMsg(t('apisComparingShort'));
     try {
       const targetCo = companies.find((c) => c.id === primaryTargetId);
       const targetSlug = targetCo?.slug || primaryTargetId;
@@ -507,7 +510,7 @@ export function DashboardListClient({
       setXferAnalyzeMsg(
         rows.length
           ? `${rows.length} API ulanylýar · ${nConflict} sany maksat firmada şol atly bar`
-          : 'Bu dashboardda baglanan API ýok — diňe layout nusga alynar'
+          : t('noApiOnDashboard')
       );
       setXferStep(2);
     } catch (e) {
@@ -532,7 +535,7 @@ export function DashboardListClient({
           ? [xferCompanyId]
           : [];
     if (!xferTarget || targetIds.length === 0) {
-      flash('Maksat firma saýlaň');
+      flash(t('selectTargetFirm'));
       return;
     }
     if (xferStep === 1) {
@@ -555,13 +558,13 @@ export function DashboardListClient({
       );
       if (sameName) {
         const ok = await confirmDialog({
-          title: 'Dashboard eýýäm bar',
+          title: t('dashboardAlreadyExists'),
           message: `«${xferTarget.name}» bu firmada eýýäm bar. Replace — köne pozlup täze ýazylar. Skip — işlem ýatyrylýar.`,
           confirmLabel: 'Replace',
           cancelLabel: 'Skip',
         });
         if (!ok) {
-          flash('Geçirildi (skip)');
+          flash(t('transferredSkip'));
           closeXfer();
           return;
         }
@@ -714,7 +717,7 @@ export function DashboardListClient({
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Göçürilmedi');
+        if (!res.ok) throw new Error(data.error || t('notTransferred'));
         setItems((prev) =>
           prev.map((x) =>
             x.id === xferTarget.id
@@ -741,7 +744,7 @@ export function DashboardListClient({
       } // end for each target
       flash(
         xferMode === 'move'
-          ? 'Dashboard firmaya göçürildi (API + filter API-lar täzelendi)'
+          ? t('dashboardMovedFirm')
           : `Dashboard nusga alyndy · ${targetIds.length} firma · API/filter API sazlandy`
       );
       closeXfer();
@@ -793,7 +796,7 @@ export function DashboardListClient({
         widgets = remapWidgetIds(raw.widgets || []);
         globalFilters = raw.globalFilters || [];
       } else {
-        throw new Error('Nädogry export faýly');
+        throw new Error(t('invalidExport'));
       }
 
       // Import into the company currently selected in the list (not the export's company)
@@ -823,7 +826,7 @@ export function DashboardListClient({
       setXferCompanyId(targetCompanyId);
       setXferCompanyIds(targetCompanyId ? [targetCompanyId] : []);
       setXferStep(1);
-      flash('Import: maksat firma / API deňeşdirmesini tassyklaň');
+      flash(t('importMapConfirm'));
     } catch (e) {
       flash(String(e));
     } finally {
@@ -916,20 +919,20 @@ export function DashboardListClient({
               className="inline-flex items-center gap-1 text-[11px] sm:text-sm text-indigo-400 hover:text-indigo-300 mb-0.5"
             >
               <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">Firmalara dolan</span>
+              <span className="truncate">{t('backToFirms')}</span>
             </button>
           ) : null}
           <h1 className="text-base sm:text-2xl font-bold text-white tracking-tight truncate leading-tight">
             {showCompanyPicker && !effectiveCompanyId
-              ? 'Firmalar'
+              ? t('companies')
               : selectedCompanyName
-                ? `${selectedCompanyName} — Dashboardlar`
-                : 'Dashboardlar'}
+                ? `${selectedCompanyName} — ${t('dashboardsTitle')}`
+                : t('dashboards')}
           </h1>
           <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             {showCompanyPicker && !effectiveCompanyId
-              ? 'Firma saýlaň — onuň dashboardlary açylar'
-              : 'Hasabatlar we analitika'}
+              ? t('selectFirmOpenDashboards')
+              : t('reportsAnalytics')}
           </p>
         </div>
         {canCreate && effectiveCompanyId && (
@@ -952,12 +955,12 @@ export function DashboardListClient({
               onClick={() => fileRef.current?.click()}
             >
               <Upload className="h-4 w-4" />
-              Import
+              {t('import')}
             </Button>
             <Link href={`/dashboards/new${effectiveCompanyId ? `?companyId=${encodeURIComponent(effectiveCompanyId)}` : ''}`}>
               <Button size="sm" disabled={busy}>
                 <Plus className="h-4 w-4" />
-                Täze
+                {t('newItem')}
               </Button>
             </Link>
           </div>
@@ -968,7 +971,7 @@ export function DashboardListClient({
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/40 backdrop-blur-[1px] pointer-events-none">
           <div className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm text-white shadow-xl pointer-events-auto">
             <Loader2 className="h-4 w-4 animate-spin text-indigo-400" />
-            Garaşyň…
+            {t('waitEllipsis')}
           </div>
         </div>
       )}
@@ -1021,13 +1024,13 @@ export function DashboardListClient({
               {canManageAccess && (
                 <button
                   type="button"
-                  title="Firma dashboardlary üçin ulanyjy dostupy"
+                  title={t('userAccessFirmDashboards')}
                   className="absolute top-3 right-3 p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
                   onClick={(e) => {
                     e.stopPropagation();
                     const first = items.find((d) => d.companyId === c.id);
                     if (first) openAccess(first);
-                    else flash('Bu firma üçin dashboard ýok — ilki dörediň');
+                    else flash(t('noDashboardForFirm'));
                   }}
                 >
                   <Users className="h-4 w-4" />
@@ -1045,7 +1048,7 @@ export function DashboardListClient({
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Dashboard gözle..."
+          placeholder={t('searchDashboard')}
           className="w-full h-11 pl-10 pr-10 rounded-2xl bg-slate-900/80 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/40"
         />
         {q && (
@@ -1065,7 +1068,7 @@ export function DashboardListClient({
         <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-16 text-center">
           <LayoutDashboard className="h-10 w-10 text-slate-600 mx-auto mb-3" />
           <p className="text-slate-400">
-            {items.length === 0 ? 'Heniz dashboard ýok' : 'Gözleg boýunça netije ýok'}
+            {items.length === 0 ? t('noDashboardsYet') : t('noSearchResultsAlt')}
           </p>
           {canCreate && items.length === 0 && (
             <Link href={`/dashboards/new${effectiveCompanyId ? `?companyId=${encodeURIComponent(effectiveCompanyId)}` : ''}`} className="inline-block mt-4">
@@ -1210,9 +1213,7 @@ export function DashboardListClient({
                           onClick={() => remove(d.id)}
                           disabled={busy}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          Poz
-                        </button>
+                          <Trash2 className="h-3.5 w-3.5" />{t('delete')}</button>
                         </>
                         )}
                       </div>
@@ -1232,7 +1233,7 @@ export function DashboardListClient({
           <div className="absolute inset-0 bg-black/70" onClick={() => closeXfer()} />
           <div className="relative w-full max-w-lg max-h-[min(92dvh,720px)] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl space-y-4">
             <h3 className="text-lg font-semibold text-white text-center">
-              {xferMode === 'move' ? 'Firma-a göçür' : 'Firma-a nusga'}
+              {xferMode === 'move' ? t('moveToFirm') : 'Firma-a nusga'}
               <span className="block text-[11px] font-normal text-slate-500 mt-0.5">
                 Ädim {xferStep}/2
               </span>
@@ -1260,7 +1261,7 @@ export function DashboardListClient({
 
                 <div className="space-y-1.5">
                   <span className="text-xs text-slate-400">
-                    Maksat firma{xferMode === 'copy' ? 'lar (birnäçe saýlap bolýar)' : ''}
+                    Maksat firma{xferMode === 'copy' ? t('multiSelectHint') : ''}
                   </span>
                   {xferMode === 'copy' ? (
                     <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-700 divide-y divide-slate-800">
@@ -1396,7 +1397,7 @@ export function DashboardListClient({
                           </span>
                         ) : (
                           <span className="shrink-0 text-[10px] rounded-md bg-sky-500/15 text-sky-300 px-1.5 py-0.5">
-                            Täze
+                            {t('newItem')}
                           </span>
                         )}
                       </div>
@@ -1446,7 +1447,7 @@ export function DashboardListClient({
                 <p className="text-[10px] text-slate-500 leading-relaxed">
                   <b className="text-slate-400">Replace</b> — SQL/sazlama göçürilýär (şol atly API).{' '}
                   <b className="text-slate-400">Skip</b> — maksatdaky API saklanýar, widget oňa baglanýar.{' '}
-                  <b className="text-slate-400">Täze</b> — saýlanan DB bilen döredilýär.
+                  <b className="text-slate-400">{t('newItem')}</b> — saýlanan DB bilen döredilýär.
                 </p>
               </div>
             )}
@@ -1458,7 +1459,7 @@ export function DashboardListClient({
                 disabled={xferBusy}
                 onClick={() => (xferStep === 2 ? setXferStep(1) : closeXfer())}
               >
-                {xferStep === 2 ? 'Yza' : 'Ýatyr'}
+                {xferStep === 2 ? t('back') : t('cancel')}
               </Button>
               <Button
                 className="flex-1"
@@ -1469,7 +1470,7 @@ export function DashboardListClient({
                 {xferStep === 1
                   ? 'Dowam · API barla'
                   : xferMode === 'move'
-                    ? 'Göçür'
+                    ? t('copy')
                     : 'Nusga al'}
               </Button>
             </div>
@@ -1487,7 +1488,7 @@ export function DashboardListClient({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <Input label="Ady" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            <Input label={t('name')} value={editName} onChange={(e) => setEditName(e.target.value)} />
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-400">Goşmaça at / düşündiriş</label>
               <textarea
@@ -1495,13 +1496,11 @@ export function DashboardListClient({
                 onChange={(e) => setEditDesc(e.target.value)}
                 rows={3}
                 className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                placeholder="Gysga düşündiriş..."
+                placeholder={t('shortDescDots')}
               />
             </div>
             <div className="flex gap-2 justify-end pt-1">
-              <Button variant="ghost" size="sm" onClick={() => setEditTarget(null)}>
-                Ýatyr
-              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setEditTarget(null)}>{t('cancel')}</Button>
               <Button size="sm" loading={busy} onClick={saveEdit} disabled={!editName.trim()}>
                 Ýatda sakla
               </Button>
@@ -1570,7 +1569,7 @@ export function DashboardListClient({
               )}
             </div>
             <div className="flex gap-2 justify-end">
-              <Button variant="ghost" size="sm" onClick={() => setAccessTarget(null)}>Ýatyr</Button>
+              <Button variant="ghost" size="sm" onClick={() => setAccessTarget(null)}>{t('cancel')}</Button>
               <Button size="sm" loading={busy} onClick={saveAccess}>Ýatda sakla</Button>
             </div>
           </div>

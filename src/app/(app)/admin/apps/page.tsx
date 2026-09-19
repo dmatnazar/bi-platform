@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useLocale } from '@/components/LocaleProvider';
 
 type AppDoc = {
   id: string;
@@ -48,6 +49,8 @@ const ICONS: Record<string, typeof Monitor> = {
 };
 
 export default function AdminAppsPage() {
+  const { t } = useLocale();
+
   const [platforms, setPlatforms] = useState<AppPlatform[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -69,10 +72,10 @@ export default function AdminAppsPage() {
     try {
       const res = await fetch('/api/admin/apps');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
+      if (!res.ok) throw new Error(data.error || t('loadFailedLower'));
       setPlatforms(data.platforms || []);
     } catch (e) {
-      toastError('Programmalar ýüklenmedi', String(e));
+      toastError(t('appsLoadFailed'), String(e));
     } finally {
       setLoading(false);
     }
@@ -106,11 +109,11 @@ export default function AdminAppsPage() {
         body: JSON.stringify({ platforms: next }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'şowsuz');
+      if (!res.ok) throw new Error(data.error || t('failedLower'));
       setPlatforms(data.platforms || next);
-      toastSuccess('Saklandy');
+      toastSuccess(t('saved'));
     } catch (e) {
-      toastError('Saklanmady', String(e));
+      toastError(t('saveFailed'), String(e));
     } finally {
       setSavingMeta(false);
     }
@@ -147,14 +150,14 @@ export default function AdminAppsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'şowsuz');
+      if (!res.ok) throw new Error(data.error || t('failedLower'));
       setPlatforms((prev) =>
         prev.map((p) => (p.id === selected.id ? data.platform : p))
       );
       setEditDoc(null);
-      toastSuccess('Dokument saklandy');
+      toastSuccess(t('documentSaved'));
     } catch (e) {
-      toastError('Saklanmady', String(e));
+      toastError(t('saveFailed'), String(e));
     } finally {
       setSavingDoc(false);
     }
@@ -163,8 +166,8 @@ export default function AdminAppsPage() {
   async function removeDoc(docId: string) {
     if (!selected) return;
     const ok = await confirmDialog({
-      title: 'Dokumenty poz',
-      message: 'Bu dokumentasiýa pozulsynmy?',
+      title: t('deleteDocument'),
+      message: t('documentConfirmDelete'),
       danger: true,
     });
     if (!ok) return;
@@ -175,13 +178,13 @@ export default function AdminAppsPage() {
         body: JSON.stringify({ action: 'delete_doc', platformId: selected.id, docId }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'şowsuz');
+      if (!res.ok) throw new Error(data.error || t('failedLower'));
       setPlatforms((prev) =>
         prev.map((p) => (p.id === selected.id ? data.platform : p))
       );
-      toastSuccess('Pozuldy');
+      toastSuccess(t('deleted'));
     } catch (e) {
-      toastError('Pozulmady', String(e));
+      toastError(t('deleteFailed'), String(e));
     }
   }
 
@@ -193,17 +196,17 @@ export default function AdminAppsPage() {
             Programmalar
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Client goşundylary (Windows, iOS…) we gurnama dokumentasiýasy
+            {t('appsSubtitle')}
           </p>
         </div>
         <Button variant="ghost" size="sm" onClick={() => void load()} className="gap-1.5">
           <RefreshCw className="h-3.5 w-3.5" />
-          Täzele
+          {t('refresh')}
         </Button>
       </div>
 
       {loading ? (
-        <p className="text-slate-500 text-sm">Ýüklenýär...</p>
+        <p className="text-slate-500 text-sm">{t('loading')}</p>
       ) : !selected ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {platforms
@@ -223,8 +226,8 @@ export default function AdminAppsPage() {
                   </div>
                   <p className="font-semibold text-white text-sm">{p.name}</p>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    {p.status === 'available' ? 'Elýeterli' : 'Ýakyn wagtda'} ·{' '}
-                    {p.docs?.length || 0} dok
+                    {p.status === 'available' ? t('available') : t('comingSoon')} ·{' '}
+                    {t('docsCount').replace('{n}', String(p.docs?.length || 0))}
                   </p>
                 </button>
               );
@@ -270,8 +273,8 @@ export default function AdminAppsPage() {
                   }
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
                 >
-                  <option value="available">Elýeterli (login-de açyk)</option>
-                  <option value="coming_soon">Ýakyn wagtda</option>
+                  <option value="available">{t('availableLogin')}</option>
+                  <option value="coming_soon">{t('comingSoonStatus')}</option>
                 </select>
               </div>
             </div>
@@ -323,7 +326,7 @@ export default function AdminAppsPage() {
             {editDoc && (
               <div className="rounded-xl border border-indigo-500/30 bg-slate-950 p-3 space-y-2">
                 <Input
-                  label="Ady"
+                  label={t('name')}
                   value={docTitle}
                   onChange={(e) => setDocTitle(e.target.value)}
                   placeholder="Gurnama (gysga)"
@@ -337,12 +340,8 @@ export default function AdminAppsPage() {
                   placeholder="1. Setup-y açyň...&#10;2. ..."
                 />
                 <div className="flex gap-2 justify-end">
-                  <Button size="sm" variant="ghost" onClick={() => setEditDoc(null)}>
-                    Ýatyr
-                  </Button>
-                  <Button size="sm" loading={savingDoc} onClick={() => void saveDoc()}>
-                    Sakla
-                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditDoc(null)}>{t('cancel')}</Button>
+                  <Button size="sm" loading={savingDoc} onClick={() => void saveDoc()}>{t('save')}</Button>
                 </div>
               </div>
             )}
@@ -369,7 +368,7 @@ export default function AdminAppsPage() {
                         type="button"
                         onClick={() => startEditDoc(d)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-sky-300 hover:bg-slate-800"
-                        title="Üýtget"
+                        title={t('edit')}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -377,7 +376,7 @@ export default function AdminAppsPage() {
                         type="button"
                         onClick={() => void removeDoc(d.id)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800"
-                        title="Poz"
+                        title={t('delete')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>

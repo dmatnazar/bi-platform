@@ -20,6 +20,7 @@ import { ApiPickerModal } from '@/components/ApiPickerModal';
 import { Link2, Sparkles , Pencil } from 'lucide-react';
 import { ThemeColorField } from '@/components/ui/ThemeColorField';
 import { useTheme } from '@/components/ThemeProvider';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface EndpointOpt {
   id: string;
@@ -49,6 +50,8 @@ export function WidgetConfigPanel({
   onSuggestGlobalFilters,
   preferredTenantSlug,
 }: Props) {
+  const { t } = useLocale();
+
   const { theme } = useTheme();
   const [apiPickerOpen, setApiPickerOpen] = useState(false);
   const [endpoints, setEndpoints] = useState<EndpointOpt[]>([]);
@@ -247,7 +250,7 @@ export function WidgetConfigPanel({
       } catch (e: any) {
         if (!cancelled) {
           setSampleColumns(ds.columns || []);
-          setColumnsError(e?.message || 'Sütünler alynmady');
+          setColumnsError(e?.message || t('columnsNotFetched'));
         }
       } finally {
         if (!cancelled) setColumnsLoading(false);
@@ -462,29 +465,35 @@ export function WidgetConfigPanel({
   return (
     <div className="p-4 space-y-3">
       <Input
-        label="Ady (esasy)"
+        label={t('widgetTitleTm')}
         value={widget.title}
         onChange={(e) => onChange({ ...widget, title: e.target.value })}
       />
       <Input
-        label="Mobile ady (islege görä)"
+        label={t('widgetTitleRu')}
+        value={widget.titleRu || ''}
+        onChange={(e) => onChange({ ...widget, titleRu: e.target.value.trim() ? e.target.value : undefined })}
+        placeholder="RU"
+      />
+      <Input
+        label={t('mobileNameOptional')}
         value={widget.mobileTitle || ''}
         onChange={(e) =>
           onChange({ ...widget, mobileTitle: e.target.value.trim() ? e.target.value : undefined })
         }
-        placeholder="Boş bolsa esasy ady görkezilýär"
+        placeholder={t('emptyShowsMainName')}
       />
 
       {(widget.type === 'kpi' || widget.type === 'text') && (
         <Input
-          label="Statik baha / tekst"
+          label={t('staticValueText')}
           value={String(widget.staticValue ?? '')}
           onChange={(e) => onChange({ ...widget, staticValue: e.target.value })}
         />
       )}
 
       <div className="space-y-1.5">
-        <label className="text-xs text-slate-400">API (data source)</label>
+        <label className="text-xs text-slate-400">{t('apiDataSource')}</label>
         <div className="flex gap-1.5">
         <button
           type="button"
@@ -499,7 +508,7 @@ export function WidgetConfigPanel({
                     ? `${ep.method} ${ep.name} (${ep.tenantSlug})`
                     : ds.path || ds.endpointId;
                 })()
-              : '— saýlaň —'}
+              : t('selectPlease')}
           </span>
           <span className="text-[10px] text-indigo-400 shrink-0">Saýla</span>
         </button>
@@ -539,7 +548,7 @@ export function WidgetConfigPanel({
                 type="button"
                 onClick={suggestAndAddGlobal}
                 className="flex items-center gap-1 text-[10px] text-indigo-300 hover:text-indigo-200"
-                title="paramsSchema-dan global filter hökmünde goş"
+                title={t('addAsGlobalFilter')}
               >
                 <Sparkles className="h-3 w-3" />
                 Global filter et
@@ -570,7 +579,7 @@ export function WidgetConfigPanel({
                 </div>
 
                 <Select
-                  label="Çeşme"
+                  label={t('source')}
                   value={binding.source}
                   onChange={(e) =>
                     updateBinding(p.name, {
@@ -580,9 +589,9 @@ export function WidgetConfigPanel({
                     })
                   }
                   options={[
-                    { value: 'global', label: 'Global filter' },
+                    { value: 'global', label: t('globalFilterOne') },
                     { value: 'fixed', label: 'Sabit baha' },
-                    { value: 'widget', label: 'Widget-içi' },
+                    { value: 'widget', label: t('insideWidget') },
                   ]}
                 />
 
@@ -696,10 +705,10 @@ export function WidgetConfigPanel({
       <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] text-slate-500">
           {columnsLoading
-            ? 'Sütünler ýüklenýär…'
+            ? t('columnsLoading')
             : sampleColumns.length
               ? `${sampleColumns.length} sütün`
-              : 'Sütün ýok'}
+              : t('noColumns')}
         </p>
         <button
           type="button"
@@ -721,7 +730,7 @@ export function WidgetConfigPanel({
           value={ds?.categoryField || ''}
           onChange={(e) => patchDs({ categoryField: e.target.value || undefined })}
         >
-          <option value="">— saýla —</option>
+          <option value="">{t('chooseDash')}</option>
           {sampleColumns.map((c) => (
             <option key={c} value={c}>
               {c}
@@ -907,14 +916,14 @@ export function WidgetConfigPanel({
       )}
 
       <Input
-        label="Auto-refresh (sekunt, 0=öçür)"
+        label={t('autoRefreshSec')}
         type="number"
         value={String(ds?.refreshSec ?? 0)}
         onChange={(e) => patchDs({ refreshSec: Number(e.target.value) || 0 })}
       />
 
       <ThemeColorField
-        label="Esasy reňk (Dark / Light)"
+        label={t('primaryColorTheme')}
         value={widget.config?.color}
         fallbackDark="#6366f1"
         fallbackLight="#4f46e5"
@@ -990,7 +999,7 @@ export function WidgetConfigPanel({
                     <button
                       type="button"
                       className="mt-6 text-[10px] text-rose-400 hover:text-rose-300 px-1"
-                      title="Poz"
+                      title={t('delete')}
                       onClick={() => {
                         const next = (widget.config?.colors || []).filter((_, j) => j !== i);
                         onChange({
@@ -1084,7 +1093,7 @@ export function WidgetConfigPanel({
                         {!!(widget.config as any)?.valueLabelBg && (
                           <div className="col-span-full w-full">
                             <ThemeColorField
-                              label="Label fon reňki"
+                              label={t('labelBgColor')}
                               value={(widget.config as any)?.valueLabelBgColor}
                               fallbackDark="#0f172a"
                               fallbackLight="#ffffff"
@@ -1119,7 +1128,7 @@ export function WidgetConfigPanel({
                         {widget.config?.gridLines !== false && (
                           <div className="col-span-full w-full space-y-2">
                             <ThemeColorField
-                              label="Tor çyzyk reňki"
+                              label={t('gridLineColor')}
                               value={widget.config?.gridLineColor}
                               fallbackDark="#1e293b"
                               fallbackLight="#e2e8f0"
@@ -1131,7 +1140,7 @@ export function WidgetConfigPanel({
                               }
                             />
                             <ThemeColorField
-                              label="Oks çyzyk reňki"
+                              label={t('axisLineColor')}
                               value={widget.config?.axisLineColor}
                               fallbackDark="#334155"
                               fallbackLight="#cbd5e1"
@@ -1358,7 +1367,7 @@ export function WidgetConfigPanel({
               <div className="space-y-3 pt-2 border-t border-slate-800">
                 <p className="text-xs font-semibold text-slate-300">Tekst / label sazlamalary</p>
                 <ThemeColorField
-                  label="Label reňki"
+                  label={t('labelColor')}
                   value={widget.config?.labelColor}
                   fallbackDark="#94a3b8"
                   fallbackLight="#475569"
@@ -1370,7 +1379,7 @@ export function WidgetConfigPanel({
                   }
                 />
                 <ThemeColorField
-                  label="Oks label reňki"
+                  label={t('axisLabelColor')}
                   value={widget.config?.axisLabelColor}
                   fallbackDark="#94a3b8"
                   fallbackLight="#64748b"
@@ -1398,7 +1407,7 @@ export function WidgetConfigPanel({
                     </label>
                     {!!widget.config?.pieLabelBg && (
                       <ThemeColorField
-                        label="Pie label fon reňki"
+                        label={t('pieLabelBgColor')}
                         value={widget.config?.pieLabelBgColor}
                         fallbackDark="#0f172a"
                         fallbackLight="#ffffff"
@@ -1425,7 +1434,7 @@ export function WidgetConfigPanel({
                     </label>
                     {widget.config?.pieLabelLine !== false && (
                       <ThemeColorField
-                        label="Label çyzyk reňki"
+                        label={t('labelLineColor')}
                         value={widget.config?.pieLabelLineColor}
                         fallbackDark="#64748b"
                         fallbackLight="#94a3b8"
@@ -1450,7 +1459,7 @@ export function WidgetConfigPanel({
                       }
                     />
                     <ThemeColorField
-                      label="Hover / saýlanan border"
+                      label={t('hoverSelectedBorder')}
                       value={widget.config?.pieBorderActiveColor}
                       fallbackDark="#ffffff"
                       fallbackLight="#0f172a"
@@ -1557,7 +1566,7 @@ export function WidgetConfigPanel({
 
                 {(widget.type === 'line' || widget.type === 'area' || widget.type === 'bar') && (
                   <ThemeColorField
-                    label="Value (san) reňki — çyzykdan aýratyn"
+                    label={t('valueColorSeparate')}
                     value={(widget.config as any)?.valueLabelColor}
                     fallbackDark="#e2e8f0"
                     fallbackLight="#334155"
@@ -1700,7 +1709,7 @@ export function WidgetConfigPanel({
                         {align === 'center'
                           ? '⊙ Merkez'
                           : align === 'left'
-                            ? '⊣ Çep'
+                            ? t('alignLeft')
                             : '⊢ Sag'}
                       </button>
                     ))}
@@ -1709,7 +1718,7 @@ export function WidgetConfigPanel({
 
                 {/* Task 5: Text Color — theme-aware */}
                 <ThemeColorField
-                  label="Teksti Tüsy (KPI)"
+                  label={t('textStyleKpi')}
                   value={widget.config?.color}
                   fallbackDark="#ffffff"
                   fallbackLight="#0f172a"
@@ -1851,7 +1860,7 @@ export function WidgetConfigPanel({
                 })
               }
             >
-              <option value="">— saýla —</option>
+              <option value="">{t('chooseDash')}</option>
               {(sampleColumns.length ? sampleColumns : []).map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -1985,7 +1994,7 @@ export function WidgetConfigPanel({
                     type="button"
                     className="text-[11px] text-rose-400 hover:text-rose-300"
                     onClick={() => patchDs({ tableAggregates: [] })}
-                    title="Ähli aggregatlary aýyr"
+                    title={t('clearAllAggregates')}
                   >
                     Aýyr
                   </button>
@@ -2026,7 +2035,7 @@ export function WidgetConfigPanel({
                 </select>
                 <input
                   className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2 font-mono"
-                  placeholder="Ýa-da column adyny ýazyň (Jemi bahasy)"
+                  placeholder={t('orTypeColumnName')}
                   value={a.column}
                   onChange={(e) => {
                     const next = [...(ds?.tableAggregates || [])];
@@ -2103,9 +2112,7 @@ export function WidgetConfigPanel({
                       const next = (ds?.tableAggregates || []).filter((_, j) => j !== i);
                       patchDs({ tableAggregates: next.length ? next : undefined });
                     }}
-                  >
-                    Poz
-                  </button>
+                  >{t('delete')}</button>
                 </div>
               </div>
             ))}
@@ -2121,8 +2128,8 @@ export function WidgetConfigPanel({
           <p className="text-xs font-semibold text-indigo-300">Hierarhiýa / Drill-down</p>
           <p className="text-[11px] text-slate-500">
             {widget.type === 'pie'
-              ? 'Tegelek bölegine basylanda child API-a parametr iberilýär we täze tegelek açylýar (Telefonlar → Samsung → A12…). Path we Undo bilen yza gaýdyp bolýar.'
-              : 'Setire basylanda saýlanan sütündäki bahany başga API-a iberip detal tablisasyny açýar (meselem faktura → harytlar).'}
+              ? t('pieDrillHint')
+              : t('rowDrillHint')}
           </p>
           <label className="flex items-center gap-2 text-xs text-slate-300">
             <input
@@ -2155,7 +2162,7 @@ export function WidgetConfigPanel({
           {ds?.drillDown?.enabled && (
             <>
               <Input
-                label="Çeşme sütün (mes: fich_id)"
+                label={t('sourceColumn')}
                 value={ds.drillDown.sourceField || ''}
                 onChange={(e) =>
                   patchDs({
@@ -2165,7 +2172,7 @@ export function WidgetConfigPanel({
                 placeholder="fich_id"
               />
               <Input
-                label="Child API param ady (boş bolsa çeşme bilen birmeňzeş)"
+                label={t('childApiParam')}
                 value={ds.drillDown.targetParam || ''}
                 onChange={(e) =>
                   patchDs({
@@ -2241,9 +2248,7 @@ export function WidgetConfigPanel({
                               },
                             });
                           }}
-                        >
-                          Poz
-                        </button>
+                        >{t('delete')}</button>
                       </div>
                       <Input
                         label="sourceField"
@@ -2269,7 +2274,7 @@ export function WidgetConfigPanel({
                         placeholder="brand_id"
                       />
                       <Input
-                        label="path (boş = birinji child path)"
+                        label={t('pathEmptyFirst')}
                         value={lv.path || ''}
                         onChange={(e) => {
                           const next = [...(ds.drillDown?.levels || [])];
@@ -2322,7 +2327,7 @@ export function WidgetConfigPanel({
                   });
                 }}
                 options={[
-                  { value: '', label: '— Saýla —' },
+                  { value: '', label: t('selectDash') },
                   ...endpoints.map((ep) => ({
                     value: ep.id,
                     label: `${ep.name} (${ep.tenantSlug}${ep.pathTemplate})`,
@@ -2349,7 +2354,7 @@ export function WidgetConfigPanel({
                 }
               />
               <Input
-                label="Modal title şablony"
+                label={t('modalTitleTemplate')}
                 value={ds.drillDown.titleTemplate || ''}
                 onChange={(e) =>
                   patchDs({
@@ -2447,7 +2452,7 @@ export function WidgetConfigPanel({
                     </select>
                     <input
                       className="rounded border border-slate-700 bg-slate-900 px-1.5 py-1 text-[11px] text-white col-span-2 font-mono"
-                      placeholder="Ýa-da column adyny ýazyň"
+                      placeholder={t('orTypeColumnNameShort')}
                       value={a.column}
                       onChange={(e) => {
                         const next = [...(ds.drillDown?.aggregates || [])];
@@ -2528,9 +2533,7 @@ export function WidgetConfigPanel({
                             },
                           });
                         }}
-                      >
-                        Poz
-                      </button>
+                      >{t('delete')}</button>
                     </div>
                   </div>
                 ))}

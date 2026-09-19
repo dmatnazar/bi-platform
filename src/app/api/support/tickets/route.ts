@@ -15,6 +15,19 @@ function isSupportStaff(user: any) {
   return canHandleSupport(user) || isSuperAdmin(user);
 }
 
+/** Bir firma bir gezek (slug / id) */
+function dedupeCompanies(list: any[]): any[] {
+  const map = new Map<string, any>();
+  for (const c of list || []) {
+    const slug = String(c.slug || '').toLowerCase().trim();
+    const id = String(c.id || '').trim();
+    const key = slug || id;
+    if (!key) continue;
+    if (!map.has(key)) map.set(key, c);
+  }
+  return [...map.values()];
+}
+
 /** Firma umumy chat id (durnukly) */
 function groupChatId(companyId: string) {
   return `group-${companyId}`;
@@ -74,7 +87,7 @@ export async function GET(req: NextRequest) {
 
   // User firms (tenant slugs + primary company)
   const mySlugs = actorTenantSlugs(user);
-  const companies = await listCompanies();
+  const companies = dedupeCompanies(await listCompanies());
   const mySlugsSet = new Set(mySlugs);
   const myCompanies = companies.filter((c) => {
     const id = String(c.id || '');
@@ -87,22 +100,19 @@ export async function GET(req: NextRequest) {
     );
   });
 
-  // Ensure group chats for user firms
+  // Ensure group chats — her slug üçin bir
   const groups: SupportTicket[] = [];
-  for (const c of myCompanies) {
+  const groupScope = dedupeCompanies(
+    admin ? (isSuperAdmin(user) ? companies : myCompanies) : myCompanies
+  );
+  for (const c of groupScope) {
     const g = await ensureGroupChat(String(c.id), c.slug, c.name);
-    groups.push(g);
-  }
-  // Admin / super: ensure groups for all or company scope
-  if (admin) {
-    const scope = isSuperAdmin(user) ? companies : myCompanies;
-    for (const c of scope) {
-      const g = await ensureGroupChat(String(c.id), c.slug, c.name);
-      if (!groups.find((x) => x.id === g.id)) groups.push(g);
+    if (!groups.find((x) => x.id === g.id || x.companyId === g.companyId)) {
+      groups.push(g);
     }
   }
 
-  let tickets;
+  let tickets: SupportTicket[];
   if (admin) {
     tickets = await listSupportTickets({
       companyId: companyFilter || (isSuperAdmin(user) ? undefined : user.companyId),
@@ -110,20 +120,23 @@ export async function GET(req: NextRequest) {
     });
   } else {
     tickets = await listSupportTickets({ userId: user.id, status });
-    // also include group chats for my firms
-    tickets = [
-      ...groups.filter((g) => !status || g.status === status),
-      ...tickets.filter((t) => !t.isGroupChat),
-    ];
   }
 
-  if (admin) {
-    // include groups in list
-    const gids = new Set(tickets.filter((t) => t.isGroupChat).map((t) => t.id));
-    for (const g of groups) {
-      if (!gids.has(g.id)) {
-        if (!companyFilter || g.companyId === companyFilter) tickets.push(g);
-      }
+  // Köne / goşmaça umumy chat-lary aýyr (diňe group-{companyId} galdyr)
+  const canonicalGroupIds = new Set(groups.map((g) => g.id));
+  tickets = tickets.filter((t) => {
+    if (!t.isGroupChat) return true;
+    // diňe kanonik umumy chat
+    return canonicalGroupIds.has(t.id);
+  });
+
+  // Her firma üçin bir umumy chat (myCompanies / admin scope)
+  const haveGroup = new Set(tickets.filter((t) => t.isGroupChat).map((t) => t.companyId));
+  for (const g of groups) {
+    if (companyFilter && g.companyId !== companyFilter) continue;
+    if (!haveGroup.has(g.companyId)) {
+      tickets.push(g);
+      haveGroup.add(g.companyId);
     }
   }
 
@@ -131,10 +144,23 @@ export async function GET(req: NextRequest) {
     tickets = tickets.filter((t) => t.companyId === companyFilter);
   }
 
+  // User: ähli bagly firmalaryň umumy chat-y + öz ticketleri
+  if (!admin) {
+    tickets = tickets.filter(
+      (t) =>
+        t.isGroupChat ||
+        t.userId === user.id
+    );
+  }
+
   tickets = tickets.sort((a, b) => {
-    // groups first for users
     if (a.isGroupChat && !b.isGroupChat) return -1;
     if (!a.isGroupChat && b.isGroupChat) return 1;
+    if (a.isGroupChat && b.isGroupChat) {
+      return String(a.companyName || a.companySlug || '').localeCompare(
+        String(b.companyName || b.companySlug || '')
+      );
+    }
     return (b.lastMessageAt || '').localeCompare(a.lastMessageAt || '');
   });
 
@@ -144,13 +170,14 @@ export async function GET(req: NextRequest) {
     messageCount: (t.messages || []).length,
   }));
 
-  const firmList = (admin ? (isSuperAdmin(user) ? companies : myCompanies) : myCompanies).map(
-    (c: any) => ({
-      id: String(c.id),
-      slug: String(c.slug || ''),
-      name: String(c.name || c.slug || c.id),
-    })
+  const firmSource = dedupeCompanies(
+    admin ? (isSuperAdmin(user) ? companies : myCompanies) : myCompanies
   );
+  const firmList = firmSource.map((c: any) => ({
+    id: String(c.id),
+    slug: String(c.slug || ''),
+    name: String(c.name || c.slug || c.id),
+  }));
 
   return NextResponse.json({
     tickets: slim,

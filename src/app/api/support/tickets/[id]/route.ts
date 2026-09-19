@@ -110,8 +110,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
 
   const admin = isSupportStaff(user);
-  // User may only write on their own ticket; admin replies as staff
-  if (!admin && ticket.userId !== user.id) {
+  // Own ticket OR company group chat (canAccess already checked)
+  if (!admin && ticket.userId !== user.id && !ticket.isGroupChat) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
@@ -161,8 +161,6 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!user) return NextResponse.json({ error: 'Giriş gerek' }, { status: 401 });
 
   const admin = isSupportStaff(user);
-  if (!admin) return NextResponse.json({ error: 'Diňe admin' }, { status: 403 });
-
   const { id } = await ctx.params;
   const ticket = await getSupportTicket(id);
   if (!ticket) return NextResponse.json({ error: 'Tapyimady' }, { status: 404 });
@@ -171,9 +169,29 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   const body = await req.json();
+  // Hat üýtgetmek: { messageId, body }
+  if (body.messageId && typeof body.body === 'string') {
+    const msg = (ticket.messages || []).find((m) => m.id === body.messageId);
+    if (!msg) return NextResponse.json({ error: 'Hat tapylmady' }, { status: 404 });
+    if (msg.authorId !== user.id && !admin) {
+      return NextResponse.json({ error: 'Diňe öz hatyňyzy üýtgedip bilersiňiz' }, { status: 403 });
+    }
+    msg.body = String(body.body).trim().slice(0, 5000);
+    (msg as any).editedAt = new Date().toISOString();
+    ticket.updatedAt = new Date().toISOString();
+    await upsertSupportTicket(ticket);
+    return NextResponse.json({ ticket });
+  }
+
+  if (!admin) return NextResponse.json({ error: 'Diňe admin' }, { status: 403 });
+
   const parsed = patchSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: 'Nädogry' }, { status: 400 });
+  }
+
+  if (ticket.isGroupChat && parsed.data.status === 'trashed') {
+    return NextResponse.json({ error: 'Umumy chat pozulmaýar' }, { status: 400 });
   }
 
   const now = new Date().toISOString();
@@ -204,8 +222,10 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
   }
 
+  if (ticket.isGroupChat) {
+    return NextResponse.json({ error: 'Umumy chat pozulmaýar' }, { status: 400 });
+  }
   // Only allow permanent delete from trash (or force)
-  // Soft rule: prefer trashed first, but allow hard delete always for admin
   const removed = await deleteSupportTicket(id);
   if (!removed) return NextResponse.json({ error: 'Pozup bolmady' }, { status: 500 });
 

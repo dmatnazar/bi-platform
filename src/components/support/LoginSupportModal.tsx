@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Headphones, Phone, X, User, Mail, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Contact = {
   id: string;
   fullName: string;
   role?: string;
+  roleRu?: string;
+  noteRu?: string;
   phone?: string;
   telegram?: string;
   whatsapp?: string;
@@ -79,7 +82,10 @@ const btnBase =
   'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium border transition-colors';
 
 export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [intro, setIntro] = useState('Tehniki meseleler boýunça biziň bilen habarlaşyň.');
+  const { t, locale } = useLocale();
+  const [intro, setIntro] = useState(() => t('techSupportIntro'));
+  const [introTm, setIntroTm] = useState('');
+  const [introRuState, setIntroRuState] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -91,7 +97,16 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
-        if (d.intro) setIntro(d.intro);
+        const ru = (d.introRu || '').trim();
+        const tm = (d.intro || '').trim();
+        setIntroTm(tm);
+        setIntroRuState(ru);
+        if (locale === 'ru') {
+          const pick = ru || t('techSupportIntro');
+          setIntro(/Tehniki meseleler|habarlaşyň/i.test(pick) ? t('techSupportIntro') : pick);
+        } else {
+          setIntro(tm || t('techSupportIntro'));
+        }
         setContacts(Array.isArray(d.contacts) ? d.contacts : []);
       })
       .catch(() => {})
@@ -101,7 +116,16 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
     return () => {
       alive = false;
     };
-  }, [open]);
+  }, [open, locale, t]);
+
+  useEffect(() => {
+    if (locale === 'ru') {
+      const pick = introRuState || t('techSupportIntro');
+      setIntro(/Tehniki meseleler|habarlaşyň/i.test(pick) ? t('techSupportIntro') : pick);
+    } else {
+      setIntro(introTm || t('techSupportIntro'));
+    }
+  }, [locale, introTm, introRuState, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -119,7 +143,7 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
       className="fixed inset-0 z-[2147483000] flex items-end sm:items-center justify-center px-3 pb-10 sm:pb-0 pt-16"
       role="dialog"
       aria-modal="true"
-      aria-label="Tehniki goldaw"
+      aria-label={t('techSupport')}
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md rounded-2xl border border-slate-700/80 bg-gradient-to-b from-slate-900 to-slate-950 shadow-2xl overflow-hidden max-h-[min(78dvh,560px)] flex flex-col">
@@ -128,29 +152,29 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
             <Headphones className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-white">Tehniki goldaw</p>
+            <p className="text-sm font-semibold text-white">{t('techSupport')}</p>
             <p className="text-[11px] text-slate-500 truncate">{intro}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-            aria-label="Ýap"
+            aria-label={t('close')}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2.5">
-          {loading && <p className="text-center text-xs text-slate-500 py-8">Ýüklenýär…</p>}
+          {loading && <p className="text-center text-xs text-slate-500 py-8">{t('loading')}</p>}
           {!loading && contacts.length === 0 && (
             <p className="text-center text-xs text-slate-500 py-8">
-              Häzirçe kontakt goşulmadyk.
+              {t('noContactsYet')}
             </p>
           )}
           {contacts.map((c) => {
-            const msg = `Salam, ${c.fullName}! BI Platform boýunça tehniki kömek gerek.`;
-            const mailSub = 'BI Platform — tehniki goldaw';
+            const msg = `${t('supportHelloTpl').replace('{name}', c.fullName)}`;
+            const mailSub = t('mailSubjectSupport');
             return (
               <div
                 key={c.id}
@@ -162,8 +186,12 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-white truncate">{c.fullName}</p>
-                    {c.role ? <p className="text-[11px] text-slate-400 truncate">{c.role}</p> : null}
-                    {c.note ? <p className="text-[10px] text-slate-500 mt-0.5">{c.note}</p> : null}
+                    {(c.role || c.roleRu) ? (
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {locale === 'ru' ? (c.roleRu || c.role) : (c.role || c.roleRu)}
+                      </p>
+                    ) : null}
+                    {(locale === 'ru' ? c.noteRu || c.note : c.note || c.noteRu) ? <p className="text-[10px] text-slate-500 mt-0.5">{locale === 'ru' ? (c.noteRu || c.note) : (c.note || c.noteRu)}</p> : null}
                   </div>
                 </div>
 
@@ -174,7 +202,7 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
                       className={cn(btnBase, 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25')}
                     >
                       <Phone className="h-3.5 w-3.5" />
-                      Jan
+                      {t('call')}
                     </a>
                   ) : null}
                   {c.phone ? (
@@ -183,7 +211,7 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
                       className={cn(btnBase, 'bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500/25')}
                     >
                       <MessageSquare className="h-3.5 w-3.5" />
-                      SMS
+                      {t('sms')}
                     </a>
                   ) : null}
                   {c.telegram ? (
@@ -239,7 +267,7 @@ export function LoginSupportModal({ open, onClose }: { open: boolean; onClose: (
             onClick={onClose}
             className="w-full rounded-xl border border-slate-700 bg-slate-800/80 py-2 text-xs font-medium text-white hover:bg-slate-700"
           >
-            Ýap
+            {t('closeBtn')}
           </button>
         </div>
       </div>

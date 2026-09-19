@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react';
 import { Headphones, Phone, Mail, User, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Contact = {
   id: string;
   fullName: string;
   role?: string;
+  roleRu?: string;
+  noteRu?: string;
   phone?: string;
   telegram?: string;
   whatsapp?: string;
@@ -40,7 +43,9 @@ const btn =
   'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-medium border transition-colors';
 
 export default function TechSupportPage() {
-  const [intro, setIntro] = useState('Tehniki meseleler boýunça biziň bilen habarlaşyň.');
+  const { t, locale } = useLocale();
+
+  const [intro, setIntro] = useState(t('supportContactText'));
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,37 +53,44 @@ export default function TechSupportPage() {
     fetch('/api/public/support-contacts', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
-        if (d.intro) setIntro(d.intro);
+        const ru = (d.introRu || '').trim();
+        const tm = (d.intro || '').trim();
+        if (locale === 'ru') {
+          const pick = ru || t('techSupportIntro');
+          setIntro(/Tehniki meseleler|habarlaşyň/i.test(pick) ? t('techSupportIntro') : pick);
+        } else {
+          setIntro(tm || t('techSupportIntro'));
+        }
         setContacts(Array.isArray(d.contacts) ? d.contacts : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [locale, t]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4 px-1 sm:px-0">
+    <div className="w-full max-w-4xl mx-auto space-y-4 px-1 sm:px-0">
       <div>
         <h1 className="text-base sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
           <Headphones className="h-5 w-5 text-cyan-400 shrink-0" />
-          Tehniki goldaw
+          {t('techSupport')}
         </h1>
         <p className="text-xs sm:text-sm text-slate-400 mt-1">{intro}</p>
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-500 py-10 text-center">Ýüklenýär…</p>
+        <p className="text-sm text-slate-500 py-10 text-center">{t('loading')}</p>
       ) : contacts.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-700 py-14 text-center text-sm text-slate-500">
-          Kontakt goşulmadyk
+          {t('noContactsYet')}
         </div>
       ) : (
         <div className="grid gap-3">
           {contacts.map((c) => {
-            const msg = `Salam, ${c.fullName}! BI Platform boýunça tehniki kömek gerek.`;
+            const msg = `${t('supportHelloTpl').replace('{name}', c.fullName)}`;
             return (
               <div
                 key={c.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 space-y-3 shadow-lg"
+                className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 shadow-lg"
               >
                 <div className="flex items-start gap-3">
                   <div className="h-12 w-12 rounded-full bg-gradient-to-br from-cyan-500/25 to-indigo-500/20 text-cyan-200 flex items-center justify-center border border-cyan-500/20 shrink-0">
@@ -86,14 +98,40 @@ export default function TechSupportPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white">{c.fullName}</p>
-                    {c.role && <p className="text-xs text-slate-400">{c.role}</p>}
-                    {c.note && <p className="text-[11px] text-slate-500 mt-0.5">{c.note}</p>}
+                    {(c.role || c.roleRu) && <p className="text-xs text-slate-400">{locale === 'ru' ? (c.roleRu || c.role) : (c.role || c.roleRu)}</p>}
+                    {(locale === 'ru' ? (c.noteRu || c.note) : (c.note || c.noteRu)) && <p className="text-[11px] text-slate-500 mt-0.5">{locale === 'ru' ? (c.noteRu || c.note) : (c.note || c.noteRu)}</p>}
                   </div>
+                </div>
+                <div className="hidden sm:grid grid-cols-2 gap-2 text-xs text-slate-300 mb-1">
+                  {c.phone && (
+                    <p>
+                      <span className="text-slate-500">Jan: </span>
+                      <a href={`tel:${c.phone}`} className="text-sky-400 hover:underline">{c.phone}</a>
+                    </p>
+                  )}
+                  {c.gmail && (
+                    <p>
+                      <span className="text-slate-500">Email: </span>
+                      <a href={`mailto:${c.gmail}`} className="text-sky-400 hover:underline">{c.gmail}</a>
+                    </p>
+                  )}
+                  {c.telegram && (
+                    <p>
+                      <span className="text-slate-500">Telegram: </span>
+                      <span className="text-slate-200">{c.telegram}</span>
+                    </p>
+                  )}
+                  {c.whatsapp && (
+                    <p>
+                      <span className="text-slate-500">WhatsApp: </span>
+                      <span className="text-slate-200">{c.whatsapp}</span>
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {c.phone && (
                     <a href={`tel:${digitsOnly(c.phone)}`} className={cn(btn, 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30')}>
-                      <Phone className="h-3.5 w-3.5" /> Jan
+                      <Phone className="h-3.5 w-3.5" /> {t('call')}
                     </a>
                   )}
                   {c.phone && (
@@ -101,7 +139,7 @@ export default function TechSupportPage() {
                       href={`sms:${digitsOnly(c.phone)}?body=${encodeURIComponent(msg)}`}
                       className={cn(btn, 'bg-teal-500/15 text-teal-300 border-teal-500/30')}
                     >
-                      <MessageSquare className="h-3.5 w-3.5" /> SMS
+                      <MessageSquare className="h-3.5 w-3.5" /> {t('sms')}
                     </a>
                   )}
                   {c.telegram && (

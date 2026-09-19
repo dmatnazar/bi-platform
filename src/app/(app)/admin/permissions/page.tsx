@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError, toastInfo } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type StaffRole = 'super_admin' | 'admin' | 'editor' | 'viewer';
 type PermissionKey = string;
@@ -64,6 +65,8 @@ const ROLE_META: {
 ];
 
 export default function PermissionsPage() {
+  const { t } = useLocale();
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [forbidden, setForbidden] = useState(false);
@@ -93,7 +96,7 @@ export default function PermissionsPage() {
       setMatrix(data.matrix);
       setDirty(false);
     } catch {
-      toastError('Ýüklenmedi', 'Rugsatlar alynmady');
+      toastError(t('loadFailedCap'), t('permissionsLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -146,12 +149,12 @@ export default function PermissionsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak şowsuz', data.error);
+        toastError(t('saveFailedLong'), data.error);
         return;
       }
       setMatrix(data.matrix);
       setDirty(false);
-      toastSuccess('Saklandy', 'Rol rugsatlary täzelendi');
+      toastSuccess(t('saved'), t('rolePermsUpdated'));
     } finally {
       setSaving(false);
     }
@@ -159,9 +162,9 @@ export default function PermissionsPage() {
 
   async function resetDefaults() {
     const ok = await confirmDialog({
-      title: 'Deslapky rugsatlar',
+      title: t('defaultPerms'),
       message:
-        'Ähli üýtgeşmeler pozular we deslapky (zawod) rugsatlar dikeldiler. Dowam edilsinmi?',
+        t('resetPermsConfirm'),
       confirmLabel: 'Dikelt',
       danger: true,
     });
@@ -180,7 +183,7 @@ export default function PermissionsPage() {
       }
       setMatrix(data.matrix);
       setDirty(false);
-      toastInfo('Dikeldildi', 'Deslapky rugsatlar ýüklendi');
+      toastInfo('Dikeldildi', t('defaultPermsLoaded'));
     } finally {
       setSaving(false);
     }
@@ -260,7 +263,7 @@ export default function PermissionsPage() {
         <Info className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
         <p>
           <strong className="text-amber-200">Super admin</strong> hemişe ähli rugsatlara eýe we
-          üýtgedilmeýär. Diňe <strong className="text-amber-200">admin / editor / viewer</strong>{' '}
+          üýtgedilmeýär. Diňe <strong className="text-amber-600">admin / editor / viewer</strong>{' '}
           üçin bellikleri üýtgedip bilersiňiz. Käbir rugsatlar (slug, tarif, programmalar…) diňe
           super admin-de galýar.
         </p>
@@ -301,13 +304,13 @@ export default function PermissionsPage() {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Rugsat gözle..."
+          placeholder={t('searchPerm')}
           className="w-full h-9 pl-3 pr-3 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/40"
         />
       </div>
 
       {loading || !matrix ? (
-        <div className="text-center text-slate-500 text-sm py-12">Ýüklenýär...</div>
+        <div className="text-center text-slate-500 text-sm py-12">{t('loading')}</div>
       ) : (
         <div className="space-y-3">
           {filteredGroups.map((g) => {
@@ -344,7 +347,7 @@ export default function PermissionsPage() {
                         type="button"
                         className="text-[10px] px-1.5 py-0.5 rounded-md border border-slate-700 text-slate-400 hover:text-emerald-300 hover:border-emerald-500/40"
                         onClick={() => setAllInGroup(activeRole, g.items, true)}
-                        title="Ählisini aç"
+                        title={t('expandAll')}
                       >
                         Ähli
                       </button>
@@ -352,7 +355,7 @@ export default function PermissionsPage() {
                         type="button"
                         className="text-[10px] px-1.5 py-0.5 rounded-md border border-slate-700 text-slate-400 hover:text-rose-300 hover:border-rose-500/40"
                         onClick={() => setAllInGroup(activeRole, g.items, false)}
-                        title="Ählisini ýap"
+                        title={t('collapseAll')}
                       >
                         Hiç
                       </button>
@@ -422,13 +425,9 @@ export default function PermissionsPage() {
       {/* Sticky mobile save bar */}
       {dirty && (
         <div className="fixed bottom-0 inset-x-0 z-40 sm:hidden border-t border-slate-800 bg-slate-950/95 backdrop-blur px-3 py-2.5 flex gap-2 safe-area-pb">
-          <Button variant="secondary" className="flex-1 h-10" onClick={load} disabled={saving}>
-            Ýatyr
-          </Button>
+          <Button variant="secondary" className="flex-1 h-10" onClick={load} disabled={saving}>{t('cancel')}</Button>
           <Button className="flex-1 h-10" loading={saving} onClick={save}>
-            <Save className="h-4 w-4" />
-            Sakla
-          </Button>
+            <Save className="h-4 w-4" />{t('save')}</Button>
         </div>
       )}
     </div>

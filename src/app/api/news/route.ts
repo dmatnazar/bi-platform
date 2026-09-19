@@ -95,6 +95,8 @@ export async function POST(req: NextRequest) {
   const item = createNews({
     title,
     body: String(body.body || ''),
+    titleRu: body.titleRu != null ? String(body.titleRu) : undefined,
+    bodyRu: body.bodyRu != null ? String(body.bodyRu) : undefined,
     images: Array.isArray(body.images) ? body.images.map(String) : [],
     media: Array.isArray(body.media) ? body.media : undefined,
     published: body.published !== false,

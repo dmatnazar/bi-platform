@@ -17,6 +17,7 @@ import { ChartWidget } from '@/components/charts/ChartWidget';
 import { cn } from '@/lib/utils';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { getEndpointCatalog, resolveLiveEndpoint, type CatalogEndpoint } from '@/lib/endpoint-catalog-client';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   /** Fullscreen: enable chart wheel/pinch zoom */
@@ -146,6 +147,8 @@ function LiveWidgetInner({
   className,
   zoomEnabled = false,
 }: Props) {
+  const { t } = useLocale();
+
   const [rows, setRows] = useState<Record<string, unknown>[] | undefined>(undefined);
   const [truncatedWarn, setTruncatedWarn] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -306,7 +309,7 @@ function LiveWidgetInner({
         const data = await res.json().catch(() => ({}));
         if (ac.signal.aborted) return;
         if (!res.ok) {
-          setError(data.error || data.message || 'API säwlik');
+          setError(data.error || data.message || t('apiError'));
           setRows(undefined);
           lastFetchedKey.current = '';
         } else {
@@ -327,7 +330,7 @@ function LiveWidgetInner({
             truncated = true;
           }
           if (truncated) {
-            setTruncatedWarn(`Ilkinji ${maxRows} setir görkezilýär (API max setir çägi).`);
+            setTruncatedWarn(`${t('rowsLimitTpl').replace('{n}', String(maxRows))}`);
           } else {
             setTruncatedWarn(null);
           }
@@ -435,19 +438,23 @@ function LiveWidgetInner({
       {error && !loading && (
         <div className="absolute inset-0 z-30 flex items-center justify-center p-3 bg-slate-950/70 backdrop-blur-[1px]">
           <div className="max-w-[90%] w-full rounded-2xl border border-rose-500/30 bg-slate-900/95 shadow-xl px-4 py-5 flex flex-col items-center gap-3 text-center">
-            <div className="h-10 w-10 rounded-full bg-rose-500/15 flex items-center justify-center">
-              <AlertTriangle className="h-5 w-5 text-rose-400" />
-            </div>
-            <p className="text-xs text-rose-200/90 leading-snug break-words max-h-16 overflow-hidden">
-              {error}
-            </p>
+            {widget.type !== 'kpi' && (
+              <>
+                <div className="h-10 w-10 rounded-full bg-rose-500/15 flex items-center justify-center">
+                  <AlertTriangle className="h-5 w-5 text-rose-400" />
+                </div>
+                <p className="text-xs text-rose-200/90 leading-snug break-words max-h-16 overflow-hidden">
+                  {error}
+                </p>
+              </>
+            )}
             <button
               type="button"
               onClick={retryFetch}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-xl border border-indigo-500/40 bg-indigo-500/15 text-sm font-medium text-indigo-200 hover:bg-indigo-500/25 hover:border-indigo-400/60 transition-colors"
+              className="bi-widget-retry-btn inline-flex items-center gap-2 h-9 px-4 rounded-xl border border-indigo-500/40 bg-indigo-500/15 text-sm font-medium text-indigo-200 hover:bg-indigo-500/25 hover:border-indigo-400/60 transition-colors"
             >
               <RefreshCw className="h-4 w-4" />
-              Täzele
+              {t('refresh')}
             </button>
           </div>
         </div>

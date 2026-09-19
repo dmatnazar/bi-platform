@@ -4,17 +4,20 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Headphones, Plus, Trash2, Save, RefreshCw, Pencil, X, Phone, Mail } from 'lucide-react';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Contact = {
   id: string;
   fullName: string;
   role?: string;
+  roleRu?: string;
   phone?: string;
   telegram?: string;
   whatsapp?: string;
   imo?: string;
   gmail?: string;
   note?: string;
+  noteRu?: string;
   order: number;
   active: boolean;
 };
@@ -24,6 +27,8 @@ function emptyForm(): Contact {
     id: '',
     fullName: '',
     role: 'Tehniki goldaw',
+    roleRu: 'Техподдержка',
+    noteRu: '',
     phone: '',
     telegram: '',
     whatsapp: '',
@@ -36,7 +41,10 @@ function emptyForm(): Contact {
 }
 
 export function SupportContactsAdmin() {
+  const { t } = useLocale();
+
   const [intro, setIntro] = useState('');
+  const [introRu, setIntroRu] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,8 +57,9 @@ export function SupportContactsAdmin() {
     try {
       const res = await fetch('/api/admin/support-contacts');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
+      if (!res.ok) throw new Error(data.error || t('loadFailedLower'));
       setIntro(data.intro || '');
+      setIntroRu(data.introRu || '');
       setContacts(Array.isArray(data.contacts) ? data.contacts : []);
     } catch (e) {
       toastError('Goldaw kontaktlary', String(e));
@@ -63,19 +72,20 @@ export function SupportContactsAdmin() {
     void load();
   }, [load]);
 
-  async function persist(nextContacts: Contact[], nextIntro?: string) {
+  async function persist(nextContacts: Contact[], nextIntro?: string, nextIntroRu?: string) {
     setSaving(true);
     try {
       const res = await fetch('/api/admin/support-contacts', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ intro: nextIntro ?? intro, contacts: nextContacts }),
+        body: JSON.stringify({ intro: nextIntro ?? intro, introRu: nextIntroRu ?? introRu, contacts: nextContacts }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'saklanmady');
       setContacts(data.contacts || []);
       if (data.intro != null) setIntro(data.intro);
-      toastSuccess('Tehniki goldaw saklandy');
+      if (data.introRu != null) setIntroRu(data.introRu);
+      toastSuccess(t('savedOk'));
       return true;
     } catch (e) {
       toastError('Saklamak', String(e));
@@ -99,7 +109,7 @@ export function SupportContactsAdmin() {
 
   async function saveModal() {
     if (!form.fullName.trim()) {
-      toastError('Ady gerek', 'Ady Familiýasy ýazyň');
+      toastError('Ady gerek', t('enterFullName'));
       return;
     }
     let next: Contact[];
@@ -118,7 +128,7 @@ export function SupportContactsAdmin() {
   }
 
   async function saveIntro() {
-    await persist(contacts, intro);
+    await persist(contacts, intro, introRu);
   }
 
   return (
@@ -129,9 +139,9 @@ export function SupportContactsAdmin() {
             <Headphones className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-white">Tehniki goldaw</h2>
+            <h2 className="text-sm font-semibold text-white">{t('supportStaffTitle')}</h2>
             <p className="text-[11px] text-slate-500 leading-snug">
-              Login «Tehniki goldaw» modalynyň işgärleri
+              {t('supportStaffHint')}
             </p>
           </div>
         </div>
@@ -141,32 +151,45 @@ export function SupportContactsAdmin() {
           </Button>
           <Button size="sm" onClick={openCreate} className="flex-1 sm:flex-none">
             <Plus className="h-3.5 w-3.5" />
-            Goş
+            {t('addContact')}
           </Button>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <label className="text-xs text-slate-400">Modal giriş teksti</label>
+        <label className="text-xs text-slate-400">{t('modalIntroTm')}</label>
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
             value={intro}
             onChange={(e) => setIntro(e.target.value)}
-            placeholder="Tehniki meseleler boýunça..."
+            placeholder={t('supportContactShort')}
           />
           <Button size="sm" variant="secondary" loading={saving} onClick={() => void saveIntro()} className="shrink-0">
             <Save className="h-3.5 w-3.5" />
-            Teksti sakla
+            {t('saveText')}
+          </Button>
+        </div>
+        <label className="text-xs text-slate-400 mt-2">{t('modalIntroRu')}</label>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+            value={introRu}
+            onChange={(e) => setIntroRu(e.target.value)}
+            placeholder="RU"
+          />
+          <Button size="sm" variant="secondary" loading={saving} onClick={() => void saveIntro()} className="shrink-0">
+            <Save className="h-3.5 w-3.5" />
+            {t('saveText')}
           </Button>
         </div>
       </div>
 
       {loading ? (
-        <p className="text-xs text-slate-500">Ýüklenýär…</p>
+        <p className="text-xs text-slate-500">{t('loading')}</p>
       ) : contacts.length === 0 ? (
         <p className="text-xs text-slate-500 py-8 text-center border border-dashed border-slate-700 rounded-xl">
-          Işgär ýok. «Goş» bilen täze kontakt goşuň.
+          {t('noStaffYet')}
         </p>
       ) : (
         <>
@@ -189,7 +212,7 @@ export function SupportContactsAdmin() {
                         : 'shrink-0 text-[10px] text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded'
                     }
                   >
-                    {c.active ? 'Aktiw' : 'Öçük'}
+                    {c.active ? t('active') : t('disabled')}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 gap-1 text-[11px]">
@@ -219,17 +242,13 @@ export function SupportContactsAdmin() {
                     className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-slate-700 py-2 text-xs text-sky-300 hover:bg-slate-800"
                     onClick={() => openEdit(c)}
                   >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Üýtget
-                  </button>
+                    <Pencil className="h-3.5 w-3.5" />{t('edit')}</button>
                   <button
                     type="button"
                     className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg border border-slate-700 py-2 text-xs text-rose-400 hover:bg-slate-800"
                     onClick={() => void remove(c.id)}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Poz
-                  </button>
+                    <Trash2 className="h-3.5 w-3.5" />{t('delete')}</button>
                 </div>
               </div>
             ))}
@@ -241,7 +260,7 @@ export function SupportContactsAdmin() {
               <thead className="bg-slate-950 text-slate-400">
                 <tr className="border-b border-slate-800">
                   <th className="px-3 py-2 font-medium">Ady</th>
-                  <th className="px-3 py-2 font-medium">Wezipe</th>
+                  <th className="px-3 py-2 font-medium">{t('roleTm')}</th>
                   <th className="px-3 py-2 font-medium">Telefon</th>
                   <th className="px-3 py-2 font-medium">Telegram</th>
                   <th className="px-3 py-2 font-medium">WhatsApp</th>
@@ -267,7 +286,7 @@ export function SupportContactsAdmin() {
                             : 'text-slate-500 bg-slate-800 px-1.5 py-0.5 rounded'
                         }
                       >
-                        {c.active ? 'Aktiw' : 'Öçük'}
+                        {c.active ? t('active') : t('disabled')}
                       </span>
                     </td>
                     <td className="px-3 py-2">
@@ -302,7 +321,7 @@ export function SupportContactsAdmin() {
           <div className="relative w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl max-h-[92dvh] overflow-y-auto">
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 sticky top-0 bg-slate-900 z-10">
               <h3 className="text-sm font-semibold text-white">
-                {editingId ? 'Işgäri üýtget' : 'Täze işgär'}
+                {editingId ? t('editStaff') : t('newStaff')}
               </h3>
               <button type="button" className="p-1.5 text-slate-400 hover:text-white" onClick={() => setModalOpen(false)}>
                 <X className="h-4 w-4" />
@@ -318,11 +337,19 @@ export function SupportContactsAdmin() {
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400">Wezipe</label>
+                <label className="text-xs text-slate-400">{t('roleTm')}</label>
                 <input
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
                   value={form.role || ''}
                   onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                  placeholder="TM"
+                />
+                <label className="text-xs text-slate-400 mt-2 block">{t('roleRu')}</label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+                  value={form.roleRu || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, roleRu: e.target.value }))}
+                  placeholder="RU"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -370,11 +397,19 @@ export function SupportContactsAdmin() {
                 </div>
               </div>
               <div>
-                <label className="text-xs text-slate-400">Bellik</label>
+                <label className="text-xs text-slate-400">{t('noteTm')}</label>
                 <input
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
                   value={form.note || ''}
                   onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))}
+                  placeholder="TM"
+                />
+                <label className="text-xs text-slate-400 mt-2 block">{t('noteRu')}</label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white"
+                  value={form.noteRu || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, noteRu: e.target.value }))}
+                  placeholder="RU"
                 />
               </div>
               <label className="flex items-center gap-2 text-sm text-slate-300 py-1">

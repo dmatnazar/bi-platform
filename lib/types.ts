@@ -254,7 +254,7 @@ export type GlobalFilterValues = Record<string, string | number | boolean | null
 
 /** Support chat: users write only to admins */
 export type SupportCategory = 'error' | 'suggestion' | 'question' | 'feedback' | 'other';
-export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'trashed';
 
 export interface SupportMessage {
   id: string;

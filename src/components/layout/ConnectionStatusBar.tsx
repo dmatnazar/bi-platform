@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatDate, formatDateTime } from '@/lib/utils';
 import { Cloud, CloudOff, Database, RefreshCw, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
+import { useLocale } from '@/components/LocaleProvider';
 interface TenantClientStatus {
   slug: string;
   name: string;
@@ -45,47 +45,42 @@ function formatClientLabel(status: Status | null, companyName?: string): string 
     let live = 0;
     let offline = 0;
     for (const t of list) {
-      if (t.online || t.live) live += 1;
+      if (t.online) live += 1;
       else offline += 1;
     }
     const parts: string[] = [];
-    if (live) parts.push(`live(${live})`);
+    if (live) parts.push(`online(${live})`);
     if (offline) parts.push(`offline(${offline})`);
     return parts.join(', ') || '—';
   }
   if (list.length === 1) {
     const t = list[0];
     if (t.online) return `${t.name} online`;
-    if (status?.biClientDataAvailable) return status.fromCache ? `${t.name} cache` : `${t.name} live`;
     return `${t.name} offline`;
-  }
-  if (status?.biClientDataAvailable) {
-    return status.fromCache ? 'cache' : 'live';
   }
   return companyName ? `${companyName} —` : '—';
 }
 
 /** Admin strip: live(n), offline(n) — details in modal */
-function formatAdminClientSummary(status: Status | null): string {
+function formatAdminClientSummary(status: Status | null, t: (k: string, fb?: string) => string): string {
   const list = status?.tenantStatuses || [];
   if (list.length === 0) {
     if (status?.biClientDataAvailable) return status.fromCache ? 'cache' : 'live';
-    return 'ýok';
+    return t('noneShort');
   }
   let live = 0;
   let offline = 0;
-  for (const t of list) {
-    if (t.online || t.live) live += 1;
+  for (const item of list) {
+    if (item.online) live += 1;
     else offline += 1;
   }
   if (list.length === 1) {
-    const t = list[0];
-    if (t.online) return `${t.name} online`;
-    if (t.live || status?.biClientDataAvailable) return `${t.name} live`;
-    return `${t.name} offline`;
+    const item = list[0];
+    if (item.online) return `${item.name} online`;
+    return `${item.name} offline`;
   }
   const parts: string[] = [];
-  if (live) parts.push(`live(${live})`);
+  if (live) parts.push(`online(${live})`);
   if (offline) parts.push(`offline(${offline})`);
   return parts.join(', ') || '—';
 }
@@ -99,6 +94,8 @@ interface Props {
 }
 
 export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props) {
+  const { t } = useLocale();
+
   const [status, setStatus] = useState<Status | null>(null);
   const [loading, setLoading] = useState(false);
   const [clientModal, setClientModal] = useState(false);
@@ -166,7 +163,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   const intervalLabel =
     !status || status.catalogSyncIntervalSec <= 0
       ? 'el bilen'
-      : `her ${status.catalogSyncIntervalSec}s`;
+      : t('intervalEvery').replace('{n}', String(status.catalogSyncIntervalSec));
 
   const lastSyncIso = status?.cachedAt || status?.catalogSyncedAt || null;
   const lastSyncFull = lastSyncIso ? formatDateTime(lastSyncIso) : '—';
@@ -174,17 +171,17 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
   const dataSource = !status
     ? '—'
     : status.fromCache
-      ? 'Cache (ýerli saklanan)'
+      ? t('cacheLocal')
       : status.biClientDataAvailable
         ? 'Live (VPS / tunnel)'
-        : 'Maglumat ýok';
+        : t('noData');
 
   const clientModalUi = clientModal ? (
     <div
       className="fixed inset-0 z-[2147483000]"
       role="dialog"
       aria-modal="true"
-      aria-label="Birikme statusy"
+      aria-label={t('connectionStatus')}
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" onClick={() => setClientModal(false)} />
       {/* Anchored under the indicator bar, centered horizontally */}
@@ -194,15 +191,15 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
       >
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 shrink-0 bg-slate-950/80">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-white truncate">Birikme statusy</p>
-            <p className="text-[10px] text-slate-500 truncate">VPS · BI Client · Sync</p>
+            <p className="text-sm font-semibold text-white truncate">{t('connectionStatusTitle')}</p>
+            <p className="text-[10px] text-slate-500 truncate">{t('vpsBiClientSync')}</p>
           </div>
           <button
             type="button"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 shrink-0"
             onClick={() => setClientModal(false)}
-            aria-label="Ýap"
-            title="Ýap"
+            aria-label={t('close')}
+            title={t('close')}
           >
             <X className="h-4 w-4" />
           </button>
@@ -213,27 +210,27 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
           <div className="px-4 py-3 space-y-2 border-b border-slate-800/80">
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2">
-                <p className="text-slate-500 text-[10px]">VPS Gateway</p>
+                <p className="text-slate-500 text-[10px]">{t('vpsGateway')}</p>
                 <p className={status?.gatewayOnline ? 'text-emerald-300 font-medium' : 'text-rose-300 font-medium'}>
-                  {status?.gatewayOnline ? 'Connected' : 'Offline'}
+                  {status?.gatewayOnline ? t('connected') : t('offline')}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2">
-                <p className="text-slate-500 text-[10px]">Maglumat çeşmesi</p>
+                <p className="text-slate-500 text-[10px]">{t('dataSource')}</p>
                 <p className="text-slate-200 font-medium truncate" title={dataSource}>
                   {dataSource}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2 col-span-2">
-                <p className="text-slate-500 text-[10px]">Soňky catalog sync</p>
+                <p className="text-slate-500 text-[10px]">{t('lastCatalogSync')}</p>
                 <p className="text-white font-medium tabular-nums">{lastSyncFull}</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
                   Interval: {intervalLabel}
-                  {status?.catalogSyncIntervalSec ? ' · awto' : ''}
+                  {status?.catalogSyncIntervalSec ?  ` · ${t('autoShort')}` : ''}
                 </p>
               </div>
               <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-2.5 py-2 col-span-2">
-                <p className="text-slate-500 text-[10px]">Status barlandy</p>
+                <p className="text-slate-500 text-[10px]">{t('statusCheckedAt')}</p>
                 <p className="text-slate-300 tabular-nums">{checkedFull}</p>
               </div>
             </div>
@@ -241,13 +238,13 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             {status && (
               <div className="flex flex-wrap gap-1.5 pt-1">
                 <span className="inline-flex items-center rounded-lg bg-indigo-500/15 border border-indigo-500/25 px-2 py-0.5 text-[10px] text-indigo-200">
-                  {status.counts.tenants} firma
+                  {t('firmsCount').replace('{n}', String(status.counts.tenants))}
                 </span>
                 <span className="inline-flex items-center rounded-lg bg-sky-500/15 border border-sky-500/25 px-2 py-0.5 text-[10px] text-sky-200">
-                  {status.counts.endpoints} API
+                  {t('apiCount').replace('{n}', String(status.counts.endpoints))}
                 </span>
                 <span className="inline-flex items-center rounded-lg bg-emerald-500/15 border border-emerald-500/25 px-2 py-0.5 text-[10px] text-emerald-200">
-                  {status.counts.staff} işgär
+                  {t('staffCount').replace('{n}', String(status.counts.staff))}
                 </span>
               </div>
             )}
@@ -255,13 +252,13 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
 
           {/* Per-firm tunnel list */}
           <div className="px-4 py-2">
-            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">BI Client — firmalar</p>
+            <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-1.5">{t('biClientFirms')}</p>
             <ul className="rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-800">
               {(status?.tenantStatuses || []).length === 0 ? (
-                <li className="px-3 py-4 text-xs text-slate-500 text-center">Firma statusy ýok</li>
+                <li className="px-3 py-4 text-xs text-slate-500 text-center">{t('noFirmStatus')}</li>
               ) : (
-                (status?.tenantStatuses || []).map((t) => {
-                  const state = t.online ? 'online' : t.live ? 'live' : 'offline';
+                (status?.tenantStatuses || []).map((tenant) => {
+                  const state = tenant.online ? t('online') : tenant.live ? 'live' : t('offline');
                   const color =
                     state === 'online' || state === 'live' ? 'text-emerald-300' : 'text-amber-300';
                   const bg =
@@ -269,10 +266,10 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
                       ? 'bg-emerald-500/10 border-emerald-500/30'
                       : 'bg-amber-500/10 border-amber-500/30';
                   return (
-                    <li key={t.slug} className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm">
+                    <li key={tenant.slug} className="flex items-center justify-between gap-2 px-3 py-2.5 text-sm">
                       <div className="min-w-0">
-                        <p className="text-slate-100 truncate font-medium">{t.name}</p>
-                        <p className="text-[10px] text-slate-500 font-mono truncate">{t.slug}</p>
+                        <p className="text-slate-100 truncate font-medium">{tenant.name}</p>
+                        <p className="text-[10px] text-slate-500 font-mono truncate">{tenant.slug}</p>
                       </div>
                       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md border ${color} ${bg}`}>
                         {state}
@@ -292,14 +289,14 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', loading && 'animate-spin')} />
-            Täzele
+            {t('refresh')}
           </button>
           <button
             type="button"
             onClick={() => setClientModal(false)}
             className="flex-1 rounded-xl border border-slate-600 bg-slate-700/80 px-3 py-2 text-xs font-medium text-white hover:bg-slate-600"
           >
-            Ýap
+            {t('closeBtn')}
           </button>
         </div>
       </div>
@@ -314,7 +311,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
           type="button"
           onClick={() => openClientModal()}
           className="inline-flex items-center gap-1.5 rounded-lg px-1 py-0.5 hover:bg-slate-800/80 transition-colors"
-          title="Birikme statusy — basyp aç"
+          title={t('connStatusTap')}
         >
           <Dot ok={!!status?.gatewayOnline} />
           {status?.gatewayOnline ? (
@@ -323,14 +320,14 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             <CloudOff className="h-3.5 w-3.5 text-rose-400" />
           )}
           <span className={status?.gatewayOnline ? 'text-emerald-300' : 'text-rose-300'}>
-            VPS {status?.gatewayOnline ? 'online' : 'offline'}
+            VPS {status?.gatewayOnline ? t('online') : t('offline')}
           </span>
         </button>
         <button
           type="button"
           onClick={() => openClientModal()}
           className="inline-flex items-center gap-1.5 max-w-full rounded-lg px-1 py-0.5 hover:bg-slate-800/80 transition-colors text-left"
-          title="Firma tunnel statuslary — basyp aç"
+          title={t('tunnelStatusTap')}
         >
           <Dot ok={!!status?.biClientDataAvailable} warn={!!status?.fromCache && status?.biClientDataAvailable} />
           <Database className="h-3.5 w-3.5 text-sky-400 shrink-0" />
@@ -356,7 +353,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
         type="button"
         onClick={() => openClientModal()}
         className="inline-flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 hover:bg-slate-800/80 transition-colors"
-        title="Birikme statusy — basyp aç"
+        title={t('connStatusTap')}
       >
         <Dot ok={!!status?.gatewayOnline} />
         {status?.gatewayOnline ? (
@@ -365,7 +362,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
           <CloudOff className="h-3.5 w-3.5 text-rose-400" />
         )}
         <span className={status?.gatewayOnline ? 'text-emerald-300' : 'text-rose-300'}>
-          VPS {status?.gatewayOnline ? 'connected' : 'offline'}
+          VPS {status?.gatewayOnline ? t('connected') : t('offline')}
         </span>
       </button>
 
@@ -373,7 +370,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
         type="button"
         onClick={() => openClientModal()}
         className="inline-flex items-center gap-1.5 rounded-lg px-1.5 py-0.5 hover:bg-slate-800/80 transition-colors text-left"
-        title="Firma tunnel statuslary — basyp aç"
+        title={t('tunnelStatusTap')}
       >
         <Dot ok={!!status?.biClientDataAvailable} warn={status?.fromCache && status?.biClientDataAvailable} />
         <Database className="h-3.5 w-3.5 text-slate-400" />
@@ -383,8 +380,8 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
             const list = status?.tenantStatuses || [];
             if (list.length <= 1) {
               return (
-                <span className={status?.biClientDataAvailable ? 'text-emerald-300' : 'text-rose-300'}>
-                  {formatAdminClientSummary(status)}
+                <span className={status?.biClientDataAvailable ? 'text-emerald-300' : 'text-rose-300'} suppressHydrationWarning>
+                  {formatAdminClientSummary(status, t)}
                 </span>
               );
             }
@@ -411,7 +408,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
         </span>
       </button>
 
-      <div className="inline-flex items-center gap-1.5 text-slate-300" title="Soňky catalog sync">
+      <div className="inline-flex items-center gap-1.5 text-slate-300" title={t('lastCatalogSync')}>
         <RefreshCw className={cn('h-3 w-3 text-slate-400', loading && 'animate-spin')} />
         <span>
           Sync: <span className="text-slate-200 font-medium tabular-nums">{syncLabel}</span>
@@ -422,7 +419,7 @@ export function ConnectionStatusBar({ isSuperAdmin = false, companyName }: Props
 
       {status && (
         <span className="text-slate-300 text-[10px] sm:text-[11px] font-medium">
-          {status.counts.tenants}firma · {status.counts.endpoints}API · {status.counts.staff}işgär
+          {t('firmsCount').replace('{n}', String(status.counts.tenants))} · {t('apiCount').replace('{n}', String(status.counts.endpoints))} · {t('staffCount').replace('{n}', String(status.counts.staff))}
         </span>
       )}
 

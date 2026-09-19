@@ -3,6 +3,7 @@
 import { type MouseEvent } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
+import { useLocale } from '@/components/LocaleProvider';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 
 export function ThemeToggle({ className, compact }: Props) {
   const { theme, toggleTheme } = useTheme();
+  const { t } = useLocale();
   const isLight = theme === 'light';
 
   function onClick(e: MouseEvent<HTMLButtonElement>) {
@@ -23,8 +25,8 @@ export function ThemeToggle({ className, compact }: Props) {
     <button
       type="button"
       onClick={onClick}
-      title={isLight ? 'Garaňky tema' : 'Ýagty tema'}
-      aria-label={isLight ? 'Garaňky tema' : 'Ýagty tema'}
+      title={isLight ? t('themeDark') : t('themeLight')}
+      aria-label={isLight ? t('themeDark') : t('themeLight')}
       className={cn(
         'inline-flex items-center justify-center rounded-full border transition-colors',
         compact
@@ -34,7 +36,7 @@ export function ThemeToggle({ className, compact }: Props) {
       )}
     >
       {isLight ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-      {!compact && <span>{isLight ? 'Garaňky' : 'Ýagty'}</span>}
+      {!compact && <span>{isLight ? t('themeDark') : t('themeLight')}</span>}
     </button>
   );
 }

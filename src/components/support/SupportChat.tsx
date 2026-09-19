@@ -24,23 +24,26 @@ import {
   Circle,
   Check,
   CheckCheck,
+  Trash2,
+  Pencil,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
-const CATEGORIES: { value: SupportCategory; label: string; icon: typeof Bug }[] = [
-  { value: 'error', label: 'Säwlik / Error', icon: Bug },
-  { value: 'suggestion', label: 'Teklip', icon: Lightbulb },
-  { value: 'question', label: 'Sorag', icon: HelpCircle },
-  { value: 'feedback', label: 'Pikir / maslahat', icon: MessageSquare },
-  { value: 'other', label: 'Beýleki', icon: CircleDot },
+const CATEGORY_DEFS: { value: SupportCategory; labelKey: string; fallback: string; icon: typeof Bug }[] = [
+  { value: 'error', labelKey: 'errorLabel', fallback: 'Säwlik / Error', icon: Bug },
+  { value: 'suggestion', labelKey: 'suggestion', fallback: 'Teklip', icon: Lightbulb },
+  { value: 'question', labelKey: 'question', fallback: 'Sorag', icon: HelpCircle },
+  { value: 'other', labelKey: 'other', fallback: 'Beýleki', icon: CircleDot },
 ];
 
-const STATUS_LABEL: Record<SupportTicketStatus, string> = {
-  open: 'Açyk',
-  in_progress: 'Işlenýär',
-  resolved: 'Çözüldi',
-  closed: 'Ýapyk',
-  trashed: 'Pozulanlar',
+const STATUS_LABEL_KEYS: Record<SupportTicketStatus, string> = {
+  open: 'statusOpen',
+  in_progress: 'statusInProgress',
+  resolved: 'statusResolved',
+  closed: 'statusClosed',
+  trashed: 'statusTrashed',
 };
 
 const STATUS_COLOR: Record<SupportTicketStatus, string> = {
@@ -51,13 +54,27 @@ const STATUS_COLOR: Record<SupportTicketStatus, string> = {
   trashed: 'bg-rose-500/15 text-rose-300',
 };
 
-const STATUS_TABS: { key: 'all' | SupportTicketStatus; label: string }[] = [
-  { key: 'all', label: 'Ählisi' },
-  { key: 'open', label: 'Açyk' },
-  { key: 'in_progress', label: 'Işlenýär' },
-  { key: 'resolved', label: 'Çözüldi' },
-  { key: 'closed', label: 'Ýapyk' },
-  { key: 'trashed', label: 'Pozulanlar' },
+function ticketMatchesFirm(
+  t: { companyId?: string; companySlug?: string },
+  c: { id: string; slug?: string }
+) {
+  const cid = String(t.companyId || '').trim();
+  const cslug = String(t.companySlug || '').trim().toLowerCase();
+  const id = String(c.id || '').trim();
+  const slug = String(c.slug || '').trim().toLowerCase();
+  if (!cid && !cslug) return false;
+  if (cid && (cid === id || cid === slug || cid.toLowerCase() === slug)) return true;
+  if (cslug && (cslug === slug || cslug === id.toLowerCase())) return true;
+  return false;
+}
+
+const STATUS_TAB_DEFS: { key: 'all' | SupportTicketStatus; labelKey: string; fallback: string }[] = [
+  { key: 'all', labelKey: 'allOf', fallback: 'Ählisi' },
+  { key: 'open', labelKey: 'statusOpen', fallback: 'Açyk' },
+  { key: 'in_progress', labelKey: 'statusInProgress', fallback: 'Işlenýär' },
+  { key: 'resolved', labelKey: 'statusResolved', fallback: 'Çözüldi' },
+  { key: 'closed', labelKey: 'statusClosed', fallback: 'Ýapyk' },
+  { key: 'trashed', labelKey: 'statusTrashed', fallback: 'Pozulan' },
 ];
 
 interface Props {
@@ -72,6 +89,17 @@ interface Props {
 type TicketListItem = SupportTicket & { messageCount?: number };
 
 export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, onListOpenChange }: Props) {
+  const { t: tr } = useLocale();
+  const categories = useMemo(
+    () => CATEGORY_DEFS.map((c) => ({ ...c, label: tr(c.labelKey) || c.fallback })),
+    [tr]
+  );
+  const statusTabs = useMemo(
+    () => STATUS_TAB_DEFS.map((s) => ({ ...s, label: tr(s.labelKey) || s.fallback })),
+    [tr]
+  );
+
+
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [active, setActive] = useState<SupportTicket | null>(null);
@@ -96,6 +124,8 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
   const [companies, setCompanies] = useState<{ id: string; slug: string; name: string }[]>([]);
   const [composeCompanyId, setComposeCompanyId] = useState('');
   const [firmFilter, setFirmFilter] = useState<string | null>(null);
+  const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
+  const [editingMsgBody, setEditingMsgBody] = useState('');
   const draftKey = `bi-support-draft-${mode}`;
 
   useEffect(() => {
@@ -200,12 +230,32 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
     if (res.ok) {
       setTickets(data.tickets || []);
       if (Array.isArray(data.companies)) {
-        setCompanies(data.companies);
-        setComposeCompanyId((prev) => prev || (data.companies[0]?.id ?? ''));
+        const seen = new Set<string>();
+        const unique = data.companies.filter((c: { id: string; slug?: string }) => {
+          const k = String(c.slug || c.id).toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        setCompanies(unique);
+        setComposeCompanyId((prev) => prev || (unique[0]?.id ?? ''));
       }
     }
     setLoading(false);
   }, [firmFilter]);
+
+  const scopedTickets = useMemo(() => {
+    let list = tickets;
+    if (firmFilter) {
+      const firm = companies.find((c) => c.id === firmFilter || c.slug === firmFilter);
+      list = list.filter((t) =>
+        firm
+          ? ticketMatchesFirm(t, firm)
+          : t.companyId === firmFilter || t.companySlug === firmFilter
+      );
+    }
+    return list;
+  }, [tickets, firmFilter, companies]);
 
   const statusCounts = useMemo(() => {
     const c: Record<string, number> = {
@@ -216,21 +266,30 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
       closed: 0,
       trashed: 0,
     };
-    for (const t of tickets) {
-      c.all += 1;
+    for (const t of scopedTickets) {
+      if (t.isGroupChat) {
+        // Umumy chat diňe Ählisi sanyna
+        c.all += 1;
+        continue;
+      }
       const s = t.status || 'open';
+      if (s !== 'trashed') c.all += 1;
       c[s] = (c[s] || 0) + 1;
     }
     return c;
-  }, [tickets]);
+  }, [scopedTickets]);
 
   const visibleTickets = useMemo(() => {
+    let list = scopedTickets;
     if (statusFilter === 'all') {
-      // default list: everything except trash
-      return tickets.filter((t) => t.status !== 'trashed');
+      // ähli (trash däl) + umumy
+      list = list.filter((t) => t.isGroupChat || t.status !== 'trashed');
+    } else {
+      // diňe şol status; umumy chat diňe all-da
+      list = list.filter((t) => !t.isGroupChat && t.status === statusFilter);
     }
-    return tickets.filter((t) => t.status === statusFilter);
-  }, [tickets, statusFilter]);
+    return list;
+  }, [scopedTickets, statusFilter]);
 
   const loadTicket = useCallback(async (id: string) => {
     const res = await fetch(`/api/support/tickets/${id}`);
@@ -254,7 +313,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
   }, [mode]);
 
   useEffect(() => {
-    setLoading(true);
+    setLoading((prev) => (tickets.length === 0 ? true : prev));
     void loadList();
   }, [loadList]);
 
@@ -264,7 +323,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
       return;
     }
     loadTicket(activeId);
-    pollRef.current = setInterval(() => loadTicket(activeId), 8000);
+    pollRef.current = setInterval(() => loadTicket(activeId), 15000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -289,7 +348,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      if (!res.ok) throw new Error(data.error || tr('failed'));
       setComposing(false);
       setSubject('');
       setBody('');
@@ -369,7 +428,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
         body: JSON.stringify({ body: reply, attachments }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
+      if (!res.ok) throw new Error(data.error || tr('failed'));
       setReply('');
       setPendingFiles([]);
       setActive(data.ticket);
@@ -396,11 +455,16 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
   }
 
   async function hardDeleteTicket(id: string) {
-    if (!confirm('Bu ticket we ähli faýllary doly pozular. Dowam?')) return;
+    const t = tickets.find((x) => x.id === id) || (active?.id === id ? active : null);
+    if (t?.isGroupChat) {
+      alert(tr('groupChatNoDelete'));
+      return;
+    }
+    if (!confirm(tr('ticketDeleteConfirm'))) return;
     const res = await fetch(`/api/support/tickets/${id}`, { method: 'DELETE' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data.error || 'Pozup bolmady');
+      alert(data.error || tr('deleteFailedLong'));
       return;
     }
     if (activeId === id) {
@@ -410,7 +474,36 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
     await loadList();
   }
 
+  async function saveEditMessage() {
+    if (!activeId || !editingMsgId) return;
+    const body = editingMsgBody.trim();
+    if (!body) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/support/tickets/${activeId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: editingMsgId, body }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || tr('editFailed'));
+        return;
+      }
+      setActive(data.ticket);
+      setEditingMsgId(null);
+      setEditingMsgBody('');
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function moveToTrash(id: string) {
+    const t = tickets.find((x) => x.id === id) || (active?.id === id ? active : null);
+    if (t?.isGroupChat) {
+      alert(tr('groupChatNoDelete'));
+      return;
+    }
     const res = await fetch(`/api/support/tickets/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -456,10 +549,10 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
             <MessageCircle className="h-4 w-4 text-indigo-400 shrink-0" />
             <h2 className="text-sm font-semibold text-white truncate">
               {firmFilter
-                ? companies.find((c) => c.id === firmFilter)?.name || 'Firma'
+                ? companies.find((c) => c.id === firmFilter)?.name || tr('company')
                 : mode === 'admin'
                   ? 'Ticketler'
-                  : 'Ýüzlenmeler'}
+                  : tr('tickets')}
             </h2>
           </div>
           <div className="flex items-center gap-1">
@@ -501,11 +594,11 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
             >
               <Filter className="h-3.5 w-3.5 text-slate-400 shrink-0" />
               <span className="flex-1 text-[11px] text-slate-200 truncate">
-                {STATUS_TABS.find((t) => t.key === statusFilter)?.label || 'Filter'}
+                {statusTabs.find((t) => t.key === statusFilter)?.label || 'Filter'}
               </span>
               <span className="text-[10px] font-bold text-indigo-300 bg-indigo-500/15 px-1.5 py-0.5 rounded-full">
                 {statusFilter === 'all'
-                  ? statusCounts.all - (statusCounts.trashed || 0)
+                  ? statusCounts.all
                   : statusCounts[statusFilter] || 0}
               </span>
               <ChevronDown className={cn('h-3.5 w-3.5 text-slate-500 transition-transform', statusMenuOpen && 'rotate-180')} />
@@ -519,7 +612,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                   setActive(null);
                 }}
                 className="h-9 w-9 shrink-0 rounded-xl border border-indigo-500/40 bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/25 flex items-center justify-center"
-                title="Täze ýüzlenme"
+                title={tr('newTicket')}
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -529,11 +622,11 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
             <>
               <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
               <div className="absolute left-2 right-2 top-full mt-1 z-20 rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1 max-h-56 overflow-y-auto">
-                {STATUS_TABS.filter((tab) => mode === 'admin' || tab.key !== 'trashed' || true).map((tab) => {
+                {statusTabs.filter((tab) => mode === 'admin' || tab.key !== 'trashed' || true).map((tab) => {
                   // user: hide trashed optional — show all for consistency
                   const count =
                     tab.key === 'all'
-                      ? statusCounts.all - (statusCounts.trashed || 0)
+                      ? statusCounts.all
                       : statusCounts[tab.key] || 0;
                   const active = statusFilter === tab.key;
                   if (mode === 'user' && tab.key === 'trashed') return null;
@@ -582,7 +675,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                   Garalama
                 </span>
                 <p className="text-sm font-medium text-amber-100/90 truncate flex-1">
-                  {subject.trim() || 'Täze ýüzlenme'}
+                  {subject.trim() || tr('newTicket')}
                 </p>
               </div>
               {body.trim() && (
@@ -592,42 +685,96 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
           )}
           {mode === 'admin' && !firmFilter && companies.length > 0 ? (
             <div className="p-2 space-y-1">
-              <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500">Firmalar</p>
-              {companies.map((c) => {
-                const cnt = tickets.filter((t) => t.companyId === c.id && !t.isGroupChat).length;
-                const gUnread = tickets
-                  .filter((t) => t.companyId === c.id)
-                  .reduce((s, t) => s + (mode === 'admin' ? t.unreadForAdmin || 0 : t.unreadForUser || 0), 0);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setFirmFilter(c.id)}
-                    className="w-full text-left px-3 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 flex items-center gap-2"
-                  >
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-sm text-slate-100 truncate">{c.name}</span>
-                      <span className="block text-[10px] text-slate-500 truncate">{c.slug}</span>
-                    </span>
-                    <span className="text-[10px] text-slate-400">{cnt} ticket</span>
-                    {gUnread > 0 && (
-                      <span className="min-w-[1.1rem] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">
-                        {gUnread}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-slate-500">{tr('companies')}</p>
+              {(() => {
+                const firmButtons = companies
+                  .map((c) => {
+                    const firmTs = tickets.filter((t) => ticketMatchesFirm(t, c));
+                    const hasGroup = firmTs.some((t) => t.isGroupChat);
+                    const nonGroup = firmTs.filter((t) => !t.isGroupChat);
+                    const matching =
+                      statusFilter === 'all'
+                        ? nonGroup.filter((t) => t.status !== 'trashed')
+                        : nonGroup.filter((t) => (t.status || 'open') === statusFilter);
+                    const groupCount = hasGroup && statusFilter === 'all' ? 1 : 0;
+                    const cnt = matching.length + groupCount;
+                    if (statusFilter !== 'all' && matching.length === 0) return null;
+                    const gUnread = firmTs.reduce(
+                      (s, t) =>
+                        s + (mode === 'admin' ? t.unreadForAdmin || 0 : t.unreadForUser || 0),
+                      0
+                    );
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setFirmFilter(c.id)}
+                        className="w-full text-left px-3 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 flex items-center gap-2"
+                      >
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm text-slate-100 truncate">{c.name}</span>
+                          <span className="block text-[10px] text-slate-500 truncate">{c.slug}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {cnt} ticket{groupCount ? ' · +umumy' : ''}
+                        </span>
+                        {gUnread > 0 && (
+                          <span className="min-w-[1.1rem] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">
+                            {gUnread}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
+                  .filter(Boolean);
+                // Firmalar boş bolsa, status boýunça ticketleri göni görkez
+                if (firmButtons.length === 0 && statusFilter !== 'all') {
+                  const flat = tickets.filter(
+                    (t) => !t.isGroupChat && (t.status || 'open') === statusFilter
+                  );
+                  if (flat.length === 0) {
+                    return (
+                      <p className="px-3 py-4 text-sm text-slate-500 text-center">
+                        Bu statusda ticket ýok
+                      </p>
+                    );
+                  }
+                  return flat.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => {
+                        if (t.companyId) setFirmFilter(t.companyId);
+                        setActiveId(t.id);
+                        setComposing(false);
+                      }}
+                      className="w-full text-left px-3 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60"
+                    >
+                      <p className="text-sm text-slate-100 truncate">{t.subject}</p>
+                      <p className="text-[10px] text-slate-500 truncate">
+                        {(t.companyName || t.companySlug || '') +
+                          (t.userName ? ` · ${t.userName}` : '')}
+                      </p>
+                    </button>
+                  ));
+                }
+                if (firmButtons.length === 0) {
+                  return (
+                    <p className="px-3 py-4 text-sm text-slate-500 text-center">Firma ýok</p>
+                  );
+                }
+                return firmButtons;
+              })()}
             </div>
           ) : loading ? (
-            <p className="p-4 text-sm text-slate-500">Ýüklenýär...</p>
+            <p className="p-4 text-sm text-slate-500">{tr('loading')}</p>
           ) : visibleTickets.length === 0 && !(subject.trim() || body.trim()) ? (
             <div className="p-6 text-center text-sm text-slate-500">
               {statusFilter === 'trashed'
-                ? 'Pozulan ticket ýok'
+                ? tr('noDeletedTickets')
                 : mode === 'user'
-                  ? 'Heniz ýüzlenme ýok. Teklip, säwlik ýa-da sorag ýazyň.'
-                  : 'Bu bölümde ticket ýok.'}
+                  ? tr('noTicketsYet')
+                  : tr('noTicketsInSection')}
             </div>
           ) : (
             visibleTickets.map((t) => (
@@ -649,7 +796,9 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-medium text-slate-100 truncate">
                       {t.isGroupChat ? (
-                        <span className="text-emerald-300">Umumy chat</span>
+                        <span className="text-emerald-300">
+                          {(t.companyName || t.companySlug || tr('company')) + ' — ' + tr('groupChat')}
+                        </span>
                       ) : (
                         t.subject
                       )}
@@ -665,10 +814,10 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5">
                     <span className={cn('text-[10px] px-1.5 py-0.5 rounded-md', STATUS_COLOR[t.status])}>
-                      {STATUS_LABEL[t.status]}
+                      {tr(STATUS_LABEL_KEYS[t.status])}
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      {CATEGORIES.find((c) => c.value === t.category)?.label}
+                      {categories.find((c) => c.value === t.category)?.label}
                     </span>
                     <span className="text-[10px] text-slate-600">
                       {(t.messageCount ?? t.messages?.length ?? 0)} hat
@@ -680,7 +829,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                     </p>
                   )}
                 </button>
-                {mode === 'admin' && t.status === 'trashed' && (
+                {mode === 'admin' && t.status === 'trashed' && !t.isGroupChat && (
                   <div className="px-3 pb-2 flex gap-2">
                     <button
                       type="button"
@@ -721,18 +870,18 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <h3 className="text-base font-semibold text-white">Täze ýüzlenme</h3>
+              <h3 className="text-base font-semibold text-white">{tr('newAppeal')}</h3>
             </div>
             <div
               ref={composeScrollRef}
               className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 sm:px-5 py-3 space-y-3"
             >
               <p className="text-xs text-slate-500">
-                Bu hat diňe adminlere gidýär. Teklip, maslahat, säwlik ýa-da sorag ýazyň.
+                {tr('newAppealHint')}
               </p>
               {companies.length > 0 && (
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-400">Firma *</label>
+                  <label className="mb-1 block text-xs font-medium text-slate-400">{tr('companyRequired')}</label>
                   <select
                     className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100"
                     value={composeCompanyId}
@@ -747,27 +896,27 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                 </div>
               )}
               <Input
-                label="Tema"
+                label={tr('topic')}
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="Gysga tema..."
+                placeholder={tr('topicPlaceholder')}
                 onFocus={(e) => scrollFocusedIntoView(e.currentTarget)}
               />
               <Select
-                label="Görnüşi"
+                label={tr('viewTypeAcc')}
                 value={category}
                 onChange={(e) => setCategory(e.target.value as SupportCategory)}
-                options={CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+                options={categories.map((c) => ({ value: c.value, label: c.label }))}
                 onFocus={(e) => scrollFocusedIntoView(e.currentTarget)}
               />
               <div>
-                <label className="mb-1 block text-xs font-medium text-slate-400">Hat</label>
+                <label className="mb-1 block text-xs font-medium text-slate-400">{tr('messageLabel')}</label>
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={5}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                  placeholder="Jikme-jik ýazyň..."
+                  placeholder={tr('writeDetails')}
                   onFocus={(e) => scrollFocusedIntoView(e.currentTarget)}
                 />
               </div>
@@ -778,16 +927,14 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                 size="sm"
                 className="flex-1 min-h-12 text-sm font-semibold"
                 onClick={() => setComposing(false)}
-              >
-                Ýatyr
-              </Button>
+              >{tr('cancel')}</Button>
               <Button
                 size="sm"
                 className="flex-1 min-h-12 text-sm font-semibold"
                 loading={sending}
                 onClick={createTicket}
               >
-                Iber
+                {tr('send')}
               </Button>
             </div>
           </div>
@@ -798,7 +945,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
             {mode === 'user' && (
               <Button className="mt-4" size="sm" onClick={() => setComposing(true)}>
                 <Plus className="h-4 w-4" />
-                Täze ýüzlenme
+                {tr('newAppeal')}
               </Button>
             )}
           </div>
@@ -814,13 +961,16 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
               </button>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-semibold text-white truncate">{active.subject}</h3>
+              {(active.companyName || active.companySlug) && (
+                <p className="text-[10px] text-indigo-300/90 truncate">{active.companyName || active.companySlug}</p>
+              )}
                 <p className="text-[11px] text-slate-500 truncate">
                   {mode === 'admin' && `${active.userName} · `}
-                  {CATEGORIES.find((c) => c.value === active.category)?.label}
+                  {categories.find((c) => c.value === active.category)?.label}
                 </p>
               </div>
               <span className={cn('text-[10px] px-2 py-0.5 rounded-md', STATUS_COLOR[active.status])}>
-                {STATUS_LABEL[active.status]}
+                {tr(STATUS_LABEL_KEYS[active.status])}
               </span>
               {mode === 'admin' && (
                 <>
@@ -829,31 +979,31 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                     onChange={(e) => setStatus(e.target.value as SupportTicketStatus)}
                     className="h-8 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-300 px-2"
                   >
-                    {(Object.keys(STATUS_LABEL) as SupportTicketStatus[]).map((s) => (
+                    {(Object.keys(STATUS_LABEL_KEYS) as SupportTicketStatus[]).map((s) => (
                       <option key={s} value={s}>
-                        {STATUS_LABEL[s]}
+                        {tr(STATUS_LABEL_KEYS[s])}
                       </option>
                     ))}
                   </select>
-                  {active.status !== 'trashed' ? (
+                  {!active.isGroupChat && active.status !== 'trashed' ? (
                     <button
                       type="button"
                       onClick={() => void moveToTrash(active.id)}
-                      className="h-8 px-2 rounded-lg border border-slate-700 text-[11px] text-slate-300 hover:bg-slate-800"
-                      title="Pozulanlara geçir"
+                      className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-700 text-slate-300 hover:bg-rose-500/10 hover:text-rose-300"
+                      title={tr('moveToDeleted')}
                     >
-                      Trash
+                      <Trash2 className="h-4 w-4" />
                     </button>
-                  ) : (
+                  ) : !active.isGroupChat && active.status === 'trashed' ? (
                     <button
                       type="button"
                       onClick={() => void hardDeleteTicket(active.id)}
-                      className="h-8 px-2 rounded-lg border border-rose-500/40 text-[11px] text-rose-300 hover:bg-rose-500/15"
-                      title="Faýllar bilen doly poz"
+                      className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-rose-500/40 text-rose-300 hover:bg-rose-500/15"
+                      title={tr('deleteWithFiles')}
                     >
-                      Düýbünden poz
+                      <Trash2 className="h-4 w-4" />
                     </button>
-                  )}
+                  ) : null}
                 </>
               )}
             </div>
@@ -883,10 +1033,25 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                     <div
                       className={cn(
                         'max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 py-2.5 text-sm',
+                        'relative group',
                         mine
                           ? 'bg-indigo-600 text-white rounded-br-md'
-                          : 'bg-slate-800 text-slate-100 rounded-bl-md'
+                          : 'bg-slate-800 text-slate-100 rounded-bl-md',
+                        mine && m.body && editingMsgId !== m.id && 'sm:cursor-default cursor-pointer'
                       )}
+                      onClick={() => {
+                        // Mobile: tap own message to open edit (no hover icon)
+                        if (
+                          mine &&
+                          m.body &&
+                          editingMsgId !== m.id &&
+                          typeof window !== 'undefined' &&
+                          window.matchMedia('(max-width: 768px), (pointer: coarse)').matches
+                        ) {
+                          setEditingMsgId(m.id);
+                          setEditingMsgBody(m.body || '');
+                        }
+                      }}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[10px] font-medium opacity-80">
@@ -894,8 +1059,64 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                           {m.isStaffReply ? ' · Admin' : ''}
                         </span>
                       </div>
-                      {m.body && (
-                        <p className="whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                      {editingMsgId === m.id ? (
+                        <div
+                          className="space-y-1.5 min-w-[180px]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <textarea
+                            value={editingMsgBody}
+                            onChange={(e) => setEditingMsgBody(e.target.value)}
+                            className="bi-chat-edit-input w-full min-h-[60px] rounded-lg bg-white border border-slate-300 text-sm text-slate-900 p-2 dark:bg-slate-950/80 dark:border-slate-600 dark:text-slate-100"
+                            autoFocus
+                          />
+                          <div className="flex gap-1 justify-end">
+                            <button
+                              type="button"
+                              title={tr('chatCancel')}
+                              className="bi-action-icon bi-action-muted p-1.5 rounded-lg bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-700 dark:text-slate-200"
+                              onClick={() => {
+                                setEditingMsgId(null);
+                                setEditingMsgBody('');
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              title={tr('chatSave')}
+                              className="bi-action-icon bi-action-ok p-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500"
+                              disabled={sending}
+                              onClick={() => void saveEditMessage()}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {m.body && (
+                            <p className="whitespace-pre-wrap break-words leading-relaxed">{m.body}</p>
+                          )}
+                          {(m as any).editedAt && (
+                            <p className="text-[9px] opacity-60 mt-0.5">{tr('chatEdited')}</p>
+                          )}
+                        </>
+                      )}
+                      {/* Desktop only: hover pencil. Mobile uses tap on bubble. */}
+                      {mine && m.body && editingMsgId !== m.id && (
+                        <button
+                          type="button"
+                          title={tr('edit')}
+                          className="hidden sm:flex absolute -top-2 -left-2 p-1 rounded-md bg-slate-800/90 text-slate-400 hover:text-indigo-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingMsgId(m.id);
+                            setEditingMsgBody(m.body || '');
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
                       )}
                       {m.attachments && m.attachments.length > 0 && (
                         <div className="mt-2 space-y-1.5">
@@ -921,7 +1142,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                       )}
                       {mine && (
                         <div className="mt-1 flex justify-end items-center gap-0.5 text-[10px]" title={
-                          m.readAt ? 'Okaldy (chat açyldy)' : m.deliveredAt ? 'Baryp ýetdi' : 'Ugradyldy'
+                          m.readAt ? tr('readChatOpened') : m.deliveredAt ? tr('delivered') : tr('sent')
                         }>
                           {m.readAt ? (
                             // Okaldy — tegelek
@@ -1002,7 +1223,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                   <div className="flex items-center gap-0.5 shrink-0">
                     <button
                       type="button"
-                      title="Faýl"
+                      title={tr('file')}
                       onClick={() => {
                         if (fileRef.current) {
                           fileRef.current.accept = '.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,image/*';
@@ -1036,7 +1257,7 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                       el.style.height = `${Math.min(Math.max(el.scrollHeight, 42), 160)}px`;
                     }}
                     rows={1}
-                    placeholder={mode === 'admin' ? 'Jogap ýazyň...' : 'Adminlere ýazyň...'}
+                    placeholder={mode === 'admin' ? tr('replyPlaceholder') : tr('writeToAdmins')}
                     className="flex-1 min-w-0 rounded-xl border border-slate-700 bg-slate-950/80 px-2.5 sm:px-3 py-2.5 sm:py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40 resize-none min-h-[42px] max-h-40 overflow-y-auto"
                     onFocus={(e) => {
                       scrollFocusedIntoView(e.currentTarget);

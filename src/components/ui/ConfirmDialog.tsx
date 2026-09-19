@@ -6,8 +6,24 @@ import { create } from 'zustand';
 import { AlertTriangle } from 'lucide-react';
 import { Button } from './Button';
 import { useModalAnimations } from '@/lib/use-modal-animations';
+import { translate, STORAGE_KEY, isLocale, DEFAULT_LOCALE } from '@/lib/i18n';
+import { useLocale } from '@/components/LocaleProvider';
 
 type ConfirmResult = boolean | 'stay';
+
+function currentLocale() {
+  try {
+    const v = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    if (isLocale(v)) return v;
+  } catch {
+    /* */
+  }
+  return DEFAULT_LOCALE;
+}
+
+function tt(key: string, fallback: string) {
+  return translate(currentLocale(), key, fallback);
+}
 
 interface ConfirmState {
   open: boolean;
@@ -15,7 +31,7 @@ interface ConfirmState {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
-  /** Optional third button (e.g. "Ýatda sakla" stay) — resolves to 'stay' */
+  /** Optional third button — resolves to 'stay' */
   stayLabel: string | null;
   danger: boolean;
   resolve: ((ok: ConfirmResult) => void) | null;
@@ -47,8 +63,8 @@ export const useConfirmStore = create<ConfirmState>((set, get) => ({
         open: true,
         title,
         message,
-        confirmLabel: confirmLabel || 'Hawa',
-        cancelLabel: cancelLabel || 'Ýatyr',
+        confirmLabel: confirmLabel || tt('yes', 'Hawa'),
+        cancelLabel: cancelLabel || tt('cancel', 'Ýatyr'),
         stayLabel: stayLabel || null,
         danger: danger ?? true,
         resolve,
@@ -69,6 +85,8 @@ export function confirmDialog(opts: {
   stayLabel?: string;
   danger?: boolean;
 }) {
+  const { t } = useLocale();
+
   return useConfirmStore.getState().show(opts);
 }
 
@@ -110,7 +128,7 @@ export function ConfirmDialogHost() {
               {stayLabel}
             </Button>
           )}
-          <Button variant="danger" size="sm" onClick={() => close(false)}>
+          <Button variant="secondary" size="sm" onClick={() => close(false)} className="bi-btn-cancel">
             {cancelLabel}
           </Button>
           <Button variant={danger ? 'danger' : 'primary'} size="sm" onClick={() => close(true)}>

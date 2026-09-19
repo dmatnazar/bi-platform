@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import { createPortal } from 'react-dom';
 import { toastWarning } from '@/components/ui/Toast';
+import { useLocale } from '@/components/LocaleProvider';
 
 type PlatformSummary = {
   id: string;
@@ -40,6 +41,8 @@ const ICONS: Record<string, typeof Monitor> = {
 };
 
 export function LoginAppsSection() {
+  const { t } = useLocale();
+
   const [platforms, setPlatforms] = useState<PlatformSummary[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [docs, setDocs] = useState<AppDoc[]>([]);
@@ -59,7 +62,7 @@ export function LoginAppsSection() {
 
   async function openPlatform(id: string, name: string, status: string) {
     if (status !== 'available') {
-      toastWarning(name, `${name} wersiýasy taýýarlanýar · ýakyn wagtda elýeterli bolar`);
+      toastWarning(name, `${name} ${t('versionPreparing')}`);
       return;
     }
     setOpenId(id);
@@ -89,7 +92,7 @@ export function LoginAppsSection() {
         <div className="flex items-center gap-3 mb-4">
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-700 to-transparent" />
           <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
-            Programmalar
+            {t('appsSection')}
           </span>
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-700 to-transparent" />
         </div>
@@ -109,7 +112,7 @@ export function LoginAppsSection() {
                     ? 'border-slate-600/80 bg-slate-900/70 hover:border-indigo-500/50 hover:bg-indigo-500/10 cursor-pointer shadow-lg shadow-black/20'
                     : 'border-slate-800/60 bg-slate-900/40 opacity-70 cursor-pointer hover:opacity-90'
                 )}
-                title={available ? `${p.name} — gurnama` : `${p.name} — ýakyn wagtda`}
+                title={available ? `${p.name} — ${t('installTitle')}` : `${p.name} — ${t('comingSoon')}`}
               >
                 <div
                   className={cn(
@@ -131,12 +134,12 @@ export function LoginAppsSection() {
                 </span>
                 {!available && (
                   <span className="absolute -top-1.5 -right-1.5 text-[8px] px-1 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 leading-none">
-                    soň
+                    {t('soonShort')}
                   </span>
                 )}
                 {available && (
                   <span className="text-[9px] text-indigo-400/90 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Ýükle
+                    {t('downloadShort')}
                   </span>
                 )}
               </button>
@@ -144,7 +147,7 @@ export function LoginAppsSection() {
           })}
         </div>
         <p className="text-center text-[10px] sm:text-[11px] text-slate-600 mt-3 px-4 leading-relaxed">
-          Windows elýeterli. iOS, Android we Linux ýakyn wagtda işlenilýär.
+          {t('appsAvailabilityNote')}
         </p>
       </div>
 
@@ -163,10 +166,10 @@ export function LoginAppsSection() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="text-sm sm:text-base font-semibold text-white truncate">
-                    {platformName} programmasyny ýükle
+                    {t('downloadAppOf').replace('{name}', platformName)}
                   </h3>
                   <p className="text-[11px] text-slate-400 truncate">
-                    Gurnama gollanmasy we soňky wersiýa
+                    {t('installGuideShort')}
                   </p>
                 </div>
                 <button
@@ -180,11 +183,11 @@ export function LoginAppsSection() {
 
               <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
                 {loadingDocs ? (
-                  <p className="text-sm text-slate-500 text-center py-8">Ýüklenýär...</p>
+                  <p className="text-sm text-slate-500 text-center py-8">{t('loading')}</p>
                 ) : docs.length === 0 ? (
                   <div className="text-center py-6 space-y-2">
                     <BookOpen className="h-8 w-8 text-slate-600 mx-auto" />
-                    <p className="text-sm text-slate-400">Dokumentasiýa heniz goşulmady</p>
+                    <p className="text-sm text-slate-400">{t('docsNotAddedYet')}</p>
                   </div>
                 ) : (
                   docs.map((d) => (
@@ -211,18 +214,17 @@ export function LoginAppsSection() {
                     className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-medium text-sm py-3 shadow-lg shadow-indigo-900/40 transition-colors"
                   >
                     <Download className="h-4 w-4" />
-                    {platformName} programmasyny ýükle
+                    {t('downloadAppOf').replace('{name}', platformName)}
                     <ExternalLink className="h-3.5 w-3.5 opacity-70" />
                   </a>
                 ) : (
                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs px-3 py-2.5 text-center">
-                    Ýükleme baglanyşygy heniz sazlanmady. Admin → Programmalar bölümünde
-                    latest.yml URL goýuň.
+                    {t('downloadLinkNotSet')} {t('putLatestYmlUrl')}
                   </div>
                 )}
                 <p className="text-[10px] text-center text-slate-500 flex items-center justify-center gap-1">
                   <Clock className="h-3 w-3" />
-                  Soňky wersiýa latest.yml-dan awtomatiki alynýar
+                  {t('latestFromYml')}
                 </p>
               </div>
             </div>

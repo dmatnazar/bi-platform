@@ -42,6 +42,7 @@ import {
   canManageCompanies,
 } from '@/lib/auth-client';
 import { BalanceBadge } from '@/components/billing/BalanceBadge';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   user: SessionUser;
@@ -57,6 +58,7 @@ type NavBadges = {
 export function Sidebar({ user }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const { t } = useLocale();
   const [navPending, setNavPending] = useState<string | null>(null);
   const [logoutPending, setLogoutPending] = useState(false);
 
@@ -183,32 +185,32 @@ export function Sidebar({ user }: Props) {
     icon: typeof LayoutDashboard;
     badge?: number;
   }[] = [
-    { href: '/dashboards', label: 'Dashboardlar', icon: LayoutDashboard },
+    { href: '/dashboards', label: t('navDashboard'), icon: LayoutDashboard },
     {
       href: '/news',
-      label: 'Habarlar',
+      label: t('navNews'),
       icon: Newspaper,
       badge: badges.newsUnread,
     },
-    { href: '/tech-support', label: 'Tehniki goldaw', icon: Headphones },
+    { href: '/tech-support', label: t('navSupport'), icon: Headphones },
     ...(staffOk
       ? [
           {
             href: '/admin/staff',
-            label: 'Işgärler',
+            label: t('navStaff'),
             icon: Users,
             badge: badges.staffPending,
           },
         ]
       : []),
     ...(firmsOk
-      ? [{ href: '/admin/companies', label: 'Ähli firmalar', icon: Building2 }]
+      ? [{ href: '/admin/companies', label: t('navCompanies'), icon: Building2 }]
       : []),
     ...(billingOk
       ? [
           {
             href: '/admin/billing',
-            label: 'Tarif & Balans',
+            label: t('navBilling'),
             icon: Wallet,
             badge: badges.billingEmpty,
           },
@@ -218,21 +220,21 @@ export function Sidebar({ user }: Props) {
       ? [
           {
             href: '/admin/devices',
-            label: 'Enjamlar',
+            label: t('navDevices'),
             icon: Server,
             badge: badges.devicesPending,
           },
         ]
       : []),
-    ...(apisOk ? [{ href: '/admin/apis', label: 'API-lar', icon: Network }] : []),
+    ...(apisOk ? [{ href: '/admin/apis', label: t('navApis'), icon: Network }] : []),
     ...(connOk
-      ? [{ href: '/admin/connections', label: 'DB baglanyşyklar', icon: Database }]
+      ? [{ href: '/admin/connections', label: t('navConnections'), icon: Database }]
       : []),
-    ...(appsOk ? [{ href: '/admin/apps', label: 'Programmalar', icon: AppWindow }] : []),
-    ...(settingsOk ? [{ href: '/admin/settings', label: 'Sazlamalar', icon: Settings }] : []),
+    ...(appsOk ? [{ href: '/admin/apps', label: t('navApps'), icon: AppWindow }] : []),
+    ...(settingsOk ? [{ href: '/admin/settings', label: t('navSettings'), icon: Settings }] : []),
     // Rugsatlar — diňe super admin (matrix + hard lock)
     ...(permissionsOk || superA
-      ? [{ href: '/admin/permissions', label: 'Rugsatlar', icon: Shield }]
+      ? [{ href: '/admin/permissions', label: t('navPermissions'), icon: Shield }]
       : []),
   ];
 
@@ -270,7 +272,7 @@ export function Sidebar({ user }: Props) {
   const NavContent = (
     <>
       <div className="flex items-center gap-3 px-4 py-5 pr-10 border-b border-slate-800">
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0">
+        <div className="bi-brand-icon h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shrink-0">
           <BarChart3 className="h-5 w-5 text-white" />
         </div>
         <div className="min-w-0">
@@ -320,7 +322,7 @@ export function Sidebar({ user }: Props) {
                 <Icon className="h-4 w-4 shrink-0 opacity-90" />
               )}
               <span className="truncate flex-1">
-                {pending ? 'Garaşyň…' : item.label}
+                {pending ? t('waitEllipsis') : item.label}
               </span>
               {!pending && <Badge n={item.badge} />}
             </Link>
@@ -342,7 +344,7 @@ export function Sidebar({ user }: Props) {
               ? 'bg-indigo-500/10 ring-1 ring-indigo-500/30'
               : 'hover:bg-slate-800/60'
           )}
-          title="Profil"
+          title={t('profile')}
         >
           <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center shrink-0 overflow-hidden border border-slate-700">
             {avatarOverride || (user as any).avatarUrl || (user as any).avatar ? (
@@ -386,14 +388,14 @@ export function Sidebar({ user }: Props) {
           type="button"
           disabled={logoutPending || !!navPending}
           onClick={() => void logout()}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-800 hover:text-rose-300 disabled:opacity-50 disabled:pointer-events-none"
+          className="bi-logout-btn w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 border border-transparent hover:border-rose-500/30 disabled:opacity-50 disabled:pointer-events-none"
         >
           {logoutPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <LogOut className="h-4 w-4" />
           )}
-          {logoutPending ? 'Garaşyň…' : 'Çykyş'}
+          {logoutPending ? t('loading') : t('logout')}
         </button>
       </div>
     </>
@@ -414,7 +416,7 @@ export function Sidebar({ user }: Props) {
         <button
           type="button"
           onClick={toggleCollapsed}
-          title="Menýuny görkez"
+          title={t('showMenu')}
           className="hidden lg:flex fixed top-3 left-3 z-50 p-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
         >
           <Menu className="h-4 w-4" />
@@ -431,7 +433,7 @@ export function Sidebar({ user }: Props) {
         <button
           type="button"
           onClick={toggleCollapsed}
-          title="Menýuny gizle"
+          title={t('hideMenu')}
           className="absolute top-4 right-2.5 z-10 p-1.5 rounded-lg text-slate-500 hover:text-slate-200 hover:bg-slate-800 transition-colors"
         >
           <ChevronLeft className="h-4 w-4" />

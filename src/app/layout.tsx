@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { LocaleProvider } from '@/components/LocaleProvider';
 
 /**
  * Local fonts under src/app/fonts/ (also mirrored in public/fonts/).
@@ -102,7 +103,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className={`${inter.variable} ${jetbrainsMono.variable} antialiased bg-background text-foreground font-sans`}
         suppressHydrationWarning
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <LocaleProvider>{children}</LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

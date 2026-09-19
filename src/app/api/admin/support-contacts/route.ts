@@ -26,6 +26,7 @@ export async function PUT(req: NextRequest) {
   }
   const saved = writeSupportContacts({
     intro: body.intro,
+    introRu: body.introRu,
     contacts,
     updatedAt: new Date().toISOString(),
   });

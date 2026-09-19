@@ -6,8 +6,11 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { useLocale } from '@/components/LocaleProvider';
 
 export default function NewDashboardPage() {
+  const { t } = useLocale();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const companyId = searchParams.get('companyId') || undefined;
@@ -28,12 +31,12 @@ export default function NewDashboardPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Döretmek şowsuz');
+        setError(data.error || t('createFailed'));
         return;
       }
       router.push(`/dashboards/${data.dashboard.id}`);
     } catch {
-      setError('Baglanyşyk säwligi');
+      setError(t('connectionFailed'));
     } finally {
       setLoading(false);
     }
@@ -61,17 +64,17 @@ export default function NewDashboardPage() {
           </div>
         )}
         <Input
-          label="Ady"
+          label={t('name')}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Mysal: Aýlyk satuw"
+          placeholder={t('exampleMonthlySales')}
           required
         />
         <Input
-          label="Düşündiriş (islege görä)"
+          label={t('descOptional')}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="Gysga düşündiriş"
+          placeholder={t('shortDesc')}
         />
         <Button type="submit" loading={loading} className="w-full">
           Döret we düz

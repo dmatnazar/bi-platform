@@ -1,5 +1,7 @@
 'use client';
 
+import { translate, STORAGE_KEY, isLocale, DEFAULT_LOCALE } from '@/lib/i18n';
+
 import {
   forwardRef,
   useEffect,
@@ -129,6 +131,17 @@ function loadScript(src: string): Promise<void> {
 
 let loadPromise: Promise<void> | null = null;
 
+
+function tt(key: string, fallback?: string) {
+  try {
+    const v = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    const loc = isLocale(v) ? v : DEFAULT_LOCALE;
+    return translate(loc, key, fallback);
+  } catch {
+    return fallback || key;
+  }
+}
+
 function ensureCodeMirror(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
   // Need both core + showHint addon
@@ -144,7 +157,7 @@ function ensureCodeMirror(): Promise<void> {
     }
     if (!window.CodeMirror || typeof window.CodeMirror.prototype.showHint !== 'function') {
       loadPromise = null;
-      throw new Error('CodeMirror show-hint ýüklenmedi (CDN / vendor)');
+      throw new Error(tt('codemirrorHintFail', 'CodeMirror show-hint ýüklenmedi'));
     }
   })().catch((e) => {
     loadPromise = null;

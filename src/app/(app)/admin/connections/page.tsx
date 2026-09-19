@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DataTable } from '@/components/ui/DataTable';
 import {
   Database,
   Plus,
@@ -26,6 +27,7 @@ import { Select } from '@/components/ui/Select';
 import { toastSuccess, toastError, toastInfo } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface ConnRow {
   id: string;
@@ -66,6 +68,8 @@ const emptyForm = {
 };
 
 export default function ConnectionsPage() {
+  const { t } = useLocale();
+
   const [list, setList] = useState<ConnRow[]>([]);
   const [tenants, setTenants] = useState<TenantOpt[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +108,7 @@ export default function ConnectionsPage() {
       const res = await fetch('/api/connections');
       const data = await res.json();
       if (!res.ok) {
-        toastError('Ýüklenmedi', data.error);
+        toastError(t('loadFailedCap'), data.error);
         setList([]);
         return;
       }
@@ -116,7 +120,7 @@ export default function ConnectionsPage() {
         }))
       );
     } catch (e) {
-      toastError('Ýüklenmedi', String(e));
+      toastError(t('loadFailedCap'), String(e));
     } finally {
       setLoading(false);
     }
@@ -163,10 +167,10 @@ export default function ConnectionsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Test şowsuz', data.error || res.statusText);
+        toastError(t('testFailed'), data.error || res.statusText);
         return;
       }
-      toastSuccess('Baglanyşyk OK', row.label || row.dbKey);
+      toastSuccess(t('connectionOk'), row.label || row.dbKey);
     } catch (e) {
       toastError('Test', String(e));
     } finally {
@@ -211,11 +215,11 @@ export default function ConnectionsPage() {
 
   async function fetchDatabaseList() {
     if (!form.tenantSlug) {
-      toastError('Zerur', 'Ilki firma saýlaň');
+      toastError('Zerur', t('selectCompanyFirst'));
       return;
     }
     if (form.dbType === 'excel') {
-      toastInfo('Excel', 'Sheet adyny el bilen ýazyň (mes: Sheet1). List sanawy Electron-da barlanýar.');
+      toastInfo('Excel', t('sheetNameManual'));
       return;
     }
     if (!form.host.trim() || !form.username.trim()) {
@@ -223,7 +227,7 @@ export default function ConnectionsPage() {
       return;
     }
     if (!form.password.trim() && !editing?.hasPassword) {
-      toastError('Zerur', 'Password gerek (täze baglanyşyk)');
+      toastError('Zerur', t('passwordRequiredNewConn'));
       return;
     }
     setListingDbs(true);
@@ -251,7 +255,7 @@ export default function ConnectionsPage() {
           : [];
         if (names.length) {
           setDbOptions(names);
-          toastSuccess('DB sanawy', `${names.length} sany`);
+          toastSuccess(t('dbList'), `${names.length} sany`);
           return;
         }
       }
@@ -276,19 +280,19 @@ export default function ConnectionsPage() {
             .filter(Boolean);
           if (names.length) {
             setDbOptions(names);
-            toastSuccess('DB sanawy', `${names.length} sany`);
+            toastSuccess(t('dbList'), `${names.length} sany`);
             return;
           }
         }
       }
 
       toastError(
-        'DB sanawy',
+        t('dbList'),
         data?.error ||
-          'Electron tunnel offline ýa-da maglumat nädogry. Host/parol barlaň, Electron-yň şol firmada online bolmagyny barlaň.'
+          t('electronTunnelOffline')
       );
     } catch (e) {
-      toastError('DB sanawy', String(e));
+      toastError(t('dbList'), String(e));
     } finally {
       setListingDbs(false);
     }
@@ -297,7 +301,7 @@ export default function ConnectionsPage() {
 
   async function loadBrowseDir(dirPath: string) {
     if (!form.tenantSlug) {
-      toastError('Zerur', 'Ilki firma saýlaň');
+      toastError('Zerur', t('selectCompanyFirst'));
       return;
     }
     setBrowseLoading(true);
@@ -333,7 +337,7 @@ export default function ConnectionsPage() {
 
   async function pickExcelOnElectron() {
     if (!form.tenantSlug) {
-      toastError('Zerur', 'Ilki firma saýlaň');
+      toastError('Zerur', t('selectCompanyFirst'));
       return;
     }
     setBrowseOpen(true);
@@ -364,12 +368,12 @@ export default function ConnectionsPage() {
         if (sheets.length) {
           setForm((f) => ({ ...f, host: filePath, database: sheets[0] }));
         }
-        toastSuccess('Excel saýlandy', filePath.split(/[/\\]/).pop() || filePath);
+        toastSuccess(t('excelSelected'), filePath.split(/[/\\]/).pop() || filePath);
       } else {
-        toastSuccess('Faýl saýlandy', filePath.split(/[/\\]/).pop() || filePath);
+        toastSuccess(t('fileSelected'), filePath.split(/[/\\]/).pop() || filePath);
       }
     } catch {
-      toastSuccess('Faýl saýlandy', filePath.split(/[/\\]/).pop() || filePath);
+      toastSuccess(t('fileSelected'), filePath.split(/[/\\]/).pop() || filePath);
     } finally {
       setPickingExcel(false);
     }
@@ -377,7 +381,7 @@ export default function ConnectionsPage() {
 
   async function loadExcelSheets() {
     if (!form.tenantSlug || !form.host.trim()) {
-      toastError('Zerur', 'Ilki Excel faýl ýoly gerek');
+      toastError('Zerur', t('needExcelPathFirst'));
       return;
     }
     setListingDbs(true);
@@ -411,11 +415,11 @@ export default function ConnectionsPage() {
 
   async function save() {
     if (!form.tenantSlug || !form.host.trim()) {
-      toastError('Zerur', form.dbType === 'excel' ? 'Firma we Excel faýl ýoly gerek' : 'Firma we host gerek');
+      toastError('Zerur', form.dbType === 'excel' ? t('needCompanyExcel') : t('needCompanyHost'));
       return;
     }
     if (!form.database.trim()) {
-      toastError('Zerur', form.dbType === 'excel' ? 'Sheet (list) adyny ýazyň' : 'Database saýlaň ýa-da ýazyň');
+      toastError('Zerur', form.dbType === 'excel' ? t('enterSheetName') : t('selectOrTypeDatabase'));
       return;
     }
     if (form.dbType !== 'excel' && !form.username.trim()) {
@@ -444,10 +448,10 @@ export default function ConnectionsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak şowsuz', data.error);
+        toastError(t('saveFailedLong'), data.error);
         return;
       }
-      toastSuccess('Baglanyşyk saklandy', 'VPS + Electron sync');
+      toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
       setModal(false);
       await load();
       if (form.tenantSlug) setSelectedFirm(form.tenantSlug);
@@ -458,9 +462,9 @@ export default function ConnectionsPage() {
 
   async function remove(c: ConnRow) {
     const ok = await confirmDialog({
-      title: 'Baglanyşygy poz',
+      title: t('deleteConnection'),
       message: `«${c.label || c.dbKey}» (${c.tenantName}) pozmak isleýärsiňizmi?`,
-      confirmLabel: 'Poz',
+      confirmLabel: t('delete'),
       danger: true,
     });
     if (!ok) return;
@@ -471,10 +475,10 @@ export default function ConnectionsPage() {
     });
     const data = await res.json();
     if (!res.ok) {
-      toastError('Pozup bolmady', data.error);
+      toastError(t('deleteFailedLong'), data.error);
       return;
     }
-    toastSuccess('Pozuldy');
+    toastSuccess(t('deleted'));
     await load();
   }
 
@@ -497,16 +501,14 @@ export default function ConnectionsPage() {
           </Button>
           {selectedFirm && (
             <Button size="sm" onClick={() => openCreate(selectedFirm)}>
-              <Plus className="h-3.5 w-3.5" />
-              Täze DB
-            </Button>
+              <Plus className="h-3.5 w-3.5" />{t('newDb')}</Button>
           )}
         </div>
       </div>
 
       {!selectedFirm ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {loading && <p className="text-slate-500 text-sm col-span-full">Ýüklenýär...</p>}
+          {loading && <p className="text-slate-500 text-sm col-span-full">{t('loading')}</p>}
           {!loading && firmCards.length === 0 && (
             <p className="text-slate-500 text-sm col-span-full">Firma ýok</p>
           )}
@@ -537,9 +539,7 @@ export default function ConnectionsPage() {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="ghost" onClick={() => setSelectedFirm(null)}>
-              <ArrowLeft className="h-3.5 w-3.5" />
-              Firmalar
-            </Button>
+              <ArrowLeft className="h-3.5 w-3.5" />{t('companies')}</Button>
             <span className="text-sm text-white font-medium">
               {firmCards.find((f) => f.slug === selectedFirm)?.name || selectedFirm}
             </span>
@@ -549,56 +549,76 @@ export default function ConnectionsPage() {
           {firmConns.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-700 p-8 text-center text-slate-500 text-sm">
               Bu firmada baglanyşyk ýok.{' '}
-              <button type="button" className="text-indigo-400 hover:underline" onClick={() => openCreate(selectedFirm)}>
-                Täze goş
-              </button>
+              <button type="button" className="text-indigo-400 hover:underline" onClick={() => openCreate(selectedFirm)}>{t('addNew')}</button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              {firmConns.map((c) => (
-                <div
-                  key={c.id}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium text-white truncate flex items-center gap-1.5">
-                        <Server className="h-4 w-4 text-sky-400 shrink-0" />
-                        {c.label || c.dbKey}
-                        {c.isPrimary && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
-                            primary
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">
-                        {String(c.dbType || '').toLowerCase() === 'excel' || /\.(xlsx|xls|csv)$/i.test(c.host || '')
-                          ? `EXCEL · ${c.host || '—'} · sheet: ${c.database || '—'}`
-                          : `${c.host || '—'}:${c.port || 1433} / ${c.database || '—'}`}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">user: {c.username || '—'}</p>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        loading={testingId === c.id}
-                        onClick={() => void testConn(c)}
+            <DataTable
+              columns={[
+                {
+                  id: 'label',
+                  header: t('name'),
+                  mobilePrimary: true,
+                  accessor: (c) => c.label || c.dbKey,
+                },
+                {
+                  id: 'type',
+                  header: t('viewType'),
+                  accessor: (c) => c.dbType || 'mssql',
+                },
+                {
+                  id: 'host',
+                  header: 'Host / DB',
+                  accessor: (c) => `${c.host || ''}/${c.database || ''}`,
+                  cell: (c) => (
+                    <span className="font-mono text-[11px] text-slate-400">
+                      {String(c.dbType || '').toLowerCase() === 'excel'
+                        ? `EXCEL · ${c.host || '—'} · ${c.database || '—'}`
+                        : `${c.host || '—'}:${c.port || 1433} / ${c.database || '—'}`}
+                    </span>
+                  ),
+                },
+                {
+                  id: 'actions',
+                  header: t('actions'),
+                  sortable: false,
+                  accessor: () => '',
+                  cell: (c) => (
+                    <div className="flex gap-0.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
                         title="Test"
+                        disabled={testingId === c.id}
+                        onClick={() => void testConn(c)}
+                        className="bi-action-icon bi-action-ok p-1.5 rounded-lg text-emerald-400 hover:bg-emerald-500/15 disabled:opacity-40"
                       >
-                        <Activity className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => void remove(c)}>
-                        <Trash2 className="h-3.5 w-3.5 text-rose-400" />
-                      </Button>
+                        <Activity className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title={t('edit')}
+                        onClick={() => openEdit(c)}
+                        className="bi-action-icon bi-action-primary p-1.5 rounded-lg text-indigo-300 hover:bg-indigo-500/15"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title={t('delete')}
+                        onClick={() => void remove(c)}
+                        className="bi-action-icon bi-action-danger p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/15"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  ),
+                },
+              ]}
+              rows={firmConns}
+              rowKey={(c) => c.id}
+              storageKey="bi-connections-v1"
+              searchPlaceholder={t('search')}
+              emptyMessage={t('noConnections')}
+            />
           )}
         </div>
       )}
@@ -609,17 +629,17 @@ export default function ConnectionsPage() {
             <div className="absolute inset-0 bg-black/60" onClick={() => setModal(false)} />
             <div className="relative w-full sm:max-w-lg max-h-[min(92dvh,720px)] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 p-4 sm:p-5 space-y-3 shadow-2xl">
               <h3 className="text-lg font-semibold text-white">
-                {editing ? 'Baglanyşygy üýtget' : 'Täze DB baglanyşyk'}
+                {editing ? t('editConnection') : t('newConnection')}
               </h3>
 
               <Select
-                label="Firma"
+                label={t('company')}
                 value={form.tenantSlug}
                 onChange={(e) => setForm((f) => ({ ...f, tenantSlug: e.target.value }))}
                 options={tenants.map((t) => ({ value: t.slug, label: t.name || t.slug }))}
               />
               <Input
-                label="Ady (label)"
+                label={t('label')}
                 value={form.label}
                 onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
                 placeholder="Primary"
@@ -728,7 +748,7 @@ export default function ConnectionsPage() {
                       value={form.password}
                       onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                       className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
-                      placeholder="Boş goýup bilersiňiz"
+                      placeholder={t('canLeaveEmpty')}
                     />
                   </div>
                   <p className="text-[11px] text-slate-500">
@@ -740,14 +760,14 @@ export default function ConnectionsPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="sm:col-span-2">
                       <Input
-                        label="Host"
+                        label={t('host')}
                         value={form.host}
                         onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
                         placeholder="10.0.0.5"
                       />
                     </div>
                     <Input
-                      label="Port"
+                      label={t('port')}
                       value={String(form.port)}
                       onChange={(e) => setForm((f) => ({ ...f, port: Number(e.target.value) || 1433 }))}
                     />
@@ -767,7 +787,7 @@ export default function ConnectionsPage() {
                         onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                         className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
                         autoComplete="new-password"
-                        placeholder={editing?.hasPassword && !form.password ? 'Saklanan parol bar' : ''}
+                        placeholder={editing?.hasPassword && !form.password ? t('savedPasswordExists') : ''}
                       />
                       <button
                         type="button"
@@ -793,14 +813,14 @@ export default function ConnectionsPage() {
 
                   {dbOptions.length > 0 ? (
                     <Select
-                      label="Database"
+                      label={t('database')}
                       value={form.database}
                       onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
                       options={dbOptions.map((d) => ({ value: d, label: d }))}
                     />
                   ) : (
                     <Input
-                      label="Database"
+                      label={t('database')}
                       value={form.database}
                       onChange={(e) => setForm((f) => ({ ...f, database: e.target.value }))}
                       placeholder="MyDb"
@@ -837,12 +857,8 @@ export default function ConnectionsPage() {
               </label>
 
               <div className="flex gap-2 pt-2">
-                <Button className="flex-1" loading={saving} onClick={() => void save()}>
-                  Sakla
-                </Button>
-                <Button variant="ghost" onClick={() => setModal(false)}>
-                  Ýatyr
-                </Button>
+                <Button className="flex-1" loading={saving} onClick={() => void save()}>{t('save')}</Button>
+                <Button variant="ghost" onClick={() => setModal(false)}>{t('cancel')}</Button>
               </div>
             </div>
           </div>
@@ -890,7 +906,7 @@ export default function ConnectionsPage() {
                 </span>
               </div>
               <div className="flex-1 overflow-y-auto min-h-[260px] px-2 py-2">
-                {browseLoading && <p className="text-xs text-slate-400 p-3">Ýüklenýär…</p>}
+                {browseLoading && <p className="text-xs text-slate-400 p-3">{t('loading')}</p>}
                 {browseError && <p className="text-xs text-rose-400 p-3">{browseError}</p>}
                 {!browseLoading && !browseError && browseEntries.length === 0 && (
                   <p className="text-xs text-slate-500 p-3">Boş ýa-da Excel faýl ýok</p>

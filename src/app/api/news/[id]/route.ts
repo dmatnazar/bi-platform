@@ -34,8 +34,10 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   const item = updateNews(id, {
     title: body.title,
     body: body.body,
+    titleRu: body.titleRu,
+    bodyRu: body.bodyRu,
     images: body.images,
-      media: body.media,
+    media: body.media,
     published: body.published,
     pinned: body.pinned,
   });

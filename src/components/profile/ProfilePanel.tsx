@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { BalanceBadge } from '@/components/billing/BalanceBadge';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type PresetAvatar = { id: string; url: string; name: string };
 const PANEL_POS = 'bi-profile-panel-pos';
@@ -21,6 +22,7 @@ export function broadcastAvatar(avatarId: string | null) {
 type Props = { open: boolean; onClose: () => void };
 
 export function ProfilePanel({ open, onClose }: Props) {
+  const { t } = useLocale();
   const [user, setUser] = useState<any>(null);
   const [fullName, setFullName] = useState('');
   const [login, setLogin] = useState('');
@@ -90,7 +92,7 @@ export function ProfilePanel({ open, onClose }: Props) {
       fd.append('file', file);
       const res = await fetch('/api/profile/avatars', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
+      if (!res.ok) throw new Error(data.error || t('loadFailedLower'));
       setSelectedAvatar(data.selected);
       broadcastAvatar(data.selected);
       if (data.url) {
@@ -98,7 +100,7 @@ export function ProfilePanel({ open, onClose }: Props) {
           new CustomEvent('bi-avatar-changed', { detail: { avatarId: data.selected, avatarUrl: data.url } })
         );
       }
-      toastSuccess('Avatar ýüklendi');
+      toastSuccess(t('avatarUploaded'));
     } catch (e) {
       toastError('Avatar', e instanceof Error ? e.message : String(e));
     } finally {
@@ -119,10 +121,10 @@ export function ProfilePanel({ open, onClose }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'saklanmady');
-      toastSuccess('Profil ýatda saklandy');
+      toastSuccess(t('profileSaved'));
       await load();
     } catch (e) {
-      toastError('Profil', e instanceof Error ? e.message : String(e));
+      toastError(t('profile'), e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -141,7 +143,7 @@ export function ProfilePanel({ open, onClose }: Props) {
       setSelectedAvatar(data.selected);
       setPickerOpen(false);
       broadcastAvatar(data.selected);
-      toastSuccess('Avatar saýlandy');
+      toastSuccess(t('avatarSelected'));
     } finally {
       setSavingAvatar(false);
     }
@@ -153,7 +155,7 @@ export function ProfilePanel({ open, onClose }: Props) {
       await fetch('/api/profile/avatars', { method: 'DELETE' });
       setSelectedAvatar(null);
       broadcastAvatar(null);
-      toastSuccess('Avatar aýryldy');
+      toastSuccess(t('avatarRemoved'));
     } finally {
       setSavingAvatar(false);
     }
@@ -238,7 +240,7 @@ export function ProfilePanel({ open, onClose }: Props) {
 
         <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
           {!user ? (
-            <p className="text-sm text-slate-500 text-center py-8">Ýüklenýär…</p>
+            <p className="text-sm text-slate-500 text-center py-8">{t('loading')}</p>
           ) : (
             <>
               <div className="flex items-center gap-3">
@@ -306,7 +308,7 @@ export function ProfilePanel({ open, onClose }: Props) {
         </div>
         <div className="shrink-0 p-3 border-t border-slate-800 flex gap-2">
           <Button variant="ghost" className="flex-1 min-h-11" onClick={onClose}>Ýap</Button>
-          <Button className="flex-1 min-h-11" loading={saving} onClick={() => void saveProfile()}><Save className="h-4 w-4" /> Sakla</Button>
+          <Button className="flex-1 min-h-11" loading={saving} onClick={() => void saveProfile()}><Save className="h-4 w-4" />{t('save')}</Button>
         </div>
       </div>
     </div>,

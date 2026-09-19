@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useTheme } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { useLocale } from '@/components/LocaleProvider';
 
 function ResetForm() {
+  const { t } = useLocale();
   const search = useSearchParams();
   const router = useRouter();
   const token = search.get('token') || '';
@@ -31,7 +34,7 @@ function ResetForm() {
 
   useEffect(() => {
     if (!token) {
-      setMeta({ error: 'Token ýok' });
+      setMeta({ error: t('noToken') });
       setLoading(false);
       return;
     }
@@ -39,7 +42,7 @@ function ResetForm() {
       .then((r) => r.json())
       .then((d) => {
         if (!d.ok) {
-          setMeta({ error: d.error || 'Nädogry token' });
+          setMeta({ error: d.error || t('invalidToken') });
         } else {
           setMeta(d);
           setLeft(d.expiresInSec || 0);
@@ -65,15 +68,15 @@ function ResetForm() {
     e.preventDefault();
     setError('');
     if (password.length < 6) {
-      setError('Parol azyndan 6 belgi bolmaly');
+      setError(t('passwordMin6'));
       return;
     }
     if (password !== password2) {
-      setError('Parollar gabat gelenok');
+      setError(t('passwordsMismatch'));
       return;
     }
     if (left <= 0) {
-      setError('Möhleti gutardy — täze isleg ugradyň');
+      setError(t('expiredSendNewRequest'));
       return;
     }
     setSaving(true);
@@ -85,7 +88,7 @@ function ResetForm() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Şowsuz');
+        setError(data.error || t('failed'));
         return;
       }
       setDone(true);
@@ -145,7 +148,7 @@ function ResetForm() {
       )}
       <div className="relative">
         <Input
-          label="Täze parol"
+          label={t('newPassword')}
           type={show ? 'text' : 'password'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -161,7 +164,7 @@ function ResetForm() {
         </button>
       </div>
       <Input
-        label="Paroly gaýtala"
+        label={t('repeatPassword')}
         type={show ? 'text' : 'password'}
         value={password2}
         onChange={(e) => setPassword2(e.target.value)}
@@ -179,11 +182,13 @@ function ResetForm() {
 }
 
 export default function ResetPasswordPage() {
+  const { t } = useLocale();
+
   const { theme } = useTheme();
   const isLight = theme === 'light';
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: isLight ? '#f1f5f9' : '#020617' }}>
-      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
+      <div className="fixed top-3 right-3 z-20 flex items-center gap-2"><ThemeToggle compact /><LanguageToggle compact /></div>
       <div className="w-full max-w-md space-y-6">
         <div className="text-center space-y-2">
           <div className="mx-auto h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">

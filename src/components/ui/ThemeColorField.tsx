@@ -9,6 +9,7 @@ import {
 } from '@/lib/theme-color';
 import { useTheme } from '@/components/ThemeProvider';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type Props = {
   label: string;
@@ -31,6 +32,8 @@ export function ThemeColorField({
   className,
   compact,
 }: Props) {
+  const { t } = useLocale();
+
   const { theme } = useTheme();
 
   const renderSlot = (mode: ThemeMode, slotLabel: string) => {
@@ -95,7 +98,7 @@ export function ThemeColorField({
           <span className="text-[10px] text-slate-500 uppercase">{theme}</span>
         </div>
         <p className="text-[10px] text-slate-500">
-          Häzirki tema: {theme === 'light' ? 'ýagty' : 'garaňky'} — diňe şu tema üçin saklanýar
+          Häzirki tema: {theme === 'light' ? t('lightShort') : t('darkShort')} — diňe şu tema üçin saklanýar
         </p>
       </div>
     );

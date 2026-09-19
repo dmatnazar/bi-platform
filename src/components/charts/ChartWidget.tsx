@@ -12,6 +12,7 @@ import ReactECharts from 'echarts-for-react';
 import type { DashboardWidget, GlobalFilterValues } from '@/lib/types';
 import { cn, formatCellValue } from '@/lib/utils';
 import { ArrowDown, ArrowUp, ArrowUpDown, Columns3, Download, Filter, GripVertical, Loader2, Maximize2, RotateCcw, Search, X, Undo2, ChevronRight } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
 
 const DEMO_BAR = [
   { name: 'Ýan', value: 420 },
@@ -142,6 +143,7 @@ function TableWidgetBody({
   className?: string;
   globalFilters?: GlobalFilterValues;
 }) {
+  const { t } = useLocale();
   // Only show demo sample when widget has NO dataSource (preview mode).
   // If API returned empty array → show empty state, not static demo rows.
   const hasDataSource = !!(widget.dataSource?.path || widget.dataSource?.endpointId);
@@ -507,7 +509,7 @@ function TableWidgetBody({
         }),
       });
       const data = await res.json();
-      if (!res.ok) setDrillError(data.error || 'API säwlik');
+      if (!res.ok) setDrillError(data.error || t('apiError'));
       else setDrillRows(Array.isArray(data.rows) ? data.rows : []);
     } catch (e) {
       setDrillError(String(e));
@@ -723,7 +725,7 @@ function TableWidgetBody({
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Tablo gözle..."
+                placeholder={t('searchTable')}
                 className="w-full h-8 pl-7 pr-7 rounded-lg bg-slate-950/80 border border-slate-700 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/40"
               />
               {search && (
@@ -766,15 +768,15 @@ function TableWidgetBody({
               setShowColFilters((v) => !v);
             }}
             className={cn(
-              'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1 shrink-0 relative',
+              'bi-table-tool-btn h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1 shrink-0 relative',
               showColFilters || activeColFilterCount || mobileFilterOpen
                 ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                 : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
             )}
-            title="Sütün filterleri"
+            title={t('columnFilters')}
           >
-            <Filter className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{activeColFilterCount > 0 ? activeColFilterCount : 'Filter'}</span>
+            <Filter className="bi-table-tool-icon h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{activeColFilterCount > 0 ? activeColFilterCount : t('filterWord')}</span>
             {activeColFilterCount > 0 && (
               <span className="sm:hidden absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 rounded-full bg-rose-500 text-[9px] font-bold text-white flex items-center justify-center">
                 {activeColFilterCount}
@@ -787,7 +789,7 @@ function TableWidgetBody({
               <div className="absolute inset-0 bg-black/70" onClick={() => setMobileFilterOpen(false)} />
               <div className="relative w-full sm:max-w-md max-h-[85dvh] flex flex-col rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
                 <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                  <p className="text-sm font-semibold text-white">Sütün filter</p>
+                  <p className="text-sm font-semibold text-white">{t('columnFilter')}</p>
                   <button type="button" className="p-1.5 text-slate-400" onClick={() => setMobileFilterOpen(false)}>
                     <X className="h-4 w-4" />
                   </button>
@@ -833,7 +835,7 @@ function TableWidgetBody({
                             <button
                               type="button"
                               className="p-1.5 text-rose-400 hover:text-rose-300"
-                              title="Aýyr"
+                              title={t('remove')}
                               onClick={() =>
                                 setMobileFilterSlots((prev) => prev.filter((_, i) => i !== si))
                               }
@@ -929,16 +931,16 @@ function TableWidgetBody({
             <button
               type="button"
               onClick={() => setShowColPicker((v) => !v)}
-              title="Sütünleri görkez / gizle"
+              title={t('showHideColumns')}
               className={cn(
-                'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1',
+              'bi-table-tool-btn h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1',
                 showColPicker || hiddenCols.size
                   ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                   : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
               )}
             >
-              <Columns3 className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Sütünler</span>
+              <Columns3 className="bi-table-tool-icon h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{t('columns')}</span>
               {hiddenCols.size > 0 && (
                 <span className="hidden sm:inline text-[10px] opacity-80">({visibleCols.length}/{colOrder.length})</span>
               )}
@@ -1025,7 +1027,7 @@ function TableWidgetBody({
               type="button"
               onClick={clearFilters}
               className="h-8 w-8 sm:w-auto sm:px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0 inline-flex items-center justify-center gap-1"
-              title="Arassala"
+              title={t('clear')}
             >
               <RotateCcw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Arassala</span>
@@ -1096,7 +1098,7 @@ function TableWidgetBody({
                         toggleSort(c, e.shiftKey || e.metaKey || e.ctrlKey);
                       }}
                       className="inline-flex items-center gap-1 hover:text-slate-200 min-w-0"
-                      title="Sort · Shift+klik = multi · Sütüni süýşürip tertip çalyş"
+                      title={t('sortHint')}
                     >
                       <span className="truncate">{c}</span>
                       {sortIcon(c)}
@@ -1128,10 +1130,10 @@ function TableWidgetBody({
                   className="py-10 text-center text-slate-500 text-sm"
                 >
                   {search || activeColFilterCount
-                    ? 'Filter boýunça netije ýok'
+                    ? t('noFilterResults')
                     : hasDataSource
                       ? 'Maglumat tapylmady'
-                      : 'Maglumat ýok'}
+                      : t('noData')}
                 </td>
               </tr>
             ) : (
@@ -1166,7 +1168,7 @@ function TableWidgetBody({
       <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-0.5 [overscroll-behavior:auto]">
         {sorted.length === 0 ? (
           <p className="text-center text-slate-500 text-xs py-8">
-            {search || activeColFilterCount ? 'Filter boýunça netije ýok' : 'Maglumat ýok'}
+            {search || activeColFilterCount ? t('noFilterResults') : t('noData')}
           </p>
         ) : (
           sorted.slice(0, 200).map((row, i) => {
@@ -1271,7 +1273,7 @@ function TableWidgetBody({
                   <input
                     value={drillSearch}
                     onChange={(e) => setDrillSearch(e.target.value)}
-                    placeholder="Gözle..."
+                    placeholder={t('search')}
                     className="w-full h-8 pl-7 pr-7 rounded-lg bg-slate-950/80 border border-slate-700 text-xs text-slate-100 placeholder:text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/40"
                   />
                   {drillSearch && (
@@ -1308,16 +1310,16 @@ function TableWidgetBody({
                       setShowDrillColFilters((v) => !v);
                     }}
                     className={cn(
-                      'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1 shrink-0 relative',
+              'bi-table-tool-btn h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1 shrink-0 relative',
                       showDrillColFilters || activeDrillColFilterCount || drillMobileFilterOpen
                         ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                         : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
                     )}
-                    title="Sütün filterleri"
+                    title={t('columnFilters')}
                   >
-                    <Filter className="h-3.5 w-3.5" />
+                    <Filter className="bi-table-tool-icon h-3.5 w-3.5" />
                     <span className="hidden sm:inline">
-                      {activeDrillColFilterCount > 0 ? activeDrillColFilterCount : 'Filter'}
+                      {activeDrillColFilterCount > 0 ? activeDrillColFilterCount : t('filterWord')}
                     </span>
                     {activeDrillColFilterCount > 0 && (
                       <span className="sm:hidden absolute -top-1 -right-1 min-w-[1rem] h-4 px-0.5 rounded-full bg-rose-500 text-[9px] font-bold text-white flex items-center justify-center">
@@ -1331,15 +1333,15 @@ function TableWidgetBody({
                     type="button"
                     onClick={() => setShowDrillColPicker((v) => !v)}
                     className={cn(
-                      'h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1',
+              'bi-table-tool-btn h-8 w-8 sm:w-auto sm:px-2 rounded-lg border text-xs inline-flex items-center justify-center gap-1',
                       showDrillColPicker || drillHiddenCols.size
                         ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                         : 'border-slate-700 bg-slate-950/80 text-slate-400 hover:text-slate-200'
                     )}
-                    title="Sütünleri görkez / gizle"
+                    title={t('showHideColumns')}
                   >
-                    <Columns3 className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">Sütünler</span>
+                    <Columns3 className="bi-table-tool-icon h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{t('columns')}</span>
                     {drillHiddenCols.size > 0 && (
                       <span className="hidden sm:inline text-[10px] opacity-80">
                         ({drillColKeys.length}/{drillAllColKeys.length})
@@ -1428,7 +1430,7 @@ function TableWidgetBody({
                     type="button"
                     onClick={clearDrillFilters}
                     className="h-8 w-8 sm:w-auto sm:px-2 rounded-lg border border-slate-700 text-[11px] text-slate-400 hover:text-white shrink-0 inline-flex items-center justify-center gap-1"
-                    title="Arassala"
+                    title={t('clear')}
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     <span className="hidden sm:inline">Arassala</span>
@@ -1577,9 +1579,7 @@ function TableWidgetBody({
             <div className="flex-1 min-h-0 overflow-auto p-3 flex flex-col">
               {drillLoading && (
                 <div className="flex items-center justify-center gap-2 py-12 text-slate-400 text-sm">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Ýüklenýär...
-                </div>
+                  <Loader2 className="h-5 w-5 animate-spin" />{t('loading')}</div>
               )}
               {drillError && (
                 <p className="text-sm text-rose-400 py-6 text-center">{drillError}</p>
@@ -1716,6 +1716,8 @@ function TableWidgetBody({
 }
 
 export function ChartWidget({ widget, data, className, globalFilters, zoomEnabled = false }: Props) {
+  const { t } = useLocale();
+
   const { theme } = useTheme();
   const option = useMemo(() => {
     const color = resolveThemeColor(widget.config?.color, theme, THEME_DEFAULTS.primary[theme]);
@@ -2681,7 +2683,7 @@ export function ChartWidget({ widget, data, className, globalFilters, zoomEnable
     const rowKeyFn = (r: Record<string, unknown>) =>
       rowFields.length
         ? rowFields.map((f) => String(r[f] ?? '')).join(' / ')
-        : '(Ähli)';
+        : t('allParen');
     const colKeyFn = (r: Record<string, unknown>) =>
       colFields.length
         ? colFields.map((f) => String(r[f] ?? '')).join(' / ')
@@ -2844,6 +2846,7 @@ function ChartCanvas({
   /** Fullscreen / expanded: allow wheel & pinch zoom */
   zoomEnabled?: boolean;
 }) {
+  const { t } = useLocale();
   function withZoom(opt: any) {
     if (!opt) return opt;
     const o = { ...opt };
@@ -3096,7 +3099,7 @@ function ChartCanvas({
   ) {
     const cfg = resolveLevelConfig(depth);
     if (!cfg.path || !cfg.tenantSlug) {
-      setDrillError('Hierarchy API path/tenant ýok');
+      setDrillError(t('hierarchyPathTenantMissing'));
       return;
     }
     setDrillLoading(true);
@@ -3121,7 +3124,7 @@ function ChartCanvas({
       });
       const body = await res.json();
       if (!res.ok) {
-        setDrillError(body.error || 'API säwlik');
+        setDrillError(body.error || t('apiError'));
         setLevelRows([]);
       } else {
         const rows = Array.isArray(body.rows) ? body.rows : [];
@@ -3446,7 +3449,7 @@ function ChartCanvas({
                     setLevelRows([]);
                   }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 shrink-0"
-                  title="Ýap"
+                  title={t('close')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -3455,8 +3458,7 @@ function ChartCanvas({
               <div className="flex-1 min-h-0 relative">
                 {drillLoading && (
                   <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-slate-950/60 text-slate-400 text-sm">
-                    <Loader2 className="h-5 w-5 animate-spin" /> Ýüklenýär…
-                  </div>
+                    <Loader2 className="h-5 w-5 animate-spin" />{t('loading')}</div>
                 )}
                 {drillError && (
                   <div className="p-4 text-rose-400 text-sm bg-rose-500/10 m-3 rounded-lg">

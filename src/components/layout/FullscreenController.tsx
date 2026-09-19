@@ -10,6 +10,7 @@ import {
   setFullscreenPref,
 } from '@/lib/fullscreen';
 import { useTheme } from '@/components/ThemeProvider';
+import { useLocale } from '@/components/LocaleProvider';
 import { cn, formatDate } from '@/lib/utils';
 
 const HIDE_MS = 5000;
@@ -44,6 +45,7 @@ export function FullscreenController() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const statusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { theme, toggleTheme } = useTheme();
+  const { locale, toggleLocale, t } = useLocale();
 
   const bumpVisible = useCallback(() => {
     setVisible(true);
@@ -209,14 +211,19 @@ export function FullscreenController() {
       )}
 
       {(supported || isIOS) && (
-        <button type="button" onClick={handleToggleFs} title={active ? 'Doly ekrandan çyk' : 'Doly ekran (F11)'} className={btnClass}>
+        <button
+          type="button"
+          onClick={handleToggleFs}
+          title={active ? t('fullscreenExit') : t('fullscreenEnter')}
+          className={btnClass}
+        >
           {active ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
       )}
       <button
         type="button"
         onClick={toggleStatus}
-        title="Birikme statusy"
+        title={t('connectionStatus')}
         className={cn(btnClass, 'lg:hidden', statusOpen && 'text-indigo-300 border-indigo-500/50')}
       >
         <Activity className="h-4 w-4" />
@@ -225,11 +232,24 @@ export function FullscreenController() {
       <button
         type="button"
         onClick={handleTheme}
-        title={theme === 'light' ? 'Garaňky tema' : 'Ýagty tema'}
-        aria-label={theme === 'light' ? 'Garaňky tema' : 'Ýagty tema'}
+        title={theme === 'light' ? t('themeDark') : t('themeLight')}
+        aria-label={theme === 'light' ? t('themeDark') : t('themeLight')}
         className={btnClass}
       >
         {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          toggleLocale();
+          bumpVisible();
+        }}
+        title={t('langSwitch')}
+        aria-label={t('langSwitch')}
+        className={cn(btnClass, 'font-bold text-[11px] tracking-wide')}
+      >
+        {locale === 'tm' ? 'RU' : 'TM'}
       </button>
     </div>
   );

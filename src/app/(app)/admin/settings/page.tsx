@@ -6,14 +6,15 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Server, RefreshCw, ShieldCheck, Eye, EyeOff, Info } from 'lucide-react';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
+import { useLocale } from '@/components/LocaleProvider';
 
-const SYNC_OPTIONS = [
-  { value: '0', label: 'Diňe el bilen' },
-  { value: '15', label: 'Her 15 sekunt' },
-  { value: '30', label: 'Her 30 sekunt' },
-  { value: '60', label: 'Her 1 minut' },
-  { value: '120', label: 'Her 2 minut' },
-  { value: '300', label: 'Her 5 minut' },
+const SYNC_OPTION_DEFS = [
+  { value: '0', labelKey: 'manualOnly', fallback: 'Diňe el bilen' },
+  { value: '15', labelKey: 'every15s', fallback: 'Her 15 sekunt' },
+  { value: '30', labelKey: 'every30s', fallback: 'Her 30 sekunt' },
+  { value: '60', labelKey: 'every1min', fallback: 'Her 1 minut' },
+  { value: '300', labelKey: 'every5min', fallback: 'Her 5 minut' },
+  { value: '900', labelKey: 'every15min', fallback: 'Her 15 minut' },
 ];
 
 function normalizeEmail(raw: string): string {
@@ -34,6 +35,12 @@ function isValidEmail(raw: string): boolean {
 }
 
 export default function SettingsPage() {
+  const { t } = useLocale();
+  const SYNC_OPTIONS = SYNC_OPTION_DEFS.map((o) => ({
+    value: o.value,
+    label: t(o.labelKey) || o.fallback,
+  }));
+
   const [gatewayUrl, setGatewayUrl] = useState('http://localhost:4000');
   const [secret, setSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
@@ -176,8 +183,8 @@ export default function SettingsPage() {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      toastSuccess('Gateway saklandy');
+      if (!res.ok) throw new Error(data.error || t('failed'));
+      toastSuccess(t('gatewaySaved'));
       await loadGateway();
     } catch (e) {
       toastError('Gateway', e instanceof Error ? e.message : String(e));
@@ -195,8 +202,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ catalogSyncIntervalSec: Number(syncSec) || 0 }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      toastSuccess('Sync saklandy');
+      if (!res.ok) throw new Error(data.error || t('failed'));
+      toastSuccess(t('syncSaved'));
       await loadGateway();
     } catch (e) {
       toastError('Sync', e instanceof Error ? e.message : String(e));
@@ -217,8 +224,8 @@ export default function SettingsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      toastSuccess('Seans sazlamalary saklandy');
+      if (!res.ok) throw new Error(data.error || t('failed'));
+      toastSuccess(t('sessionSettingsSaved'));
       await loadGateway();
     } catch (e) {
       toastError('Seanslar', e instanceof Error ? e.message : String(e));
@@ -236,8 +243,8 @@ export default function SettingsPage() {
         body: JSON.stringify({ authAnimations, appAnimations, modalAnimations }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      toastSuccess('Animasiýa sazlamalary saklandy');
+      if (!res.ok) throw new Error(data.error || t('failed'));
+      toastSuccess(t('animationSettingsSaved'));
       try {
         localStorage.setItem('bi-auth-animations', authAnimations ? '1' : '0');
         localStorage.setItem('bi-app-animations', appAnimations ? '1' : '0');
@@ -247,7 +254,7 @@ export default function SettingsPage() {
       }
       await loadGateway();
     } catch (e) {
-      toastError('Animasiýa', e instanceof Error ? e.message : String(e));
+      toastError(t('animation'), e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(null);
     }
@@ -269,8 +276,8 @@ export default function SettingsPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Şowsuz');
-      toastSuccess('Update feed saklandy', 'Ähli Electron enjamlary');
+      if (!res.ok) throw new Error(data.error || t('failed'));
+      toastSuccess(t('updateFeedSaved'), t('allElectronDevices'));
       await loadUpdateFeed();
     } catch (e) {
       toastError('Update feed', e instanceof Error ? e.message : String(e));
@@ -291,7 +298,7 @@ export default function SettingsPage() {
       if (test) {
         const to = normalizeEmail(testToVal);
         if (!isValidEmail(to)) {
-          toastError('Synag e-poçta', `Dogry e-poçta giriziň (mysal: siz@gmail.com). Häzirki: "${testToVal || 'boş'}"`);
+          toastError(t('testEmail'), `Dogry e-poçta giriziň (mysal: siz@gmail.com). Häzirki: "${testToVal || t('emptyShort')}"`);
           return;
         }
         if (!mailUser.trim()) {
@@ -299,7 +306,7 @@ export default function SettingsPage() {
           return;
         }
         if (!hasMailPass && !mailPass.trim()) {
-          toastError('App Password', 'App Password giriziň');
+          toastError('App Password', t('enterAppPassword'));
           return;
         }
       }
@@ -328,18 +335,18 @@ export default function SettingsPage() {
             (typeof (data as { details?: unknown }).details === 'object'
               ? JSON.stringify((data as { details: unknown }).details)
               : null) ||
-            'Şowsuz'
+            t('failed')
         );
       }
 
       if (test) {
         if ((data as { testOk?: boolean }).testOk) {
-          toastSuccess('Synag haty iberildi', normalizeEmail(mailTestTo));
+          toastSuccess(t('testMailSent'), normalizeEmail(mailTestTo));
         } else {
-          toastWarning('Saklandy, ýöne synag şowsuz', (data as { error?: string }).error || '');
+          toastWarning(t('savedButTestFailed'), (data as { error?: string }).error || '');
         }
       } else {
-        toastSuccess('Gmail / SMTP saklandy');
+        toastSuccess(t('mailSaved'));
       }
 
       // Refresh only mail section (pass comes back from API for eye)
@@ -371,15 +378,15 @@ export default function SettingsPage() {
   }
 
   if (loading) {
-    return <p className="text-slate-500 text-sm p-4">Ýüklenýär...</p>;
+    return <p className="text-slate-500 text-sm p-4">{t('loading')}</p>;
   }
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-4 sm:space-y-6 px-1 sm:px-0">
       <div>
-        <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">Sazlamalar</h1>
+        <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">{t('settingsTitle')}</h1>
         <p className="text-xs sm:text-sm text-slate-400 mt-1">
-          VPS Gateway baglanyşygy we sync · BI Platform v{version}
+          {t('settingsSubtitle').replace('{version}', version)}
         </p>
       </div>
 
@@ -400,17 +407,17 @@ export default function SettingsPage() {
                     : 'bg-slate-700 text-slate-400'
               }`}
             >
-              {online === true ? 'Online' : online === false ? 'Offline' : '...'}
+              {online === true ? t('online') : online === false ? t('offline') : '...'}
             </span>
           </div>
           <Input
-            label="Gateway URL"
+            label={t('gatewayUrl')}
             value={gatewayUrl}
             onChange={(e) => setGatewayUrl(e.target.value)}
             placeholder="http://localhost:4000"
           />
           <div>
-            <label className="mb-1 block text-xs font-medium text-slate-400">Admin Sync Secret</label>
+            <label className="mb-1 block text-xs font-medium text-slate-400">{t('adminSyncSecret')}</label>
             <div className="relative">
               <input
                 type={showSecret ? 'text' : 'password'}
@@ -424,23 +431,21 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => setShowSecret((v) => !v)}
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"
-                aria-label={showSecret ? 'Gizle' : 'Görkez'}
+                aria-label={showSecret ? t('hide') : t('show')}
               >
                 {showSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
             <p className="text-[11px] text-slate-500 mt-1 flex items-start gap-1">
               <ShieldCheck className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              Electron-daky ADMIN_SYNC_SECRET bilen birmeňzeş bolmaly.
+              {t('secretMustMatch')}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" loading={saving === 'gateway'} onClick={() => void saveGateway()}>
-              Sakla
-            </Button>
+            <Button size="sm" loading={saving === 'gateway'} onClick={() => void saveGateway()}>{t('save')}</Button>
             <Button size="sm" variant="secondary" onClick={() => void testHealth()}>
               <RefreshCw className="h-3.5 w-3.5" />
-              Health barla
+              {t('healthCheck')}
             </Button>
           </div>
         </section>
@@ -449,32 +454,32 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
             <RefreshCw className="h-4 w-4 text-indigo-400" />
-            Sync özüni alyş
+            {t('syncSelfFetch')}
           </h2>
           <Select
-            label="Catalog awto-täzeleme"
+            label={t('catalogAutoRefresh')}
             value={syncSec}
             onChange={(e) => setSyncSec(e.target.value)}
             options={SYNC_OPTIONS}
           />
           <p className="text-[11px] text-slate-500 flex gap-1">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            API katalogynyň cache täzeleniş aralygy (gateway catalog).
+            {t('catalogCacheInterval')}
           </p>
           <Button size="sm" loading={saving === 'sync'} onClick={() => void saveSync()}>
-            Sync sakla
+            {t('saveSync')}
           </Button>
         </section>
 
         {/* Animations */}
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4">
-          <h2 className="text-sm font-semibold text-white">Animasiýalar</h2>
+          <h2 className="text-sm font-semibold text-white">{t('animations')}</h2>
           <p className="text-[11px] text-slate-500">
-            Particles we sahypa geçiş animasiýalary. Öçürileninde UI has ýeňil işleýär.
+            {t('animationsHint')}
           </p>
           <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
             <span>
-              Login / Hasaba al / Täze firma
+              {t('animLoginRegister')}
               <span className="block text-[10px] text-slate-500 font-normal">
                 Particles, orb, fade-in
               </span>
@@ -488,9 +493,9 @@ export default function SettingsPage() {
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
             <span>
-              Login soň (app içi)
+              {t('animAfterLogin')}
               <span className="block text-[10px] text-slate-500 font-normal">
-                Sidebar fon particles, sahypa fade-in
+                {t('animAfterLoginDesc')}
               </span>
             </span>
             <input
@@ -502,9 +507,9 @@ export default function SettingsPage() {
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-slate-200 py-1">
             <span>
-              Modallar (aç/ýap)
+              {t('animModals')}
               <span className="block text-[10px] text-slate-500 font-normal">
-                Widget/API redaktor, tassyklama (warning) penjireleriniň geçiş animasiýasy
+                {t('animModalsDesc')}
               </span>
             </span>
             <input
@@ -515,7 +520,7 @@ export default function SettingsPage() {
             />
           </label>
           <Button size="sm" loading={saving === 'anim'} onClick={() => void saveAnimations()}>
-            Animasiýa sakla
+            {t('saveAnimations')}
           </Button>
         </section>
 
@@ -523,11 +528,9 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4">
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-white">Doly ekran (F11)</h2>
+          <h2 className="text-sm font-semibold text-white">{t('fullscreenF11')}</h2>
           <p className="text-xs text-slate-500">
-            Default: diňe ýokarky ikona basanda açylýar. Awto açmak öçürilen — refresh / modal
-            girende doly ekran açylmaz. Awto açmak isleseňiz aşakdaky switch-i açyň (birinji basyş
-            soňra synanyşýar — brauzer talaby).
+            {t('fullscreenHint')}
           </p>
           <label className="flex items-center gap-2 text-sm text-slate-200">
             <input
@@ -543,13 +546,13 @@ export default function SettingsPage() {
                 }
               }}
             />
-            Awto doly ekran (ilkinji basyşda)
+            {t('autoFullscreen')}
           </label>
         </section>
 
-          <h2 className="text-sm font-semibold text-white">Login · Hasaba al</h2>
+          <h2 className="text-sm font-semibold text-white">{t('loginRegisterSection')}</h2>
           <p className="text-xs text-slate-500">
-            Öçürileninde login sahypasynda «Hasaba al» baglanyşygy görünmeýär. Täze işgär diňe admin tarapyndan goşulýar.
+            {t('regLinkHint')}
           </p>
           <label className="flex items-center gap-2 text-sm text-slate-200">
             <input
@@ -557,7 +560,7 @@ export default function SettingsPage() {
               checked={registrationEnabled}
               onChange={(e) => setRegistrationEnabled(e.target.checked)}
             />
-            Login-de «Hasaba al» görkez
+            {t('showRegisterOnLogin')}
           </label>
           <Button
             size="sm"
@@ -571,8 +574,8 @@ export default function SettingsPage() {
                   body: JSON.stringify({ registrationEnabled }),
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error || 'Şowsuz');
-                toastSuccess('Hasaba al sazlamasy saklandy');
+                if (!res.ok) throw new Error(data.error || t('failed'));
+                toastSuccess(t('registrationSettingsSaved'));
               } catch (e) {
                 toastError('Hasaba al', e instanceof Error ? e.message : String(e));
               } finally {
@@ -580,20 +583,18 @@ export default function SettingsPage() {
               }
             }}
           >
-            Ýatda sakla
+            {t('save')}
           </Button>
         </section>
 
         <section className="rounded-2xl border border-amber-500/30 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">
-          <h2 className="text-sm font-semibold text-white">Seanslar / enjam çägi</h2>
+          <h2 className="text-sm font-semibold text-white">{t('sessionsDevices')}</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Bir hasap näçe enjamdan bir wagtda girip bilýär. Default: <b className="text-slate-300">1</b>.
-            Warning — ikinji girişde tassyklama soň beýleki seanslar ýapylar; Strict — blok;
-            Kick oldest — iň köne seansy awto ýapýar.
+            {t('sessionsHint')}
           </p>
           <div className="grid sm:grid-cols-2 gap-4">
             <label className="block text-sm text-slate-300">
-              Max enjam sany
+              {t('maxDevices')}
               <input
                 type="number"
                 min={1}
@@ -604,7 +605,7 @@ export default function SettingsPage() {
               />
             </label>
             <label className="block text-sm text-slate-300">
-              Login syýasaty
+              {t('loginPolicy')}
               <select
                 value={sessionLoginPolicy}
                 onChange={(e) =>
@@ -612,14 +613,14 @@ export default function SettingsPage() {
                 }
                 className="mt-1.5 w-full h-10 rounded-xl bg-slate-950 border border-slate-700 px-3 text-sm text-white"
               >
-                <option value="warn">Warning (tassyklama soň beýlekini ýap)</option>
-                <option value="strict">Strict (ikinji enjamy blokla)</option>
-                <option value="kick_oldest">Kick oldest (iň köne seansy awto ýap)</option>
+                <option value="warn">{t('policyWarn')}</option>
+                <option value="strict">{t('policyStrict')}</option>
+                <option value="kick_oldest">{t('policyKick')}</option>
               </select>
             </label>
           </div>
           <Button type="button" size="sm" loading={saving === 'sessions'} onClick={() => void saveSessions()}>
-            Seans sazlamalaryny sakla
+            {t('saveSessionSettings')}
           </Button>
         </section>
 
@@ -627,10 +628,10 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-indigo-500/30 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
             <Server className="h-4 w-4 text-violet-400" />
-            Awtomatiki Täzelenme (ähli Electron)
+            {t('autoUpdateAllElectron')}
           </h2>
           <p className="text-[11px] text-slate-500">
-            Bu sazlama VPS-de saklanýar. Ähli Electron enjamlary start / sync wagtynda şu feed-i ulanýar.
+            {t('updateFeedHint')}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <Select
@@ -642,12 +643,12 @@ export default function SettingsPage() {
                 { value: 'http', label: 'http' },
               ]}
             />
-            <Input label="Host" value={upHost} onChange={(e) => setUpHost(e.target.value)} placeholder="updates.example.com" />
+            <Input label={t('host')} value={upHost} onChange={(e) => setUpHost(e.target.value)} placeholder="updates.example.com" />
             <Input
-              label="Port"
+              label={t('port')}
               value={upPort}
               onChange={(e) => setUpPort(e.target.value)}
-              placeholder="boş = standart (https→443 / http→80)"
+              placeholder={t('emptyDefaultPorts')}
             />
             <Input label="Path" value={upPath} onChange={(e) => setUpPath(e.target.value)} placeholder="/updates" />
             <Input label="Username" value={upUsername} onChange={(e) => setUpUsername(e.target.value)} />
@@ -672,7 +673,7 @@ export default function SettingsPage() {
             </div>
           </div>
           <Button size="sm" loading={saving === 'update'} onClick={() => void saveUpdateFeed()}>
-            Update feed sakla (ähli Electron)
+            {t('saveUpdateFeed')}
           </Button>
         </section>
 
@@ -680,14 +681,13 @@ export default function SettingsPage() {
         <section className="rounded-2xl border border-emerald-500/25 bg-slate-900/60 p-4 sm:p-5 space-y-3 sm:space-y-4 xl:col-span-2">
           <h2 className="text-sm font-semibold text-white flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            Gmail / SMTP (Forgot password)
+            {t('gmailSmtpTitle')}
           </h2>
           <p className="text-[11px] text-slate-500">
-            Işgärler «Paroly ýatdan çykardyňyzmy?» basanda şu Gmail arkaly 15 minutlyk baglanyşyk iberilýär.
-            Gmail üçin <strong className="text-slate-400">App Password</strong> ulanyň (2FA gerekli).
+            {t('gmailSmtpHint')}
           </p>
           <label className="flex items-center justify-between text-sm text-slate-200 max-w-xs">
-            <span>Işjeň</span>
+            <span>{t('enabled')}</span>
             <input
               type="checkbox"
               checked={mailEnabled}
@@ -697,13 +697,13 @@ export default function SettingsPage() {
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="SMTP host"
+              label={t('smtpHost')}
               value={mailHost}
               onChange={(e) => setMailHost(e.target.value)}
               placeholder="smtp.gmail.com"
             />
             <Input
-              label="Port"
+              label={t('port')}
               value={mailPort}
               onChange={(e) => setMailPort(e.target.value)}
               placeholder="587"
@@ -729,39 +729,39 @@ export default function SettingsPage() {
                   className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/80 px-3 pr-10 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
                   placeholder={
                     hasMailPass
-                      ? 'Täzelemek üçin ýazyň (boş = öňküsi galýar)'
-                      : 'App Password giriziň'
+                      ? t('typeToUpdateEmptyKeep')
+                      : t('enterAppPassword')
                   }
                   autoComplete="new-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowMailPass((v) => !v)}
-                  title={showMailPass ? 'Gizle' : 'Görkez'}
+                  title={showMailPass ? 'Gizle' : t('show')}
                   className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"
-                  aria-label={showMailPass ? 'Gizle' : 'Görkez'}
+                  aria-label={showMailPass ? 'Gizle' : t('show')}
                 >
                   {showMailPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
               <p className="text-[10px] text-slate-500 mt-1">
-                Göz düwmesi saklanan / ýazylan App Password-y görkezýär ýa-da gizleýär.
+                {t('eyeToggleHint')}
               </p>
             </div>
             <Input
-              label="From ady"
+              label={t('fromName')}
               value={mailFromName}
               onChange={(e) => setMailFromName(e.target.value)}
             />
             <Input
-              label="From e-poçta"
+              label={t('fromEmail')}
               value={mailFromEmail}
               onChange={(e) => setMailFromEmail(e.target.value)}
               placeholder="you@gmail.com"
             />
           </div>
           <label className="flex items-center justify-between text-sm text-slate-200 max-w-xs">
-            <span>Secure (SSL 465)</span>
+            <span>{t('secureSsl')}</span>
             <input
               type="checkbox"
               checked={mailSecure}
@@ -772,7 +772,7 @@ export default function SettingsPage() {
           <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:items-end">
             <div className="flex-1 min-w-0 sm:min-w-[200px]">
               <Input
-                label="Synag e-poçta"
+                label={t('testEmail')}
                 name="mailTestTo"
                 type="email"
                 inputMode="email"
@@ -789,10 +789,10 @@ export default function SettingsPage() {
                 loading={saving === 'mail'}
                 onClick={() => void saveMail(true)}
               >
-                Synag iber
+                {t('sendTest')}
               </Button>
               <Button size="sm" loading={saving === 'mail'} onClick={() => void saveMail(false)}>
-                Gmail sakla
+                {t('saveGmail')}
               </Button>
             </div>
           </div>
@@ -800,11 +800,11 @@ export default function SettingsPage() {
 
         {/* Trash days */}
         <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5 space-y-3 xl:col-span-2">
-          <h2 className="text-sm font-semibold text-white">Goldaw · Pozulanlar (Trash)</h2>
+          <h2 className="text-sm font-semibold text-white">{t('supportTrashTitle')}</h2>
           <p className="text-[11px] text-slate-500">
-            Admin ticket-i «trashed» edensoň, şu gün sanawyndan soň awtomatik doly pozulmagy üçin.
+            {t('trashHint')}
           </p>
-          <label className="text-xs text-slate-400">Nace günden soň doly pozulsın?</label>
+          <label className="text-xs text-slate-400">{t('daysUntilHardDelete')}</label>
           <input
             type="number"
             min={1}

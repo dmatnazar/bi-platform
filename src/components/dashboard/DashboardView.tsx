@@ -24,6 +24,7 @@ import { generateId, cn } from '@/lib/utils';
 import { Input } from '@/components/ui/Input';
 import { ArrowLeft, Save, Pencil, Eye, ChevronDown, ChevronRight, RefreshCw, GripHorizontal, X } from 'lucide-react';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Props {
   initial: Dashboard;
@@ -62,6 +63,8 @@ function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
 }
 
 export function DashboardView({ initial, editable, companyName, companySlug }: Props) {
+  const { t } = useLocale();
+
   const router = useRouter();
   const [dashboard, setDashboard] = useState(initial);
   const [editMode, setEditMode] = useState(false);
@@ -337,9 +340,9 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   function addWidget(type: WidgetType) {
     const maxY = dashboard.widgets.reduce((m, w) => Math.max(m, w.y + w.h), 0);
     const titles: Record<WidgetType, string> = {
-      bar: 'Sütün diagramma',
-      line: 'Çyzyk diagramma',
-      area: 'Meýdança diagramma',
+      bar: t('barChart'),
+      line: t('lineDiagram'),
+      area: t('areaDiagram'),
       pie: 'Tegelek diagramma',
       table: 'Tablo',
       pivot: 'Svodny tablo',
@@ -354,7 +357,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
       y: maxY,
       w: type === 'kpi' ? 3 : type === 'pie' ? 4 : type === 'pivot' ? 8 : 6,
       h: type === 'kpi' ? 2 : type === 'pivot' ? 5 : 4,
-      staticValue: type === 'kpi' ? '0' : type === 'text' ? 'Tekst ýazyň...' : undefined,
+      staticValue: type === 'kpi' ? '0' : type === 'text' ? t('typeText') : undefined,
       config: { color: '#6366f1', showLegend: true },
       tabId: activeTabId || null,
     };
@@ -392,12 +395,12 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   // Task 8: show Save / Cancel save / Close when there are unsaved changes
   const promptUnsaved = useCallback(async (): Promise<'save' | 'discard' | 'stay'> => {
     const result = await confirmDialog({
-      title: 'Saklanmadyk üýtgetmeler',
+      title: t('unsavedChanges'),
       message:
-        'Dashboardda üýtgetmeler bar. Çykmazdan öň ýatda saklamak isleýärsiňizmi?',
-      confirmLabel: 'Ýatda sakla',
+        t('dashboardUnsaved'),
+      confirmLabel: t('rememberMe'),
       cancelLabel: 'Saklama',
-      stayLabel: 'Ýap',
+      stayLabel: t('close'),
       danger: false,
     });
     if (result === true) return 'save';
@@ -565,7 +568,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
             type="button"
             onClick={() => void handleBack()}
             className="p-2 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-colors shrink-0"
-            aria-label="Yza"
+            aria-label={t('back')}
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -640,11 +643,11 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 size="sm"
                 onClick={() => refreshAllWidgets()}
                 loading={refreshingAll}
-                title="Ähli widget-leri täzele"
+                title={t('refreshAllWidgets')}
                 className="px-2 sm:px-3"
               >
                 {!refreshingAll && <RefreshCw className="h-4 w-4" />}
-                <span className="text-xs sm:text-sm">Täzele</span>
+                <span className="text-xs sm:text-sm">{t('refresh')}</span>
               </Button>
               {editable && (
                 <Button
@@ -662,7 +665,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                   className="px-2 sm:px-3"
                 >
                   {!editOpening && <Pencil className="h-4 w-4" />}
-                  <span className="text-xs sm:text-sm">{editOpening ? '…' : 'Üýtget'}</span>
+                  <span className="text-xs sm:text-sm">{editOpening ? '…' : t('edit')}</span>
                 </Button>
               )}
             </>
@@ -679,24 +682,24 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
               type="button"
               onClick={() => setActiveTabId(tab.id)}
               className={cn(
-                'px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors',
+                'bi-dash-tab px-3 py-1.5 rounded-xl text-xs font-medium border transition-colors',
                 activeTabId === tab.id
-                  ? 'bg-indigo-500/25 text-indigo-200 border-indigo-400/50'
+                  ? 'bi-dash-tab-active bg-indigo-500/25 text-indigo-200 border-indigo-400/50'
                   : 'bg-slate-900/60 text-slate-400 border-slate-700 hover:text-slate-200'
               )}
             >
               {tab.name}
-              {tab.isDefault ? ' · default' : ''}
+              {tab.isDefault ? ` · ${t('defaultTab')}` : ''}
             </button>
           ))}
           {editMode && (
             <>
               <button
                 type="button"
-                className="px-2.5 py-1.5 rounded-xl text-[11px] border border-dashed border-slate-600 text-slate-400 hover:text-white"
+                className="bi-dash-tab-add px-2.5 py-1.5 rounded-xl text-[11px] border border-dashed border-slate-600 text-slate-400 hover:text-white"
                 onClick={() => {
                   const id = generateId();
-                  const name = `Tab ${(tabs.length || 0) + 1}`;
+                  const name = t('tabN').replace('{n}', String((tabs.length || 0) + 1));
                   setDashboard((d) => ({
                     ...d,
                     tabs: [...(d.tabs || []), { id, name, isDefault: !(d.tabs || []).length }],
@@ -759,9 +762,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                       });
                       setDirty(true);
                     }}
-                  >
-                    Poz
-                  </button>
+                  >{t('delete')}</button>
                 </>
               )}
             </>
@@ -871,12 +872,12 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
             <div
               className="lg:hidden flex items-center justify-center py-1.5 -mt-1 cursor-row-resize touch-none select-none shrink-0"
               onPointerDown={onPanelResizeStart}
-              title="Ini üýtgetmek üçin ýokary/aşak süýrüň"
+              title={t('dragToResizeHeight')}
             >
               <span className="h-1.5 w-12 rounded-full bg-slate-700" />
             </div>
 
-            {/* Collapsible: Widget goş */}
+            {/* Collapsible: {t('widgetGoş')} */}
             <div className="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden shrink-0">
               <button
                 type="button"
@@ -946,7 +947,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
             className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-800 cursor-grab active:cursor-grabbing select-none touch-none shrink-0 rounded-t-2xl bg-slate-900/90"
             style={{ touchAction: 'none' }}
             onPointerDown={onConfigDragStart}
-            title="Süýşürmek üçin tutuň"
+            title={t('dragHandle')}
           >
             <GripHorizontal className="h-4 w-4 text-slate-500 shrink-0 pointer-events-none" />
             <div className="min-w-0 flex-1 pointer-events-none">
@@ -967,7 +968,7 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 e.stopPropagation();
                 closeConfigPanel();
               }}
-              title="Ýap"
+              title={t('close')}
             >
               <X className="h-4 w-4" />
             </button>

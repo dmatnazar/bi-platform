@@ -20,12 +20,15 @@ import {
 import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError, toastWarning } from '@/components/ui/Toast';
 import { formatDateTime } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type NewsMedia = { url: string; type: 'image' | 'video'; caption?: string };
 type NewsItem = {
   id: string;
   title: string;
   body: string;
+  titleRu?: string;
+  bodyRu?: string;
   images: string[];
   media?: NewsMedia[];
   createdAt: string;
@@ -66,6 +69,8 @@ function formatBytes(n: number) {
 }
 
 export default function NewsPage() {
+  const { t, locale } = useLocale();
+
   const [items, setItems] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [canEdit, setCanEdit] = useState(false);
@@ -75,7 +80,9 @@ export default function NewsPage() {
   const [editing, setEditing] = useState<NewsItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState('');
+  const [titleRu, setTitleRu] = useState('');
   const [body, setBody] = useState('');
+  const [bodyRu, setBodyRu] = useState('');
   const bodyRef = useRef<HTMLTextAreaElement | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [media, setMedia] = useState<NewsMedia[]>([]);
@@ -106,12 +113,12 @@ export default function NewsPage() {
     try {
       const res = await fetch('/api/news', { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
+      if (!res.ok) throw new Error(data.error || t('loadFailedLower'));
       setItems(data.items || []);
       setCanEdit(!!data.canEdit);
       setUnreadCount(Number(data.unreadCount) || 0);
     } catch (e) {
-      toastError('Habarlar', String(e));
+      toastError(t('news'), String(e));
     } finally {
       setLoading(false);
     }
@@ -125,7 +132,7 @@ export default function NewsPage() {
     try {
       const n = sessionStorage.getItem('bi-unread-news');
       if (n && Number(n) > 0) {
-        toastWarning('Okalmadyk habarlar', `Siziň ${n} sany okalmadyk habaryňyz bar`);
+        toastWarning(t('unreadNews'), `${t('unreadNewsTpl').replace('{n}', String(n))}`);
         sessionStorage.removeItem('bi-unread-news');
       }
     } catch {
@@ -187,7 +194,9 @@ export default function NewsPage() {
   function openCreate() {
     setEditing(null);
     setTitle('');
+    setTitleRu('');
     setBody('');
+    setBodyRu('');
     setImages([]);
     setMedia([]);
     setPublished(true);
@@ -200,7 +209,9 @@ export default function NewsPage() {
   function openEdit(item: NewsItem) {
     setEditing(item);
     setTitle(item.title);
+    setTitleRu(item.titleRu || '');
     setBody(item.body);
+    setBodyRu(item.bodyRu || '');
     setImages([...(item.images || [])]);
     setMedia(
       item.media?.length
@@ -253,12 +264,12 @@ export default function NewsPage() {
           try {
             const j = JSON.parse(xhr.responseText || '{}');
             if (xhr.status >= 200 && xhr.status < 300) resolve(j);
-            else reject(new Error(j.error || 'ýüklenmedi'));
+            else reject(new Error(j.error || t('loadFailedLower')));
           } catch (e) {
             reject(e);
           }
         };
-        xhr.onerror = () => reject(new Error('tor ýalňyşlygy'));
+        xhr.onerror = () => reject(new Error(t('gridError')));
         xhr.onabort = () => reject(new Error('__abort__'));
         xhr.send(fd);
       });
@@ -311,7 +322,7 @@ export default function NewsPage() {
     for (const file of files) {
       if (file.size > MAX_UPLOAD_BYTES) {
         toastError(
-          'Faýl uly',
+          t('fileTooLarge'),
           `«${file.name}» (${formatBytes(file.size)}) — max ${MAX_UPLOAD_LABEL}. Ýüklenmedi.`
         );
         continue;
@@ -389,7 +400,7 @@ export default function NewsPage() {
     try {
       const res = await fetch('/api/news/media/list');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'ýüklenmedi');
+      if (!res.ok) throw new Error(data.error || t('loadFailedLower'));
       setLibrary(data.files || []);
     } catch (e) {
       toastError('Kitaphana', String(e));
@@ -400,7 +411,7 @@ export default function NewsPage() {
 
   function pickFromLibrary(f: LibFile) {
     if (f.type === 'other') {
-      toastError('Faýl', 'Goldanylmaýan görnüş');
+      toastError(t('file'), t('unsupportedFormat'));
       return;
     }
     const entry: NewsMedia = {
@@ -415,12 +426,12 @@ export default function NewsPage() {
     if (f.type === 'image') {
       setImages((prev) => (prev.includes(f.url) ? prev : [...prev, f.url]));
     }
-    toastSuccess('Goşuldy', f.name);
+    toastSuccess(t('created'), f.name);
   }
 
   async function saveEditor() {
     if (!title.trim()) {
-      toastError('Sözbaşy gerek');
+      toastError(t('headingRequired'));
       return;
     }
     setSaving(true);
@@ -431,7 +442,9 @@ export default function NewsPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title.trim(),
+            titleRu: titleRu.trim(),
             body,
+            bodyRu,
             images: media.filter((m) => m.type === 'image').map((m) => m.url),
             media,
             published,
@@ -440,14 +453,16 @@ export default function NewsPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'saklanmady');
-        toastSuccess('Habar üýtgedildi');
+        toastSuccess(t('newsUpdated'));
       } else {
         const res = await fetch('/api/news', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title.trim(),
+            titleRu: titleRu.trim(),
             body,
+            bodyRu,
             images: media.filter((m) => m.type === 'image').map((m) => m.url),
             media,
             published,
@@ -456,29 +471,29 @@ export default function NewsPage() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'saklanmady');
-        toastSuccess('Habar goşuldy');
+        toastSuccess(t('newsAdded'));
       }
       setEditorOpen(false);
       setEditorMinimized(false);
       await load();
     } catch (e) {
-      toastError('Habar', String(e));
+      toastError(t('newsOne'), String(e));
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteItem(id: string) {
-    if (!confirm('Habary pozmalymy? Bagly surat/video hem öçüriler.')) return;
+    if (!confirm(t('newsConfirmDelete'))) return;
     try {
       const res = await fetch(`/api/news/${id}`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'pozulmady');
-      toastSuccess('Pozuldy');
+      toastSuccess(t('deleted'));
       if (selected?.id === id) setSelected(null);
       await load();
     } catch (e) {
-      toastError('Poz', String(e));
+      toastError(t('delete'), String(e));
     }
   }
 
@@ -491,7 +506,7 @@ export default function NewsPage() {
       });
       setUnreadCount(0);
       setItems((prev) => prev.map((n) => ({ ...n, unread: false })));
-      toastSuccess('Ählisi okaldy');
+      toastSuccess(t('allRead'));
     } catch {
       /* */
     }
@@ -521,22 +536,21 @@ export default function NewsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="text-lg font-semibold text-white flex items-center gap-2">
           <Newspaper className="h-5 w-5 text-indigo-400" />
-          Habarlar
+          {t('newsTitle')}
           {unreadCount > 0 && (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
-              {unreadCount} täze
+              {t('nNew').replace('{n}', String(unreadCount))}
             </span>
           )}
         </h1>
         <div className="flex-1" />
         {canEdit && (
           <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> Täze habar
-          </Button>
+            <Plus className="h-4 w-4" />{t('newNews')}</Button>
         )}
         {unreadCount > 0 && (
           <Button size="sm" variant="secondary" onClick={() => void markAll()}>
-            <CheckCheck className="h-4 w-4" /> Ählisini oka
+            <CheckCheck className="h-4 w-4" /> {t('markAllRead')}
           </Button>
         )}
         <Button size="sm" variant="ghost" onClick={() => void load()}>
@@ -545,7 +559,7 @@ export default function NewsPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-slate-500">Ýüklenýär…</p>
+        <p className="text-sm text-slate-500">{t('loading')}</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-slate-500">Habar ýok</p>
       ) : (
@@ -587,12 +601,12 @@ export default function NewsPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-start gap-1">
                     {item.pinned && <Pin className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />}
-                    <p className="text-sm font-medium text-white line-clamp-2">{item.title}</p>
+                    <p className="text-sm font-medium text-white line-clamp-2">{locale === 'ru' && item.titleRu ? item.titleRu : item.title}</p>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
                     {formatDateTime(item.createdAt)}
                     {item.createdBy ? <span className="text-slate-600"> · {item.createdBy}</span> : null}
-                    <span className="text-slate-600"> · {item.viewCount ?? 0} görüji</span>
+                    <span className="text-slate-600"> · {item.viewCount ?? 0} ${t('viewerCount')}</span>
                   </p>
                 </div>
               </div>
@@ -608,7 +622,7 @@ export default function NewsPage() {
           <div className="relative w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 bg-slate-900/95 backdrop-blur">
               <h2 className="text-sm sm:text-base font-semibold text-white line-clamp-2 pr-2">
-                {selected.title}
+                {locale === 'ru' && selected.titleRu ? selected.titleRu : selected.title}
               </h2>
               <div className="flex items-center gap-1 shrink-0">
                 {canEdit && (
@@ -645,7 +659,7 @@ export default function NewsPage() {
               <p className="text-[11px] text-slate-500">
                 {formatDateTime(selected.createdAt)}
                 {selected.pinned ? ' · Pin' : ''}
-                {` · ${selected.viewCount ?? 0} görüji`}
+                {` · ${selected.viewCount ?? 0} ${t('viewerCount')}`}
               </p>
               {((selected.media && selected.media.length > 0) ||
                 (selected.images && selected.images.length > 0)) && (
@@ -691,7 +705,7 @@ export default function NewsPage() {
               <div
                 className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed [&_strong]:font-bold [&_em]:italic [&_u]:underline [&_a]:text-sky-400"
                 dangerouslySetInnerHTML={{
-                  __html: selected.body
+                  __html: (locale === 'ru' && selected.bodyRu ? selected.bodyRu : selected.body)
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;')
@@ -723,7 +737,7 @@ export default function NewsPage() {
           <div className="relative w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
             <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 bg-slate-900/95">
               <h2 className="text-base font-semibold text-white">
-                {editing ? 'Habary üýtget' : 'Täze habar'}
+                {editing ? t('editNews') : t('newNews')}
               </h2>
               <div className="flex items-center gap-1">
                 <button
@@ -752,10 +766,17 @@ export default function NewsPage() {
             <div className="p-4 space-y-3">
               <input
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
-                placeholder="Sözbaşy"
+                placeholder={t('newsTitleTm')}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
+                <label className="text-xs text-slate-400 mt-2 block">{t('newsTitleRu')}</label>
+                <input
+                  className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950 px-3 text-sm text-white"
+                  value={titleRu}
+                  onChange={(e) => setTitleRu(e.target.value)}
+                  placeholder="Заголовок (RU)"
+                />
               <div className="rounded-xl border border-slate-700 bg-slate-950 overflow-hidden">
                 <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-slate-800 bg-slate-900/80">
                   <button
@@ -786,7 +807,7 @@ export default function NewsPage() {
                   <button
                     type="button"
                     className="h-7 px-2 rounded-md text-[11px] text-slate-400 hover:bg-slate-800 hover:text-white"
-                    title="Sözbaşy"
+                    title={t('heading')}
                     onClick={() => wrapSelection('## ', '')}
                   >
                     H
@@ -811,9 +832,16 @@ export default function NewsPage() {
                 <textarea
                   ref={bodyRef}
                   className="w-full min-h-[140px] bg-transparent px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none resize-y"
-                  placeholder="Tekst ýazyň… (**galyň**, _italik_)"
+                  placeholder={t('newsBodyTm')}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
+                />
+                <label className="text-xs text-slate-400 mt-3 px-1 block">{t('newsBodyRu')}</label>
+                <textarea
+                  className="w-full min-h-[100px] rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none resize-y"
+                  placeholder="Текст (RU)"
+                  value={bodyRu}
+                  onChange={(e) => setBodyRu(e.target.value)}
                 />
               </div>
 
@@ -848,7 +876,7 @@ export default function NewsPage() {
                           type="button"
                           className="absolute top-1 right-1 h-6 w-6 rounded-full bg-rose-600 text-white text-sm leading-none shadow"
                           onClick={() => void removeMediaItem(m)}
-                          title="Poz"
+                          title={t('delete')}
                         >
                           ×
                         </button>
@@ -856,7 +884,7 @@ export default function NewsPage() {
                       <input
                         type="text"
                         className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-600"
-                        placeholder="Düşündiriş (caption)…"
+                        placeholder={t('captionDots')}
                         value={m.caption || ''}
                         onChange={(e) => setMediaCaption(m.url, e.target.value)}
                       />
@@ -885,8 +913,8 @@ export default function NewsPage() {
                               {j.status === 'uploading' && `${j.progress}%`}
                               {j.status === 'queued' && 'Nobatda'}
                               {j.status === 'paused' && 'Pause'}
-                              {j.status === 'error' && (j.error || 'Ýalňyşlyk')}
-                              {j.status === 'aborted' && 'Stop'}
+                              {j.status === 'error' && (j.error || t('error'))}
+                              {j.status === 'aborted' && t('stop')}
                             </p>
                           </div>
                           <div className="flex gap-0.5 shrink-0">
@@ -915,7 +943,7 @@ export default function NewsPage() {
                                 type="button"
                                 className="p-1 rounded bg-slate-800 text-rose-300"
                                 onClick={() => stopJob(j.id)}
-                                title="Stop"
+                                title={t('stop')}
                               >
                                 <Square className="h-3.5 w-3.5" />
                               </button>
@@ -944,7 +972,7 @@ export default function NewsPage() {
                 <div className="flex flex-wrap gap-2">
                   <label className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-xs font-medium text-indigo-200 cursor-pointer hover:bg-indigo-500/20 transition-colors">
                     <ImagePlus className="h-3.5 w-3.5" />
-                    Faýl saýla
+                    {t('selectFile')}
                     <input
                       type="file"
                       accept="image/*,image/gif,video/mp4,video/webm,video/ogg,video/quicktime"
@@ -963,7 +991,7 @@ export default function NewsPage() {
                     className="inline-flex items-center gap-1.5 rounded-xl border border-slate-600 bg-slate-800/80 px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 transition-colors"
                   >
                     <FolderOpen className="h-3.5 w-3.5" />
-                    Öňki faýllar
+                    {t('previousFiles')}
                   </button>
                 </div>
               </div>
@@ -975,11 +1003,11 @@ export default function NewsPage() {
                     checked={published}
                     onChange={(e) => setPublished(e.target.checked)}
                   />
-                  Neşir et
+                  {t('publish')}
                 </label>
                 <label className="flex items-center gap-2">
                   <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-                  Ýokarda tut (pin)
+                  {t('pinTop')}
                 </label>
               </div>
             </div>
@@ -996,7 +1024,7 @@ export default function NewsPage() {
                   }
                 }}
               >
-                {uploading ? 'Minimize' : 'Ýap'}
+                {uploading ? 'Minimize' : t('close')}
               </Button>
               <Button size="sm" className="flex-1" loading={saving} onClick={() => void saveEditor()}>
                 Ýatda sakla
@@ -1018,7 +1046,7 @@ export default function NewsPage() {
               </button>
             </div>
             <div className="p-3 grid grid-cols-3 gap-2">
-              {libraryLoading && <p className="col-span-3 text-xs text-slate-500">Ýüklenýär…</p>}
+              {libraryLoading && <p className="col-span-3 text-xs text-slate-500">{t('loading')}</p>}
               {!libraryLoading && library.length === 0 && (
                 <p className="col-span-3 text-xs text-slate-500">Faýl ýok</p>
               )}

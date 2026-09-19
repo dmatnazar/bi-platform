@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { formatDate } from '@/lib/utils';
 import { UserCheck, Check, X } from 'lucide-react';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Reg {
   id: string;
@@ -18,6 +19,8 @@ interface Reg {
 }
 
 export default function RegistrationsPage() {
+  const { t } = useLocale();
+
   const [list, setList] = useState<Reg[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
@@ -67,7 +70,7 @@ export default function RegistrationsPage() {
       </div>
 
       {loading ? (
-        <p className="text-slate-500 text-sm">Ýüklenýär...</p>
+        <p className="text-slate-500 text-sm">{t('loading')}</p>
       ) : list.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate-700 px-6 py-14 text-center">
           <UserCheck className="h-9 w-9 text-slate-600 mx-auto mb-2" />

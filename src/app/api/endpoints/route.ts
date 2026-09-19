@@ -9,6 +9,7 @@ import {
 } from '@/lib/gateway';
 import { z } from 'zod';
 import { assertReadOnlySql } from '@/lib/sqlSafety';
+import { saveApiTestDefaults } from '@/lib/api-test-defaults';
 
 const schema = z.object({
   id: z.string().optional(),
@@ -65,11 +66,27 @@ export async function POST(req: NextRequest) {
         { status }
       );
     }
+    if (parsed.data.testDefaults) {
+      saveApiTestDefaults(
+        res.data?.endpoint?.id || parsed.data.id,
+        parsed.data.tenantSlug,
+        parsed.data.pathTemplate,
+        parsed.data.testDefaults as any
+      );
+    }
     invalidateCatalogCache();
     return NextResponse.json({ ok: true, endpoint: res.data?.endpoint });
   }
 
   const res = await updateEndpointOnGateway(parsed.data as any);
+  if (res.ok && parsed.data.testDefaults) {
+    saveApiTestDefaults(
+      parsed.data.id,
+      parsed.data.tenantSlug,
+      parsed.data.pathTemplate,
+      parsed.data.testDefaults as any
+    );
+  }
   if (!res.ok) {
     const status = res.data?.error === 'duplicate' ? 409 : 502;
     return NextResponse.json(

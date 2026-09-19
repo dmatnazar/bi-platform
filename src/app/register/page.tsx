@@ -12,6 +12,8 @@ import { ModalPortal } from '@/components/ui/ModalPortal';
 import { Plus, Building2 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface CompanyOpt {
   id: string;
@@ -29,6 +31,8 @@ type SubmitPhase =
   | 'error';
 
 export default function RegisterPage() {
+  const { t } = useLocale();
+
   const { theme } = useTheme();
   const isLight = theme === 'light';
   const router = useRouter();
@@ -129,7 +133,7 @@ export default function RegisterPage() {
   async function createCompany() {
     setCompanyErr('');
     if (!newName.trim() || !newSlug.trim()) {
-      setCompanyErr('Firma ady we slug gerek');
+      setCompanyErr(t('needCompanyAndSlug'));
       return;
     }
     const slugTaken = companies.find(
@@ -152,7 +156,7 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setCompanyErr(data.error || 'Döredip bolmady');
+        setCompanyErr(data.error || t('createFailedAlt'));
         return;
       }
       const c = data.company;
@@ -165,7 +169,7 @@ export default function RegisterPage() {
       setNewName('');
       setNewSlug('');
     } catch {
-      setCompanyErr('Baglanyşyk säwligi');
+      setCompanyErr(t('connectionFailed'));
     } finally {
       setCreatingCompany(false);
     }
@@ -181,21 +185,21 @@ export default function RegisterPage() {
         const data = await res.json();
         if (data.status === 'approved') {
           setPhase('approved');
-          setStatusMsg('Hasaba alyş tassyklanyldy! Indi giriş edip bilersiňiz.');
+          setStatusMsg(t('regApprovedLogin'));
         } else if (data.status === 'rejected') {
           setPhase('rejected');
           setStatusMsg(
-            'Hasaba alyş ret edildi.' + (data.note ? ` Sebäp: ${data.note}` : '')
+            t('regRequestRejected') + (data.note ? ` Sebäp: ${data.note}` : '')
           );
         } else if (data.deliveredAt) {
           setPhase('delivered');
           setStatusMsg(
-            'Üstünlikli ugradyldy — kompaniýa administratory (Electron) islegiňizi gördi we tassyklamagyny garaşýar.'
+            t('regSentWaitingApproval')
           );
         } else {
           setPhase('on_vps');
           setStatusMsg(
-            'Isleg serwere (VPS) ýetdi. Kompaniýa Electron programmasyna ýetmezden garaşylýar — administrator internete birigensoň peýda bolar.'
+            t('regWaitingElectron')
           );
         }
       } catch {
@@ -216,7 +220,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     if (phoneLocal.length < 8) {
-      setError('Telefon belgisi doly däl (+993 bilen 8 san)');
+      setError(t('phoneIncomplete'));
       return;
     }
     setPhase('sending');
@@ -237,17 +241,17 @@ export default function RegisterPage() {
       const data = await res.json();
       if (!res.ok) {
         setPhase('error');
-        setError(data.error || 'Hasaba alyş şowsuz');
+        setError(data.error || t('registerFailed'));
         return;
       }
       setRegId(data.registrationId);
       setPhase('on_vps');
       setStatusMsg(
-        'Isleg serwere iberildi. Electron-a ýetişi barlanýar...'
+        t('regSentCheckingElectron')
       );
     } catch {
       setPhase('error');
-      setError('Baglanyşyk säwligi — serwere ýetmedi. Internetiňizi barlaň.');
+      setError(t('connectionFailedNet'));
     }
   }
 
@@ -273,7 +277,7 @@ export default function RegisterPage() {
           }}
         />
       </div>
-      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
+      <div className="fixed top-3 right-3 z-20 flex items-center gap-2"><ThemeToggle compact /><LanguageToggle compact /></div>
 
         <div className={`max-w-md w-full text-center space-y-4 ${authAnim ? 'animate-fade-in' : ''}`}>
           <div
@@ -301,8 +305,8 @@ export default function RegisterPage() {
               : phase === 'rejected'
                 ? 'Ret edildi'
                 : phase === 'delivered'
-                  ? 'Üstünlikli ugradyldy'
-                  : 'Serwerde garaşylýar'}
+                  ? t('sentSuccessfully')
+                  : t('waitingServer')}
           </h1>
           <p className="text-slate-400 text-sm leading-relaxed">{statusMsg}</p>
           {phase === 'on_vps' && (
@@ -348,7 +352,7 @@ export default function RegisterPage() {
           }}
         />
       </div>
-      <div className="fixed top-3 right-3 z-20"><ThemeToggle compact /></div>
+      <div className="fixed top-3 right-3 z-20 flex items-center gap-2"><ThemeToggle compact /><LanguageToggle compact /></div>
 
       <div className={`relative z-10 w-full max-w-lg ${authAnim ? 'animate-fade-in' : ''}`}>
         <div className="flex flex-col items-center mb-6">
@@ -380,15 +384,13 @@ export default function RegisterPage() {
                 }}
                 className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
               >
-                <Plus className="h-3.5 w-3.5" />
-                Täze firma
-              </button>
+                <Plus className="h-3.5 w-3.5" />{t('newCompany')}</button>
             </div>
             <Select
               name="tenantSlug"
               value={tenantSlug}
               onChange={(e) => setTenantSlug(e.target.value)}
-              placeholder="Kompaniýa saýlaň"
+              placeholder={t('selectCompanyAlt')}
               required
               options={companies.map((c) => ({ value: c.slug, label: c.name }))}
             />
@@ -404,7 +406,7 @@ export default function RegisterPage() {
                 <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-3 shadow-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-5 w-5 text-indigo-400" />
-                    <h3 className="text-lg font-semibold text-white">Täze firma</h3>
+                    <h3 className="text-lg font-semibold text-white">{t('newCompany')}</h3>
                   </div>
                   <p className="text-xs text-slate-400">
                     Firma VPS-e ýazylýar. Tarif saýlaň — aýda şol mukdarda REQ berilýär. Galan balans soň
@@ -431,7 +433,7 @@ export default function RegisterPage() {
                       value={newSlug}
                       className="w-full h-10 rounded-xl border border-slate-700 bg-slate-950/50 px-3 text-sm text-slate-400 font-mono cursor-not-allowed outline-none"
                       placeholder="firma-adyndan awto"
-                      title="Slug firma adyndan awtomatiki emele gelýär — el bilen üýtgedip bolmaýar"
+                      title={t('slugAutoFromName')}
                     />
                     <p className="text-[10px] text-slate-500">Firma adyndan awto — üýtgedip bolmaýar</p>
                   </div>
@@ -447,7 +449,7 @@ export default function RegisterPage() {
                               name: 'Free',
                               priceMonthly: 0,
                               includedCredits: 500,
-                              description: 'Başlangyç',
+                              description: t('initial'),
                               maxStaff: 3,
                               maxApiCallsDay: 100,
                               maxConnections: 1,
@@ -509,9 +511,7 @@ export default function RegisterPage() {
                     <Button className="flex-1" loading={creatingCompany} onClick={() => void createCompany()}>
                       Firma döret
                     </Button>
-                    <Button variant="ghost" type="button" onClick={() => setCompanyModal(false)}>
-                      Ýatyr
-                    </Button>
+                    <Button variant="ghost" type="button" onClick={() => setCompanyModal(false)}>{t('cancel')}</Button>
                   </div>
                 </div>
               </div>
@@ -520,14 +520,14 @@ export default function RegisterPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="Ady"
+              label={t('name')}
               name="firstName"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
             />
             <Input
-              label="Familiýasy"
+              label={t('surname')}
               name="lastName"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
@@ -576,7 +576,7 @@ export default function RegisterPage() {
 
           <div className="relative">
             <Input
-              label="Parol"
+              label={t('password')}
               name="password"
               type={showPw ? 'text' : 'password'}
               value={password}
@@ -595,7 +595,7 @@ export default function RegisterPage() {
           </div>
 
           <Button type="submit" className="w-full" loading={phase === 'sending'} size="lg">
-            {phase === 'sending' ? 'Iberilýär...' : 'Hasaba al'}
+            {phase === 'sending' ? t('sending') : 'Hasaba al'}
           </Button>
 
           <p className="text-center text-sm text-slate-400">

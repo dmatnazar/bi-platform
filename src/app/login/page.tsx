@@ -14,6 +14,8 @@ import { requestFullscreenSafe, fullscreenPrefDisabled } from '@/lib/fullscreen'
 import { InstallAppBanner } from '@/components/pwa/InstallAppBanner';
 import { useTheme } from '@/components/ThemeProvider';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Notif {
   id: string;
@@ -24,6 +26,8 @@ interface Notif {
 }
 
 export default function LoginPage() {
+  const { t } = useLocale();
+
   const router = useRouter();
   const { theme } = useTheme();
   const isLight = theme === 'light';
@@ -145,7 +149,7 @@ export default function LoginPage() {
         if (data.code === 'session_limit_strict') {
           setError(
             data.error ||
-              'Bu hasap başga enjamda açyk. Iň köp enjam çägine ýetdi (strict).'
+              t('sessionDeviceLimit')
           );
           setLoading(false);
           return;
@@ -153,31 +157,42 @@ export default function LoginPage() {
         if (data.code === 'registration_pending' || data.error?.includes?.('tassyklan')) {
           setWarning(
             data.error ||
-              'Hasaba alyş heniz tassyklanmady. Kompaniýa administratory (Electron) tassyklamagyny garaşyň.'
+              t('regNotYetApproved')
           );
         } else if (data.code === 'registration_rejected') {
-          setWarning(data.error || 'Hasaba alyş islegiňiz ret edildi.');
+          setWarning(data.error || t('regRequestRejected'));
         } else {
-          setError(data.error || 'Giriş şowsuz');
+          setError(data.error || t('loginFailed'));
         }
         setLoading(false);
         return;
       }
       setSessionConflict(null);
-      try {
-        const nr = await fetch('/api/news', { cache: 'no-store' });
-        const nd = await nr.json().catch(() => ({}));
-        const uc = Number(nd.unreadCount) || 0;
-        if (uc > 0) {
-          sessionStorage.setItem('bi-unread-news', String(uc));
+      // Habar sany — background (login-i saklama)
+      void (async () => {
+        try {
+          const ac = new AbortController();
+          const t = setTimeout(() => ac.abort(), 1200);
+          const nr = await fetch('/api/news', { cache: 'no-store', signal: ac.signal });
+          clearTimeout(t);
+          const nd = await nr.json().catch(() => ({}));
+          const uc = Number(nd.unreadCount) || 0;
+          if (uc > 0) sessionStorage.setItem('bi-unread-news', String(uc));
+        } catch {
+          /* */
         }
+      })();
+      // Hard navigate — router.push + refresh server layout/catalog garaşyp t('waitShort') saklaýardy
+      try {
+        window.location.assign('/dashboards');
       } catch {
-        /* */
+        router.push('/dashboards');
+        setLoading(false);
       }
-      router.push('/dashboards');
-      router.refresh();
+      // 8s-den soň heniz şu sahypada bolsa loading öçür
+      window.setTimeout(() => setLoading(false), 8000);
     } catch {
-      setError('Baglanyşyk säwligi');
+      setError(t('connectionFailed'));
       setLoading(false);
     }
   }
@@ -223,8 +238,9 @@ export default function LoginPage() {
       </div>
 
       {/* Theme toggle — login */}
-      <div className="fixed top-3 right-3 z-20">
+      <div className="fixed top-3 right-3 z-20 flex items-center gap-2">
         <ThemeToggle compact />
+        <LanguageToggle compact />
       </div>
 
       <div
@@ -238,7 +254,7 @@ export default function LoginPage() {
             BI Platform
           </h1>
           <p className="text-white/95 text-sm sm:text-base mt-1.5 px-2 leading-relaxed font-medium drop-shadow">
-            Hasabat we analitika merkezi
+            {t('analyticsCenter')}
           </p>
         </div>
 
@@ -285,7 +301,7 @@ export default function LoginPage() {
               <ul className="text-xs text-slate-400 space-y-1 max-h-32 overflow-y-auto">
                 {(sessionConflict.sessions || []).map((s, i) => (
                   <li key={i}>
-                    · {s.deviceName || 'Enjam'} — {s.ip || 'IP ýok'} —{' '}
+                    · {s.deviceName || t('deviceOne')} — {s.ip || t('noIp')} —{' '}
                     {s.lastSeenAt ? new Date(s.lastSeenAt).toLocaleString() : ''}
                   </li>
                 ))}
@@ -296,9 +312,7 @@ export default function LoginPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setSessionConflict(null)}
-                >
-                  Ýatyr
-                </Button>
+                >{t('cancel')}</Button>
                 <Button
                   type="button"
                   size="sm"
@@ -317,9 +331,9 @@ export default function LoginPage() {
           className="bg-slate-900/55 border border-slate-500/50 rounded-2xl p-5 sm:p-8 shadow-2xl backdrop-blur-md space-y-4 sm:space-y-5 ring-1 ring-white/10"
         >
           <div className="text-center sm:text-left">
-            <h2 className="text-lg sm:text-xl font-semibold text-white">Giriş</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-white">{t('loginTitle')}</h2>
             <p className="text-sm sm:text-base text-white/90 mt-1 leading-relaxed">
-              Öz login we parolyňyz bilen giriň
+              {t('loginWithCredentials')}
             </p>
           </div>
 
@@ -337,18 +351,18 @@ export default function LoginPage() {
           )}
 
           <Input
-            label="Login"
+            label={t('loginLabel')}
             name="username"
             autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="ulanyjy ady"
+            placeholder={t('username')}
             required
           />
 
           <div className="relative">
             <Input
-              label="Parol"
+              label={t('password')}
               name="password"
               type={showPw ? 'text' : 'password'}
               autoComplete="current-password"
@@ -372,19 +386,19 @@ export default function LoginPage() {
               href="/forgot-password"
               className="text-xs text-indigo-300 hover:text-indigo-300"
             >
-              Paroly ýatdan çykardyňyzmy?
+              {t('forgotPasswordQ')}
             </Link>
           </div>
 
           <Button type="submit" className="w-full" loading={loading} size="lg">
-            {loading ? 'Garaşyň...' : 'Girmek'}
+            {loading ? t('wait') : t('signInAlt')}
           </Button>
 
           {registrationEnabled && (
             <p className="text-center text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Hasabyňyz ýokmy?{' '}
+              {t('noAccount')}{' '}
               <Link href="/register" className="text-indigo-300 hover:text-indigo-300 font-medium">
-                Hasaba al
+                {t('registerLink')}
               </Link>
             </p>
           )}
@@ -396,7 +410,7 @@ export default function LoginPage() {
               className="inline-flex items-center gap-1.5 text-cyan-300/90 hover:text-cyan-200 font-medium underline-offset-2 hover:underline"
             >
               <Headphones className="h-3.5 w-3.5" />
-              Tehniki goldaw
+              {t('techSupport')}
             </button>
           </p>
         </form>

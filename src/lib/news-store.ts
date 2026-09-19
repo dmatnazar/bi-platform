@@ -16,6 +16,10 @@ export type NewsItem = {
   id: string;
   title: string;
   body: string;
+  /** Russian title (optional) */
+  titleRu?: string;
+  /** Russian body (optional) */
+  bodyRu?: string;
   /** Cover / inline image paths or absolute URLs (legacy) */
   images: string[];
   /** Images + videos with optional captions */
@@ -117,6 +121,8 @@ export function getNews(id: string): NewsItem | undefined {
 export function createNews(input: {
   title: string;
   body: string;
+  titleRu?: string;
+  bodyRu?: string;
   images?: string[];
   media?: NewsMedia[];
   published?: boolean;
@@ -130,6 +136,8 @@ export function createNews(input: {
     id: uid(),
     title: String(input.title || '').trim(),
     body: String(input.body || ''),
+    titleRu: String(input.titleRu || '').trim() || undefined,
+    bodyRu: String(input.bodyRu || '').trim() || undefined,
     images: Array.isArray(input.images) ? input.images.filter(Boolean) : [],
     media: Array.isArray(input.media) ? input.media : [],
     createdAt: now,
@@ -185,7 +193,7 @@ function collectMediaUrls(item: NewsItem): string[] {
 
 export function updateNews(
   id: string,
-  patch: Partial<Pick<NewsItem, 'title' | 'body' | 'images' | 'media' | 'published' | 'pinned'>>
+  patch: Partial<Pick<NewsItem, 'title' | 'body' | 'titleRu' | 'bodyRu' | 'images' | 'media' | 'published' | 'pinned'>>
 ): NewsItem | null {
   const f = readNews();
   const i = f.items.findIndex((n) => n.id === id);
@@ -195,6 +203,8 @@ export function updateNews(
     ...cur,
     title: patch.title !== undefined ? String(patch.title).trim() : cur.title,
     body: patch.body !== undefined ? String(patch.body) : cur.body,
+    titleRu: patch.titleRu !== undefined ? (String(patch.titleRu).trim() || undefined) : cur.titleRu,
+    bodyRu: patch.bodyRu !== undefined ? (String(patch.bodyRu).trim() || undefined) : cur.bodyRu,
     images: patch.images !== undefined ? patch.images.filter(Boolean) : cur.images,
     media: patch.media !== undefined ? patch.media : cur.media,
     published: patch.published !== undefined ? !!patch.published : cur.published,

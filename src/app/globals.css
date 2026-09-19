@@ -266,11 +266,34 @@ html.light .bg-slate-800\/60 {
   background-color: rgba(241, 245, 249, 0.85) !important;
 }
 html.light .hover\:bg-slate-800:hover,
-html.light .hover\:bg-slate-900:hover {
-  background-color: #e2e8f0 !important;
+html.light .hover\:bg-slate-900:hover,
+html.light .hover\:bg-slate-900\/50:hover,
+html.light .hover\:bg-slate-800\/60:hover {
+  background-color: #eef2f7 !important;
+  color: #0f172a !important;
 }
 html.light .hover\:bg-slate-800\/80:hover {
-  background-color: rgba(226, 232, 240, 0.9) !important;
+  background-color: #eef2f7 !important;
+  color: #0f172a !important;
+}
+html.light tr:hover td,
+html.light .hover\:bg-slate-900\/50:hover {
+  color: inherit;
+}
+/* Gök / solid btn — text ak */
+html.light .bi-btn-solid,
+html.light .bg-indigo-600,
+html.light .bg-indigo-500,
+html.light button.bg-indigo-600,
+html.light a.bg-indigo-600 {
+  color: #ffffff !important;
+}
+html.light .bi-btn-solid:hover,
+html.light .hover\:bg-indigo-500:hover {
+  color: #ffffff !important;
+}
+html.light .text-indigo-300 {
+  color: #4338ca !important;
 }
 
 html.light .border-slate-800,
@@ -995,4 +1018,601 @@ html.light button.bg-emerald-950\/40 {
   border-color: #6ee7b7 !important;
   background: #ecfdf5 !important;
   color: #047857 !important;
+}
+
+
+/* ── Light: solid/primary buttons ALWAYS white text (override .text-white) ── */
+html.light button.bg-indigo-600,
+html.light button.bg-indigo-500,
+html.light button.bg-rose-600,
+html.light button.bg-rose-500,
+html.light button.bg-emerald-600,
+html.light button.bg-emerald-500,
+html.light button.bg-sky-600,
+html.light button.bg-sky-500,
+html.light button.bg-blue-600,
+html.light .bi-btn-solid,
+html.light button.bi-btn-solid,
+html.light a.bg-indigo-600,
+html.light a.bg-rose-600 {
+  color: #ffffff !important;
+}
+html.light button.bg-indigo-600 *,
+html.light button.bg-indigo-500 *,
+html.light button.bg-rose-600 *,
+html.light button.bg-rose-500 *,
+html.light button.bg-emerald-600 *,
+html.light .bi-btn-solid * {
+  color: #ffffff !important;
+}
+/* Secondary / Ýatyr — not red, readable */
+html.light button.bi-btn-cancel,
+html.light .bi-btn-cancel {
+  color: #334155 !important;
+  background: #e2e8f0 !important;
+  border-color: #cbd5e1 !important;
+}
+/* Brand + chat FAB — tema üýtgemeýär */
+html.light .bi-brand-icon,
+html.light .bi-brand-icon * {
+  color: #ffffff !important;
+}
+html.light .bi-support-fab,
+html.light .bi-support-fab * {
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+/* Permissions help text */
+html.light .bi-help-text {
+  color: #475569 !important;
+}
+
+html.light .bg-amber-500\/5,
+html.light .border-amber-500\/20 {
+  background: #fffbeb !important;
+  border-color: #fcd34d !important;
+}
+html.light .text-amber-100\/90,
+html.light .text-amber-200 {
+  color: #92400e !important;
+}
+html.light .text-amber-400 {
+  color: #d97706 !important;
+}
+
+
+/* ── Modal footer buttons light ── */
+html.light .fixed button.bg-indigo-600,
+html.light .fixed button.bg-indigo-500,
+html.light [data-modal] button.bg-indigo-600,
+html.light button[class*="bg-indigo"] {
+  color: #ffffff !important;
+}
+html.light .fixed button.bg-rose-600,
+html.light .fixed button.bg-rose-500,
+html.light button.bg-rose-600,
+html.light button.bg-rose-500 {
+  color: #ffffff !important;
+}
+/* Ýatyr / secondary in modals */
+html.light .fixed button.bg-slate-800,
+html.light .fixed button.border-slate-700,
+html.light .fixed .bi-btn-cancel {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+html.light .fixed button.bg-slate-800:hover,
+html.light .fixed .bi-btn-cancel:hover {
+  background: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+/* Danger confirm primary stays white on red */
+html.light .fixed button.bg-rose-600 *,
+html.light .fixed button.bg-indigo-600 * {
+  color: #ffffff !important;
+}
+
+
+/* ── Table / amal icon colors in light theme ── */
+html.light .bi-action-icon.bi-action-ok,
+html.light .bi-action-icon.bi-action-ok * {
+  color: #059669 !important;
+}
+html.light .bi-action-icon.bi-action-primary,
+html.light .bi-action-icon.bi-action-primary * {
+  color: #4f46e5 !important;
+}
+html.light .bi-action-icon.bi-action-warn,
+html.light .bi-action-icon.bi-action-warn * {
+  color: #d97706 !important;
+}
+html.light .bi-action-icon.bi-action-danger,
+html.light .bi-action-icon.bi-action-danger * {
+  color: #e11d48 !important;
+}
+html.light .bi-action-icon.bi-action-muted,
+html.light .bi-action-icon.bi-action-muted * {
+  color: #475569 !important;
+}
+html.light .bi-action-btn.bi-action-ok {
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+}
+html.light .bi-action-btn.bi-action-danger {
+  color: #be123c !important;
+  background: #fff1f2 !important;
+}
+html.light .bi-action-btn.bi-action-primary {
+  color: #4338ca !important;
+  background: #eef2ff !important;
+}
+/* Filter chips active */
+html.light .bi-filter-chip-active,
+html.light .bi-filter-chip-active * {
+  color: #3730a3 !important;
+  background: #e0e7ff !important;
+  border-color: #a5b4fc !important;
+}
+/* DataTable action cell icons without class — common colors */
+html.light table button.text-indigo-300,
+html.light table button.text-indigo-300 *,
+html.light table .text-indigo-300 {
+  color: #4f46e5 !important;
+}
+html.light table button.text-emerald-400,
+html.light table button.text-emerald-400 *,
+html.light table .text-emerald-400 {
+  color: #059669 !important;
+}
+html.light table button.text-rose-400,
+html.light table button.text-rose-400 *,
+html.light table .text-rose-300,
+html.light table .text-rose-400 {
+  color: #e11d48 !important;
+}
+html.light table button.text-amber-300,
+html.light table button.text-amber-300 *,
+html.light table .text-amber-300 {
+  color: #d97706 !important;
+}
+html.light table button.text-slate-300,
+html.light table button.text-slate-300 * {
+  color: #475569 !important;
+}
+/* Chat edit input always readable */
+html.light .bi-chat-edit-input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ── Light v7: action icons + modal footer buttons ── */
+
+/* Table amal icons: slate-400 base → readable; clear hover accents */
+html.light table button.text-slate-400,
+html.light table button.text-slate-400 *,
+html.light .bi-dt-actions button.text-slate-400,
+html.light .bi-dt-actions button.text-slate-400 * {
+  color: #475569 !important;
+}
+html.light table button:hover.text-indigo-300,
+html.light table button.hover\:text-indigo-300:hover,
+html.light table button.hover\:text-indigo-300:hover *,
+html.light table button:hover .text-indigo-300 {
+  color: #4f46e5 !important;
+}
+html.light table button.hover\:text-rose-300:hover,
+html.light table button.hover\:text-rose-300:hover *,
+html.light table button.hover\:text-rose-400:hover,
+html.light table button.hover\:text-rose-400:hover * {
+  color: #e11d48 !important;
+}
+html.light table button.hover\:text-emerald-300:hover,
+html.light table button.hover\:text-emerald-300:hover *,
+html.light table button.hover\:text-emerald-400:hover,
+html.light table button.hover\:text-emerald-400:hover * {
+  color: #059669 !important;
+}
+html.light table button.hover\:bg-indigo-500\/10:hover {
+  background-color: rgb(99 102 241 / 0.12) !important;
+}
+html.light table button.hover\:bg-rose-500\/10:hover {
+  background-color: rgb(244 63 94 / 0.12) !important;
+}
+html.light table button.hover\:bg-emerald-500\/10:hover {
+  background-color: rgb(16 185 129 / 0.12) !important;
+}
+
+/* Secondary / ghost buttons in light — readable on cards & modals */
+html.light button.bg-slate-800,
+html.light .bg-slate-800.text-slate-100 {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+html.light button.bg-slate-800:hover,
+html.light button.hover\:bg-slate-700:hover {
+  background-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light button.bg-transparent.text-slate-300 {
+  color: #475569 !important;
+}
+html.light button.bg-transparent.hover\:bg-slate-800\/60:hover,
+html.light button.hover\:bg-slate-800\/60:hover {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+
+/* Confirm dialog / modal: cancel & danger clearly distinct */
+html.light .fixed button.bi-btn-cancel,
+html.light .fixed .bi-btn-cancel,
+html.light [data-confirm] .bi-btn-cancel {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+  border: 1px solid #cbd5e1 !important;
+}
+html.light .fixed button.bi-btn-cancel:hover,
+html.light .fixed .bi-btn-cancel:hover {
+  background: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+html.light .fixed button.bg-rose-600,
+html.light .fixed button.bg-rose-500 {
+  background-color: #e11d48 !important;
+  color: #ffffff !important;
+}
+html.light .fixed button.bg-rose-600:hover,
+html.light .fixed button.bg-rose-500:hover {
+  background-color: #be123c !important;
+  color: #ffffff !important;
+}
+html.light .fixed button.bg-indigo-600,
+html.light .fixed button.bg-indigo-500 {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+/* Confirm dialog card itself in light */
+html.light .fixed .border-slate-700.bg-slate-950,
+html.light .fixed .bg-slate-950.border-slate-700 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+html.light .fixed .bg-slate-950 h3,
+html.light .fixed .bg-slate-950 .text-white {
+  color: #0f172a !important;
+}
+html.light .fixed .bg-slate-950 .text-slate-400 {
+  color: #64748b !important;
+}
+
+/* Language toggle letter buttons stay readable */
+html.light .bi-lang-btn {
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+  background: #f1f5f9 !important;
+}
+
+
+/* Date filter presets — readable in light theme */
+html.light .bi-filter-preset-idle {
+  background-color: #e2e8f0 !important;
+  color: #1e293b !important;
+  border-color: #94a3b8 !important;
+}
+html.light .bi-filter-preset-idle:hover {
+  background-color: #c7d2fe !important;
+  color: #312e81 !important;
+  border-color: #818cf8 !important;
+}
+html.light .bi-filter-preset-active {
+  background-color: #6366f1 !important;
+  color: #ffffff !important;
+  border-color: #4f46e5 !important;
+}
+html.light .bi-filter-preset-active:hover {
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+}
+
+
+/* ── Light v8: force light/white text & icons → dark (visibility) ── */
+html.light .text-white\/95,
+html.light .text-white\/90,
+html.light .text-white\/80,
+html.light .text-white\/70,
+html.light .text-white\/60,
+html.light .text-white\/50 {
+  color: #0f172a !important;
+}
+html.light .text-slate-100\/90,
+html.light .text-slate-200\/90,
+html.light .text-slate-200\/80 {
+  color: #1e293b !important;
+}
+html.light .text-slate-300\/90,
+html.light .text-slate-300\/80 {
+  color: #334155 !important;
+}
+html.light .text-indigo-100,
+html.light .text-indigo-100\/90,
+html.light .text-indigo-200,
+html.light .text-indigo-200\/90,
+html.light .text-indigo-200\/70 {
+  color: #3730a3 !important;
+}
+html.light .text-sky-300,
+html.light .text-sky-200,
+html.light .text-cyan-100,
+html.light .text-violet-100 {
+  color: #1e3a5f !important;
+}
+
+/* Lucide / SVG icons inherit currentColor — force dark when parent was white-ish */
+html.light svg.text-white,
+html.light .text-white > svg,
+html.light .text-white svg,
+html.light button.text-white svg,
+html.light a.text-white svg {
+  color: #0f172a !important;
+  stroke: currentColor !important;
+}
+html.light svg.text-slate-100,
+html.light svg.text-slate-200,
+html.light svg.text-slate-300,
+html.light .text-slate-100 > svg,
+html.light .text-slate-200 > svg,
+html.light .text-slate-300 > svg,
+html.light .text-slate-400 > svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
+/* Table / list action columns — generic icon buttons */
+html.light table td button svg,
+html.light table td a svg,
+html.light [class*="actions"] button svg,
+html.light [class*="Actions"] button svg,
+html.light .bi-dt-actions svg {
+  color: #334155 !important;
+  stroke: currentColor !important;
+}
+html.light table td button:hover svg,
+html.light .bi-dt-actions button:hover svg {
+  color: #0f172a !important;
+}
+
+/* Sidebar & nav icons */
+html.light aside svg,
+html.light nav svg,
+html.light [data-sidebar] svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
+/* Status bar / header icons */
+html.light header svg,
+html.light .border-b svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+
+/* Keep white text on solid colored buttons (primary/danger) */
+html.light button.bg-indigo-600,
+html.light button.bg-indigo-600 *,
+html.light button.bg-indigo-500,
+html.light button.bg-indigo-500 *,
+html.light button.bg-violet-600,
+html.light button.bg-violet-600 *,
+html.light button.bg-rose-600,
+html.light button.bg-rose-600 *,
+html.light button.bg-rose-500,
+html.light button.bg-rose-500 *,
+html.light button.bg-emerald-600,
+html.light button.bg-emerald-600 *,
+html.light a.bg-indigo-600,
+html.light a.bg-indigo-600 *,
+html.light .bg-gradient-to-r.from-indigo-600,
+html.light .bg-gradient-to-r.from-indigo-600 *,
+html.light .bg-gradient-to-br.from-indigo-500,
+html.light .bg-gradient-to-br.from-indigo-500 * {
+  color: #ffffff !important;
+  stroke: currentColor !important;
+}
+
+/* Placeholder text visible on light inputs */
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+}
+
+/* Drop-shadow white text on login hero — force dark in light */
+html.light .drop-shadow-md,
+html.light .drop-shadow {
+  /* color handled by text-* rules */
+}
+
+
+/* ── Light v9: dashboard tabs, filters, widget chrome icons ── */
+html.light .bi-widget-cfg-btn,
+html.light .bi-widget-cfg-btn svg,
+html.light .bi-widget-chrome-icon,
+html.light .bi-widget-chrome-icon svg {
+  color: #1e293b !important;
+  stroke: currentColor !important;
+}
+html.light .bi-widget-cfg-btn:hover,
+html.light .bi-widget-cfg-btn:hover svg {
+  color: #4338ca !important;
+}
+
+/* Dashboard tab pills */
+html.light button.bg-slate-900\/60.text-slate-400,
+html.light .text-slate-400.border-slate-700 {
+  color: #334155 !important;
+}
+html.light .text-\[11px\].text-slate-400,
+html.light .text-\[10px\].text-slate-500 {
+  color: #475569 !important;
+}
+
+/* Filter bar header / count */
+html.light .bi-filter-preset-idle {
+  background-color: #e2e8f0 !important;
+  color: #0f172a !important;
+  border-color: #64748b !important;
+  font-weight: 600 !important;
+}
+
+
+/* ── Light v10: widget palette (add widget panel) ── */
+html.light .bi-widget-palette-title {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+html.light .bi-widget-palette-item {
+  background-color: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+}
+html.light .bi-widget-palette-item:hover {
+  background-color: #e0e7ff !important;
+  border-color: #6366f1 !important;
+  color: #1e1b4b !important;
+}
+html.light .bi-widget-palette-label {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+}
+html.light .bi-widget-palette-item:hover .bi-widget-palette-label {
+  color: #1e1b4b !important;
+}
+html.light .bi-widget-palette-icon,
+html.light .bi-widget-palette-icon * {
+  color: #4338ca !important;
+  stroke: currentColor !important;
+}
+html.light .bi-widget-palette-item:hover .bi-widget-palette-icon,
+html.light .bi-widget-palette-item:hover .bi-widget-palette-icon * {
+  color: #3730a3 !important;
+}
+
+
+/* ── Light v11: dashboard filter bar + tabs — dark text ── */
+html.light .bi-dash-filter-bar,
+html.light .bi-dash-filter-bar .text-white,
+html.light .bi-dash-filter-bar .text-slate-300,
+html.light .bi-dash-filter-bar .text-slate-400,
+html.light .bi-dash-filter-bar .text-slate-500,
+html.light .bi-dash-filter-bar p,
+html.light .bi-dash-filter-bar span,
+html.light .bi-dash-filter-bar button {
+  color: #0f172a !important;
+}
+html.light .bi-dash-filter-bar .text-indigo-400,
+html.light .bi-dash-filter-bar .text-indigo-400 svg {
+  color: #4338ca !important;
+}
+html.light .bi-filter-preset-idle {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+  border-color: #64748b !important;
+  font-weight: 700 !important;
+}
+html.light .bi-filter-preset-active {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  border-color: #3730a3 !important;
+  font-weight: 700 !important;
+}
+
+html.light .bi-dash-tab {
+  color: #334155 !important;
+  border-color: #94a3b8 !important;
+  background: #f1f5f9 !important;
+  font-weight: 600 !important;
+}
+html.light .bi-dash-tab-active {
+  background: #4f46e5 !important;
+  color: #ffffff !important;
+  border-color: #3730a3 !important;
+}
+html.light .bi-dash-tab-add {
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+}
+
+
+/* ── Light v12: widget error retry button — dark text & icon ── */
+html.light .bi-widget-retry-btn {
+  background-color: #e0e7ff !important;
+  border-color: #6366f1 !important;
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+html.light .bi-widget-retry-btn:hover {
+  background-color: #c7d2fe !important;
+  color: #0f172a !important;
+}
+html.light .bi-widget-retry-btn svg {
+  color: #0f172a !important;
+  stroke: currentColor !important;
+}
+
+
+/* ── Light v13: filter field labels always dark & readable ── */
+html.light .bi-dash-filter-bar .bi-filter-field-label,
+html.light .bi-dash-filter-bar label,
+html.light .bi-filter-field-label {
+  color: #0f172a !important;
+  font-weight: 600 !important;
+  opacity: 1 !important;
+}
+html.light .bi-dash-filter-bar .text-slate-400,
+html.light .bi-dash-filter-bar .text-slate-500,
+html.light .bi-dash-filter-bar .text-slate-300,
+html.light .bi-dash-filter-bar .text-white {
+  color: #0f172a !important;
+}
+html.light .bi-dash-filter-bar input,
+html.light .bi-dash-filter-bar select {
+  color: #0f172a !important;
+  background-color: #f8fafc !important;
+  border-color: #94a3b8 !important;
+}
+
+
+/* ── Light v14: logout button visible ── */
+html.light .bi-logout-btn {
+  color: #be123c !important;
+  font-weight: 600 !important;
+}
+html.light .bi-logout-btn svg {
+  color: #be123c !important;
+  stroke: currentColor !important;
+}
+html.light .bi-logout-btn:hover {
+  color: #9f1239 !important;
+  background-color: #ffe4e6 !important;
+}
+
+
+/* ── Light v15: table widget toolbar Filter / Columns ── */
+html.light .bi-table-tool-icon,
+html.light .bi-table-tool-icon * {
+  color: #0f172a !important;
+  stroke: currentColor !important;
+}
+html.light button:has(.bi-table-tool-icon),
+html.light .bi-table-tool-btn {
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+  background-color: #f1f5f9 !important;
+  font-weight: 600 !important;
+}
+html.light button:has(.bi-table-tool-icon) span {
+  color: #0f172a !important;
 }

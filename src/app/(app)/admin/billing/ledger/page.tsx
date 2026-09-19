@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/Button';
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface LedgerEntry {
   id: string;
@@ -153,6 +154,8 @@ function displayDevice(e: LedgerEntry): string {
 }
 
 export default function BillingLedgerPage() {
+  const { t } = useLocale();
+
   const [rows, setRows] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
@@ -260,10 +263,10 @@ export default function BillingLedgerPage() {
   async function deleteSelected() {
     if (!selected.size) return;
     const ok = await confirmDialog({
-      title: 'Loglary poz',
+      title: t('logsDelete'),
       message: `${selected.size} sany hereket pozular. Dowam edilsinmi?`,
-      confirmLabel: 'Poz',
-      cancelLabel: 'Ýatyr',
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
     });
     if (!ok) return;
     setBusy(true);
@@ -274,8 +277,8 @@ export default function BillingLedgerPage() {
         body: JSON.stringify({ action: 'delete-ledger', ids: [...selected] }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Pozup bolmady');
-      toastSuccess('Pozuldy');
+      if (!res.ok) throw new Error(data.error || t('deleteFailedLong'));
+      toastSuccess(t('deleted'));
       setSelected(new Set());
       await load();
     } catch (e) {
@@ -287,10 +290,10 @@ export default function BillingLedgerPage() {
 
   async function deleteOne(id: string) {
     const ok = await confirmDialog({
-      title: 'Logy poz',
-      message: 'Bu hereket pozular. Dowam?',
-      confirmLabel: 'Poz',
-      cancelLabel: 'Ýatyr',
+      title: t('logDelete'),
+      message: t('thisActionDelete'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
     });
     if (!ok) return;
     setBusy(true);
@@ -301,8 +304,8 @@ export default function BillingLedgerPage() {
         body: JSON.stringify({ action: 'delete-ledger', id }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Pozup bolmady');
-      toastSuccess('Pozuldy');
+      if (!res.ok) throw new Error(data.error || t('deleteFailedLong'));
+      toastSuccess(t('deleted'));
       await load();
     } catch (e) {
       toastError(String(e));
@@ -314,18 +317,18 @@ export default function BillingLedgerPage() {
   function exportExcel() {
     const data = filtered;
     if (!data.length) {
-      toastError('Export', 'Filtr boýunça maglumat ýok');
+      toastError('Export', t('noResultsFilter'));
       return;
     }
     const headers = [
       'Wagt',
-      'Firma',
-      'Görnüş',
-      'Sebäp',
-      'Ulanyjy',
+      t('company'),
+      t('viewType'),
+      t('reason'),
+      t('user'),
       'Device',
-      'Mukdar',
-      'Balans',
+      t('amount'),
+      t('balance'),
     ];
     const escape = (v: unknown) => {
       const s = String(v ?? '');
@@ -445,7 +448,7 @@ export default function BillingLedgerPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Gözle: firma, ulanyjy, device, sebäp…"
+            placeholder={t('searchFirmUserDevice')}
             className="w-full h-10 pl-10 pr-3 rounded-xl bg-slate-900 border border-slate-700 text-sm text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/40"
           />
         </div>
@@ -477,8 +480,7 @@ export default function BillingLedgerPage() {
 
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" /> Ýüklenýär…
-        </div>
+          <Loader2 className="h-5 w-5 animate-spin" />{t('loading')}</div>
       ) : (
         <>
           {/* Mobile cards */}

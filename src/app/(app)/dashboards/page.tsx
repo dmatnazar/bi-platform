@@ -17,7 +17,12 @@ export default async function DashboardsPage() {
 
   let companies: { id: string; name: string; slug: string }[] = [];
   try {
-    const catalog = await fetchCatalog(false);
+    const catalog = await Promise.race([
+      fetchCatalog(false),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error('catalog-timeout')), 4000)
+      ),
+    ]);
     const tenants = catalog.tenants || [];
     if (isSuperAdmin(user) || user.role === 'admin' || user.role === 'super_admin') {
       companies = tenants.map((t: any) => ({

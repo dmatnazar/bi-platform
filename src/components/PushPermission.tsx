@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Bell, BellOff, X } from 'lucide-react';
 import { requestPushToken, listenForegroundPush, ensurePushServiceWorker } from '@/lib/firebase-client';
 import { toastInfo, toastSuccess, toastError } from '@/components/ui/Toast';
+import { useLocale } from '@/components/LocaleProvider';
 
 const LS_ASKED = 'bi-push-prompt-done-v3';
 
@@ -12,6 +13,8 @@ const LS_ASKED = 'bi-push-prompt-done-v3';
  * Her login-de gaýtalamaýar. granted bolsa diňe token täzelenýär.
  */
 export function PushPermission() {
+  const { t } = useLocale();
+
   const [show, setShow] = useState(false);
   const [httpHint, setHttpHint] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -72,7 +75,7 @@ export function PushPermission() {
     let unsub = () => {};
     if (typeof window !== 'undefined' && window.isSecureContext) {
       void listenForegroundPush((p) => {
-        toastInfo(p.title || 'Habar', p.body || '');
+        toastInfo(p.title || t('newsOne'), p.body || '');
       }).then((u) => {
         unsub = u;
       });
@@ -95,7 +98,7 @@ export function PushPermission() {
     try {
       if (typeof window !== 'undefined' && !window.isSecureContext) {
         if (!silent) {
-          toastError('HTTPS gerek', 'Push diňe HTTPS ýa-da localhost-da işleýär.');
+          toastError('HTTPS gerek', t('pushHttpsOnly'));
         }
         started.current = false;
         markAsked();
@@ -112,9 +115,9 @@ export function PushPermission() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ token: res.token }),
           });
-          if (!silent) toastSuccess('Bildirişler açyk', 'Rugsat berildi');
+          if (!silent) toastSuccess(t('notificationsOn'), 'Rugsat berildi');
         } else if (!silent) {
-          toastError('Bildiriş', res.error || 'Token alynmady (VAPID)');
+          toastError(t('notification'), res.error || 'Token alynmady (VAPID)');
         }
         markAsked();
         setShow(false);
@@ -123,14 +126,14 @@ export function PushPermission() {
 
       markAsked();
       if (res.permission === 'denied' && !silent) {
-        toastError('Rugsat ýapyk', 'Site settings → Notifications → Allow.');
+        toastError(t('permClosed'), 'Site settings → Notifications → Allow.');
       } else if (!silent) {
-        toastError('Bildiriş', res.error || 'Rugsat berilmedi');
+        toastError(t('notification'), res.error || 'Rugsat berilmedi');
       }
       started.current = false;
       setShow(false);
     } catch (e) {
-      if (!silent) toastError('Bildiriş', e instanceof Error ? e.message : String(e));
+      if (!silent) toastError(t('notification'), e instanceof Error ? e.message : String(e));
       started.current = false;
     } finally {
       setBusy(false);
@@ -155,12 +158,12 @@ export function PushPermission() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white">
-            {httpHint ? 'Bildiriş — HTTPS gerek' : 'Bildirişlere rugsat'}
+            {httpHint ? t('pushHttpsRequired') : t('notificationsPermission')}
           </p>
           <p className="text-xs text-slate-400 mt-0.5">
             {httpHint
-              ? 'Push üçin HTTPS ýa-da localhost gerek. Bu duýduryş bir gezek görkezilýär.'
-              : 'Bir gezek «Allow» ýa-da «Soň». Indiki login-de gaýtalanmaýar.'}
+              ? t('pushHttpsOnce')
+              : t('pushOnceHint')}
           </p>
         </div>
         <button type="button" className="p-1 text-slate-500 hover:text-white" onClick={dismiss}>
@@ -179,7 +182,7 @@ export function PushPermission() {
             className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold py-2.5 disabled:opacity-60"
           >
             <Bell className="h-4 w-4" />
-            {busy ? 'Garaşyň…' : 'Allow'}
+            {busy ? t('waitEllipsis') : 'Allow'}
           </button>
         )}
         <button
@@ -188,7 +191,7 @@ export function PushPermission() {
           className={`inline-flex items-center justify-center gap-1 rounded-lg border border-slate-700 px-3 text-xs text-slate-400 hover:text-white ${httpHint ? 'flex-1 py-2.5 text-sm' : ''}`}
         >
           <BellOff className="h-3.5 w-3.5" />
-          {httpHint ? 'Düşündim' : 'Soň'}
+          {httpHint ? t('gotIt') : t('later')}
         </button>
       </div>
     </div>

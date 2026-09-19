@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, X, Filter, Plus, Pencil, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 export interface ApiPickerEndpoint {
   id: string;
@@ -56,10 +57,12 @@ export function ApiPickerModal({
   value,
   onSelect,
   preferredTenantSlug,
-  title = 'API saýlaň (data source)',
+  title,
   allowManage = true,
   onEndpointsChanged,
 }: Props) {
+  const { t } = useLocale();
+  const resolvedTitle = title || t('selectApiDs');
   const [q, setQ] = useState('');
   const [slugFilter, setSlugFilter] = useState<string>(preferredTenantSlug || '');
   const [autoFilter, setAutoFilter] = useState(Boolean(preferredTenantSlug));
@@ -70,7 +73,7 @@ export function ApiPickerModal({
   const [editorSrc, setEditorSrc] = useState<string | null>(null);
 
   function toggleSort(key: typeof sortKey) {
-    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+  if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else {
       setSortKey(key);
       setSortDir('asc');
@@ -192,7 +195,7 @@ export function ApiPickerModal({
       <div className="relative w-full sm:max-w-3xl max-h-[min(92dvh,720px)] flex flex-col rounded-t-2xl sm:rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-800 shrink-0">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-white truncate">{title}</h3>
+            <h3 className="text-sm font-semibold text-white truncate">{resolvedTitle}</h3>
             <p className="text-[10px] text-slate-500">
               {filtered.length} / {endpoints.length} API
               {preferredTenantSlug ? ` · dashboard firma: ${preferredTenantSlug}` : ''}
@@ -214,7 +217,7 @@ export function ApiPickerModal({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Gözle: ady, path, method, firma…"
+              placeholder={t('searchNamePathMethod')}
               className="w-full h-9 pl-9 pr-3 rounded-lg border border-slate-700 bg-slate-950 text-sm text-white placeholder:text-slate-600"
             />
           </div>
@@ -258,19 +261,15 @@ export function ApiPickerModal({
                   onClick={openNew}
                   className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-emerald-700/50 bg-emerald-950/40 text-[11px] text-emerald-300 hover:bg-emerald-900/40"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  Täze API
-                </button>
+                  <Plus className="h-3.5 w-3.5" />{t('newApi')}</button>
                 <button
                   type="button"
                   disabled={!highlighted?.id}
                   onClick={() => openEdit()}
                   className="inline-flex items-center gap-1 h-8 px-2.5 rounded-lg border border-indigo-700/50 bg-indigo-950/40 text-[11px] text-indigo-300 hover:bg-indigo-900/40 disabled:opacity-40 disabled:pointer-events-none"
-                  title={highlighted ? `Üýtget: ${highlighted.name}` : 'Ilki setir saýlaň'}
+                  title={highlighted ? `${t('editNamed')}: ${highlighted.name}` : t('selectRowFirst')}
                 >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Üýtget
-                </button>
+                  <Pencil className="h-3.5 w-3.5" />{t('edit')}</button>
               </div>
             )}
           </div>
@@ -283,9 +282,9 @@ export function ApiPickerModal({
                 {(
                   [
                     ['method', 'Method', ''],
-                    ['name', 'Ady', ''],
+                    ['name', t('name'), ''],
                     ['path', 'Path', 'hidden sm:table-cell'],
-                    ['tenant', 'Firma', ''],
+                    ['tenant', t('company'), ''],
                     ['db', 'DB', 'hidden md:table-cell'],
                     ['act', '', 'w-10'],
                   ] as const
@@ -364,7 +363,7 @@ export function ApiPickerModal({
                         {allowManage && (
                           <button
                             type="button"
-                            title="Üýtget"
+                            title={t('edit')}
                             className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
                             onClick={(ev) => {
                               ev.stopPropagation();

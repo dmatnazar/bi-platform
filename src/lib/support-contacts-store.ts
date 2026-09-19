@@ -9,12 +9,14 @@ export type SupportContact = {
   id: string;
   fullName: string;
   role?: string;
+  roleRu?: string;
   phone?: string;
   telegram?: string;
   whatsapp?: string;
   imo?: string;
   gmail?: string;
   note?: string;
+  noteRu?: string;
   order: number;
   active: boolean;
 };
@@ -23,6 +25,8 @@ export type SupportContactsFile = {
   contacts: SupportContact[];
   updatedAt: string;
   intro?: string;
+  /** Russian intro for login modal */
+  introRu?: string;
 };
 
 const DATA_DIR = path.join(process.cwd(), 'data');
@@ -35,6 +39,7 @@ function uid() {
 function defaultFile(): SupportContactsFile {
   return {
     intro: 'Tehniki meseleler boýunça biziň bilen habarlaşyň.',
+    introRu: 'Свяжитесь с нами по техническим вопросам.',
     contacts: [],
     updatedAt: new Date().toISOString(),
   };
@@ -64,16 +69,19 @@ export function writeSupportContacts(data: SupportContactsFile): SupportContacts
   ensure();
   const next: SupportContactsFile = {
     intro: String(data.intro || '').trim() || defaultFile().intro,
+    introRu: String(data.introRu || '').trim() || defaultFile().introRu,
     contacts: (data.contacts || []).map((c, i) => ({
       id: String(c.id || uid()),
       fullName: String(c.fullName || '').trim(),
       role: c.role ? String(c.role).trim() : '',
+      roleRu: c.roleRu ? String(c.roleRu).trim() : '',
       phone: c.phone ? String(c.phone).trim() : '',
       telegram: c.telegram ? String(c.telegram).trim().replace(/^@/, '') : '',
       whatsapp: c.whatsapp ? String(c.whatsapp).trim() : '',
       imo: c.imo ? String(c.imo).trim() : '',
       gmail: c.gmail ? String(c.gmail).trim() : '',
       note: c.note ? String(c.note).trim() : '',
+      noteRu: c.noteRu ? String(c.noteRu).trim() : '',
       order: typeof c.order === 'number' ? c.order : i,
       active: c.active !== false,
     })),
@@ -85,8 +93,10 @@ export function writeSupportContacts(data: SupportContactsFile): SupportContacts
 
 export function publicSupportContacts(): SupportContactsFile {
   const all = readSupportContacts();
+  const def = defaultFile();
   return {
-    intro: all.intro,
+    intro: (all.intro || '').trim() || def.intro,
+    introRu: (all.introRu || '').trim() || def.introRu,
     updatedAt: all.updatedAt,
     contacts: all.contacts
       .filter((c) => c.active && c.fullName)

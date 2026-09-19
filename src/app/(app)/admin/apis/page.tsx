@@ -21,6 +21,7 @@ import {
   clearSqlSchemaCache,
   type SchemaLoadStatus,
 } from '@/lib/sqlSchemaCache';
+import { useLocale } from '@/components/LocaleProvider';
 
 interface Endpoint {
   id: string;
@@ -31,6 +32,8 @@ interface Endpoint {
   dbKey?: string;
   sqlQuery?: string;
   paramsSchema?: unknown;
+  /** Test bahalar — column probe üçin */
+  testDefaults?: Record<string, string | number | boolean>;
   cacheTtlSec?: number;
   maxRows?: number;
   authRequired?: boolean;
@@ -60,11 +63,14 @@ function isExcelConn(c?: TenantConnection | null): boolean {
 }
 
 function ApisPageInner() {
+  const { t } = useLocale();
   const searchParams = useSearchParams();
   const embedMode = searchParams.get('embed') === '1';
   const embedBootstrapped = useRef(false);
 
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
+  const [usageByKey, setUsageByKey] = useState<Record<string, number>>({});
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [syncedAt, setSyncedAt] = useState('');
   const [fromCache, setFromCache] = useState(false);
@@ -110,6 +116,42 @@ function ApisPageInner() {
     if (!selectedTenantSlug) return [];
     return endpoints.filter((e) => e.tenantSlug === selectedTenantSlug);
   }, [endpoints, selectedTenantSlug]);
+
+  // Weiget / filter ullanys sany
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/dashboards');
+        const data = await res.json();
+        if (!alive || !res.ok) return;
+        const list = Array.isArray(data.dashboards) ? data.dashboards : [];
+        const counts: Record<string, number> = {};
+        const bump = (tenant?: string, path?: string, id?: string) => {
+          if (id) counts[id] = (counts[id] || 0) + 1;
+          if (tenant && path) {
+            const k = `${tenant}::${path}`;
+            counts[k] = (counts[k] || 0) + 1;
+          }
+        };
+        for (const d of list) {
+          for (const w of d.widgets || []) {
+            const ds = w.dataSource;
+            if (ds) bump(ds.tenantSlug, ds.path, ds.endpointId);
+            const dd = ds?.drillDown;
+            if (dd?.path) bump(dd.tenantSlug || ds?.tenantSlug, dd.path, undefined);
+          }
+          for (const f of d.globalFilters || []) {
+            const os = f.optionsSource;
+            if (os?.path) bump(os.tenantSlug, os.path, undefined);
+          }
+        }
+        setUsageByKey(counts);
+      } catch { /* */ }
+    })();
+    return () => { alive = false; };
+  }, [endpoints]);
+
 
   const selectedTenantName =
     tenants.find((t) => t.slug === selectedTenantSlug)?.name || selectedTenantSlug || '';
@@ -241,7 +283,7 @@ function ApisPageInner() {
     const slug = editTenantSlug || editEp?.tenantSlug || '';
     const conn = currentEditConnection();
     if (!slug || !conn) {
-      setExcelColsError('Firma / Excel connection saýlaň');
+      setExcelColsError(t('firmExcelSelect'));
       return;
     }
     setExcelColsLoading(true);
@@ -259,7 +301,7 @@ function ApisPageInner() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setExcelColsError(data.error || 'Sütünler alynmady');
+        setExcelColsError(data.error || t('columnsNotFetched'));
         setExcelColumns([]);
         return;
       }
@@ -306,7 +348,7 @@ function ApisPageInner() {
         return next;
       });
     }
-    toastSuccess('Excel SQL', 'SQL we filter param-lar ýazylý');
+    toastSuccess('Excel SQL', t('sqlFilterParamsNote'));
   }
 
   async function warmSqlSchema(tenantSlug: string, dbKey: string, force = false) {
@@ -396,13 +438,13 @@ function ApisPageInner() {
     setEditParams(next);
     if (addedNames.length > 0) {
       toastInfo(
-        'Parametrler awto goşuldy',
+        t('paramsAutoAdded'),
         `${addedNames.length} sany: ${addedNames.join(', ')}. ` +
-          'Default: source=query, type=string, required=ýok. ' +
-          'Her biriniň type / required / query|body|url sazlamasyny barlaň — soň test üçin aşakdaky "Test bahalar" meýdançalaryny dolduryň.'
+          t('paramDefaultsNote') +
+          t('paramCheckHint')
       );
     } else {
-      toastSuccess('Auto params', 'Täze ýok — SQL-däki ähli @param eýýäm sanawda');
+      toastSuccess('Auto params', t('noNewParams'));
     }
   }
 
@@ -576,12 +618,12 @@ function ApisPageInner() {
   async function closeEdit() {
     if (isEditorDirty()) {
       const choice = await confirmDialog({
-        title: 'Saklanmadyk üýtgeşmeler',
+        title: t('unsavedTitle'),
         message:
-          'API redaktorynda saklanmadyk üýtgeşmeler bar.\n\n• Sakla we çyk — üýtgeşmeleri VPS-e ýazyp çykýar\n• Saklamazdan çyk — üýtgeşmeler ýitýär\n• Redaktorda gal — hiç zat üýtgemän dowam edersiňiz',
-        confirmLabel: 'Sakla we çyk',
-        cancelLabel: 'Saklamazdan çyk',
-        stayLabel: 'Redaktorda gal',
+          t('unsavedMsg'),
+        confirmLabel: t('saveAndExit'),
+        cancelLabel: t('exitWithoutSave'),
+        stayLabel: t('stayInEditor'),
         danger: false,
       });
       if (choice === 'stay') return;
@@ -620,17 +662,17 @@ function ApisPageInner() {
   async function saveEdit() {
     if (!editEp) return;
     if (!(editName || '').trim()) {
-      toastError('At gerek', 'API adyny ýazyň');
+      toastError('At gerek', t('needApiName'));
       return;
     }
     if (!(editPath || '').trim() || editPath === '/') {
-      toastError('Path gerek', 'Path dolduryň');
+      toastError('Path gerek', t('fillPath'));
       return;
     }
     const conflict = pathConflict(editPath, editMethod, isCreate ? undefined : editEp.id);
     if (conflict) {
       toastError(
-        'Path eýýäm bar',
+        t('pathExists'),
         `«${conflict.name}» bilen birmeňzeş: ${editMethod} ${editPath}\nPath ýa-da method üýtgetiň.`
       );
       return;
@@ -640,7 +682,7 @@ function ApisPageInner() {
       const { assertReadOnlySql } = await import('@/lib/sqlSafety');
       const safe = assertReadOnlySql(editSql || '');
       if (!safe.ok) {
-        toastError('SQL rugsat edilmedi', safe.reason);
+        toastError(t('sqlNotAllowed'), safe.reason);
         return;
       }
     }
@@ -653,7 +695,7 @@ function ApisPageInner() {
       const missing = sqlNames.filter((n) => !declared.has(n.toLowerCase()));
       if (missing.length) {
         toastError(
-          'Parametrler doly däl',
+          t('paramsIncomplete'),
           `SQL-de bar, sanawda ýok: ${missing.map((m) => '@' + m).join(', ')}. ` +
             `"Auto params" basyň ýa-da el bilen goşuň — soň type / required / query|body|url barlaň.`
         );
@@ -720,10 +762,10 @@ function ApisPageInner() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak şowsuz', data.error || data.message);
+        toastError(t('saveFailedLong'), data.error || data.message);
         return;
       }
-      toastSuccess(isCreate ? 'API goşuldy' : 'API üýtgedildi', 'VPS-e ýazyldy · Electron catalog-dan görer');
+      toastSuccess(isCreate ? t('apiAdded') : t('apiUpdated'), t('writtenToVpsElectron'));
       forceClose();
       await load(true);
     } finally {
@@ -734,7 +776,7 @@ function ApisPageInner() {
 
   function sqlCopy() {
     void navigator.clipboard.writeText(editSql || '');
-    toastSuccess('SQL göçürildi');
+    toastSuccess(t('sqlCopied'));
   }
   async function sqlPaste() {
     try {
@@ -828,7 +870,7 @@ function ApisPageInner() {
   async function executeSql() {
     const selectedOrFull = (sqlEditorRef.current?.getSelectedOrFull() || editSql || '').trim();
     if (!editEp || !selectedOrFull) {
-      toastError('SQL boş', 'Query ýazyň');
+      toastError(t('sqlEmpty'), t('enterQuery'));
       return;
     }
     const sqlToRun = selectedOrFull;
@@ -839,7 +881,7 @@ function ApisPageInner() {
       const { assertReadOnlySql } = await import('@/lib/sqlSafety');
       const safe = assertReadOnlySql(sqlToRun);
       if (!safe.ok) {
-        toastError('SQL rugsat edilmedi', safe.reason);
+        toastError(t('sqlNotAllowed'), safe.reason);
         return;
       }
     }
@@ -890,9 +932,9 @@ function ApisPageInner() {
       const data = await res.json();
       if (ac.signal.aborted) return;
       if (!res.ok) {
-        setExecResult({ ok: false, error: data.error || 'şowsuz' });
+        setExecResult({ ok: false, error: data.error || t('failedLower') });
         setShowResultModal(true);
-        toastError('Execute şowsuz', data.error);
+        toastError(t('executeFailed'), data.error);
         return;
       }
       let rows = Array.isArray(data.rows) ? data.rows : [];
@@ -910,18 +952,18 @@ function ApisPageInner() {
       });
       setShowResultModal(true);
       toastSuccess(
-        'Execute OK',
+        t('executeOk'),
         `${rows.length} setir` +
-          (usedSelection ? ' · diňe saýlanan bölek' : '') +
+          (usedSelection ? t('selectedPartOnly') : '') +
           (truncated ? ` · max ${lim}` : '')
       );
     } catch (e: any) {
       if (e?.name === 'AbortError' || ac.signal.aborted) {
-        toastInfo('Run togtadyldy', 'SQL execute stop edildi');
+        toastInfo('Run togtadyldy', t('sqlStopped'));
         return;
       }
       setExecResult({ ok: false, error: String(e) });
-      toastError('Execute şowsuz', String(e));
+      toastError(t('executeFailed'), String(e));
     } finally {
       if (execAbortRef.current === ac) execAbortRef.current = null;
       setExecuting(false);
@@ -940,14 +982,16 @@ function ApisPageInner() {
     setExecuting(false);
   }
 
-  async function deleteEp(e: Endpoint) {
-    const ok = await confirmDialog({
-      title: 'API pozulsynmy?',
-      message: `«${e.name}»\n${e.method} ${e.pathTemplate}\n\nBu amal yzyna alynmaýar. VPS-den hem öçüriler.`,
-      confirmLabel: 'Hawa, poz',
-      danger: true,
-    });
-    if (!ok) return;
+  async function deleteEp(e: Endpoint, opts?: { skipConfirm?: boolean }) {
+    if (!opts?.skipConfirm) {
+      const ok = await confirmDialog({
+        title: t('apiConfirmDelete'),
+        message: `«${e.name}»\n${e.method} ${e.pathTemplate}\n\nBu amal yzyna alynmaýar. VPS-den hem öçüriler.`,
+        confirmLabel: t('yesDelete'),
+        danger: true,
+      });
+      if (!ok) return;
+    }
     try {
       const res = await fetch('/api/endpoints', {
         method: 'DELETE',
@@ -956,21 +1000,21 @@ function ApisPageInner() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError('Pozup bolmady', data.error || data.message);
+        toastError(t('deleteFailedLong'), data.error || data.message);
         return;
       }
-      toastSuccess('API pozuldy', 'VPS-den öçürildi');
+      toastSuccess(t('apiDeleted'), t('removedFromVps'));
       closeEdit();
       await load(true);
     } catch (err: any) {
-      toastError('Pozup bolmady', String(err));
+      toastError(t('deleteFailedLong'), String(err));
     }
   }
 
   async function copyUrl(e: Endpoint) {
     await navigator.clipboard.writeText(fullUrl(e));
     setCopied(e.id);
-    toastSuccess('URL göçürildi');
+    toastSuccess(t('urlCopied'));
     setTimeout(() => setCopied(null), 1500);
   }
 
@@ -978,6 +1022,37 @@ function ApisPageInner() {
 
   const columns = useMemo<DataTableColumn<Endpoint>[]>(
     () => [
+      {
+        id: 'select',
+        header: '',
+        sortable: false,
+        accessor: () => '',
+        cell: (r) => {
+          const on = selectedIds.has(r.id);
+          return (
+            <button
+              type="button"
+              title={on ? t('deselect') : t('select')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedIds((prev) => {
+                  const n = new Set(prev);
+                  if (n.has(r.id)) n.delete(r.id);
+                  else n.add(r.id);
+                  return n;
+                });
+              }}
+              className={
+                on
+                  ? 'h-6 w-6 rounded-md bg-indigo-500 text-white flex items-center justify-center shadow ring-2 ring-indigo-300/50'
+                  : 'h-6 w-6 rounded-md border-2 border-slate-600 bg-slate-950 text-slate-600 hover:border-indigo-400 hover:text-indigo-300 flex items-center justify-center'
+              }
+            >
+              <Check className={`h-3.5 w-3.5 ${on ? 'opacity-100' : 'opacity-40'}`} />
+            </button>
+          );
+        },
+      },
       {
         id: 'method',
         header: 'Method',
@@ -990,7 +1065,7 @@ function ApisPageInner() {
       },
       {
         id: 'name',
-        header: 'Ady',
+        header: t('name'),
         mobilePrimary: true,
         accessor: (r) => r.name,
       },
@@ -1004,7 +1079,7 @@ function ApisPageInner() {
             target="_blank"
             rel="noopener noreferrer"
             className="font-mono text-[11px] text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300 hover:underline break-all"
-            title="Session bilen aç"
+            title={t('openWithSession')}
             onClick={(e) => e.stopPropagation()}
           >
             {fullUrl(r)}
@@ -1013,12 +1088,25 @@ function ApisPageInner() {
       },
       {
         id: 'company',
-        header: 'Kompaniýa',
+        header: t('companyAlt'),
         accessor: (r) => tenantName(r.tenantSlug),
       },
       {
+        id: 'usage',
+        header: t('usage'),
+        accessor: (r) => usageByKey[r.id] || usageByKey[`${r.tenantSlug}::${r.pathTemplate || ''}`] || 0,
+        cell: (r) => {
+          const n = usageByKey[r.id] || usageByKey[`${r.tenantSlug}::${r.pathTemplate || ''}`] || 0;
+          return (
+            <span className={n > 0 ? 'text-emerald-400 font-medium tabular-nums' : 'text-slate-500'}>
+              {n}
+            </span>
+          );
+        },
+      },
+      {
         id: 'actions',
-        header: 'Amal',
+        header: t('actions'),
         sortable: false,
         accessor: () => '',
         cell: (r) => (
@@ -1027,7 +1115,7 @@ function ApisPageInner() {
               type="button"
               onClick={() => openEdit(r)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
-              title="Üýtget"
+              title={t('edit')}
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -1035,7 +1123,7 @@ function ApisPageInner() {
               type="button"
               onClick={() => void deleteEp(r)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-300 hover:bg-rose-500/10"
-              title="Poz"
+              title={t('delete')}
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -1043,7 +1131,7 @@ function ApisPageInner() {
               type="button"
               onClick={() => copyUrl(r)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-300 hover:bg-indigo-500/10"
-              title="Copy"
+              title={t('copy')}
             >
               {copied === r.id ? (
                 <Check className="h-4 w-4 text-emerald-400" />
@@ -1063,9 +1151,7 @@ function ApisPageInner() {
           </div>
         ),
       },
-    ],
-    [gatewayBase, tenants, copied]
-  );
+    ], [selectedIds, usageByKey, copied, gatewayBase, tenants]);
 
 
   // ── Full-screen API editor (not modal) ──────────────────────
@@ -1084,7 +1170,7 @@ function ApisPageInner() {
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="text-base sm:text-lg font-semibold text-white truncate max-w-[50vw] sm:max-w-none">
-              {isCreate ? (editName.trim() || 'Täze API') : (editName.trim() || editEp.name || 'API üýtget')}
+              {isCreate ? (editName.trim() || t('newApi')) : (editName.trim() || editEp.name || t('editApi'))}
             </h1>
             <p className="text-xs text-slate-500 font-mono truncate">
               {editMethod} /api/v1/{editTenantSlug || editEp.tenantSlug}/{editDbKey || 'primary'}/
@@ -1107,13 +1193,9 @@ function ApisPageInner() {
                 className="text-rose-400 hover:text-rose-300"
                 onClick={() => void deleteEp(editEp)}
               >
-                <Trash2 className="h-4 w-4" />
-                Poz
-              </Button>
+                <Trash2 className="h-4 w-4" />{t('delete')}</Button>
             )}
-            <Button size="sm" loading={saving} onClick={() => void saveEdit()}>
-              Sakla
-            </Button>
+            <Button size="sm" loading={saving} onClick={() => void saveEdit()}>{t('save')}</Button>
           </div>
         </div>
 
@@ -1150,7 +1232,7 @@ function ApisPageInner() {
                 </select>
               </div>
               <Input
-                label="Ady"
+                label={t('name')}
                 value={editName}
                 onChange={(e) => {
                   const v = e.target.value;
@@ -1163,7 +1245,7 @@ function ApisPageInner() {
                   <label className="text-xs text-slate-400">Method</label>
                   <select className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" value={editMethod} onChange={(e) => setEditMethod(e.target.value)}>
                     {['GET','POST','PUT','PATCH','DELETE'].map((m) => (
-                      <option key={m} value={m} disabled={m !== 'GET'}>{m}{m !== 'GET' ? ' (soň)' : ''}</option>
+                      <option key={m} value={m} disabled={m !== 'GET'}>{m}{m !== 'GET' ? t('laterParen') : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -1274,9 +1356,7 @@ function ApisPageInner() {
                         type="button"
                         className="text-rose-400 text-xs px-2 py-1"
                         onClick={() => setEditParams((rows) => rows.filter((_, j) => j !== i))}
-                      >
-                        Poz
-                      </button>
+                      >{t('delete')}</button>
                     </div>
                   </div>
                 ))}
@@ -1297,7 +1377,7 @@ function ApisPageInner() {
                   className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-60"
                   value={editTenantSlug}
                   disabled={!isCreate}
-                  title={!isCreate ? 'Bar bolan API-de firma üýtgedip bolanok — täze API dörediň' : undefined}
+                  title={!isCreate ? t('cantChangeFirmOnApi') : undefined}
                   onChange={(e) => {
                     const slug = e.target.value;
                     setEditTenantSlug(slug);
@@ -1346,7 +1426,7 @@ function ApisPageInner() {
                   >
                     {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
                       <option key={m} value={m} disabled={m !== 'GET'}>
-                        {m}{m !== 'GET' ? ' (soň)' : ''}
+                        {m}{m !== 'GET' ? t('laterParen') : ''}
                       </option>
                     ))}
                   </select>
@@ -1402,7 +1482,7 @@ function ApisPageInner() {
                           <input
                             autoFocus
                             className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono text-white"
-                            placeholder="dbKey el bilen ýaz"
+                            placeholder={t('dbKeyManual')}
                             value={editDbKey}
                             onChange={(e) => { const v = e.target.value; setEditDbKey(v); void warmSqlSchema(editTenantSlug || editEp?.tenantSlug || '', v); }}
                           />
@@ -1453,7 +1533,7 @@ function ApisPageInner() {
                       type="button"
                       className="text-[11px] text-emerald-400 hover:text-emerald-300"
                       onClick={autoCompleteParams}
-                      title="SQL-däki @param-lary awto goş"
+                      title={t('autoAddSqlParams')}
                     >
                       Auto params
                     </button>
@@ -1602,7 +1682,7 @@ function ApisPageInner() {
                   </button>
                 )}
                 {schemaStatus.state === 'empty' && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/40 bg-amber-950/30 px-2 py-0.5 text-[10px] text-amber-300" title="DB bagly, ýöne table tapylmady">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/40 bg-amber-950/30 px-2 py-0.5 text-[10px] text-amber-300" title={t('dbLinkedNoTable')}>
                     tables(0)
                   </span>
                 )}
@@ -1627,7 +1707,7 @@ function ApisPageInner() {
                   type="button"
                   onClick={autoCompleteParams}
                   className="inline-flex items-center gap-1 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2 py-1 text-[11px] text-emerald-300 hover:bg-emerald-900/40"
-                  title="SQL-däki @param-lary sanawa goş"
+                  title={t('addSqlParamsToList')}
                 >
                   <Sparkles className="h-3 w-3" /> Auto params
                 </button>
@@ -1818,8 +1898,8 @@ function ApisPageInner() {
                     }))}
                     rowKey={(r) => String(r.__rowId ?? '')}
                     storageKey="api-sql-result"
-                    searchPlaceholder="Netijede gözle..."
-                    emptyMessage="Setir ýok"
+                    searchPlaceholder={t('searchInResults')}
+                    emptyMessage={t('noRows')}
                   />
                 ) : (
                   <p className="p-4 text-sm text-slate-500">Netije boş</p>
@@ -1848,16 +1928,16 @@ function ApisPageInner() {
             </button>
           )}
           <h1 className="text-base sm:text-2xl font-bold text-white truncate leading-tight">
-            {selectedTenantSlug ? `${selectedTenantName} — API-lar` : 'API-lar · Firmalar'}
+            {selectedTenantSlug ? `${selectedTenantName} — API-lar` : t('apisCompanies')}
           </h1>
           <p className="text-slate-400 text-[11px] sm:text-sm mt-0.5 truncate leading-snug">
             {selectedTenantSlug
-              ? 'Doly URL · basyp aç · copy'
-              : 'Ilki firma saýlaň — soň bagly API-lar'}
+              ? t('fullUrlHint')
+              : t('selectFirmThenApis')}
             {syncedAt && (
               <span className="text-slate-500">
                 {' '}
-                · {fromCache ? 'keş' : 'janly'} · {formatDate(syncedAt)}
+                · {fromCache ? t('cacheShort') : 'janly'} · {formatDate(syncedAt)}
               </span>
             )}
           </p>
@@ -1868,7 +1948,7 @@ function ApisPageInner() {
             size="sm"
             onClick={() => {
               load(true);
-              toastInfo('Catalog täzelendi');
+              toastInfo(t('catalogRefreshed'));
             }}
             loading={loading}
           >
@@ -1877,9 +1957,7 @@ function ApisPageInner() {
           </Button>
           {selectedTenantSlug && (
             <Button size="sm" onClick={() => openCreate(selectedTenantSlug)}>
-              <Plus className="h-4 w-4" />
-              Täze API
-            </Button>
+              <Plus className="h-4 w-4" />{t('newApi')}</Button>
           )}
         </div>
       </div>
@@ -1919,15 +1997,37 @@ function ApisPageInner() {
           )}
         </div>
       ) : (
-        <DataTable
-          columns={columns}
-          rows={visibleEndpoints}
-          rowKey={(r) => r.id}
-          storageKey="bi-apis"
-          searchPlaceholder="Gözle: ady, path..."
-          emptyMessage={loading ? 'Ýüklenýär...' : 'Bu firma üçin endpoint ýok — «Täze API» bilen goşuň'}
-          onRowClick={openEdit}
-        />
+        <div className="space-y-2">
+          {selectedIds.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">{selectedIds.size} saýlandy</span>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={async () => {
+                  if (!confirm(`${selectedIds.size} API pozulsynmy?`)) return;
+                  for (const id of selectedIds) {
+                    const ep = endpoints.find((e) => e.id === id);
+                    if (ep) await deleteEp(ep, { skipConfirm: true });
+                  }
+                  setSelectedIds(new Set());
+                }}
+              >
+                Saýlananlary poz
+              </Button>
+            </div>
+          )}
+          <DataTable
+            columns={columns}
+            rows={visibleEndpoints}
+            rowKey={(r) => r.id}
+            storageKey="bi-apis"
+            searchPlaceholder={t('searchNamePath')}
+            emptyMessage={loading ? t('loading') : t('noEndpointsForFirm')}
+            onRowClick={openEdit}
+            selectedKeys={selectedIds}
+          />
+        </div>
       )}
     </div>
   );

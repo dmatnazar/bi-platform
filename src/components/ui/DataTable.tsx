@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 export interface DataTableColumn<T> {
   id: string;
@@ -39,6 +40,10 @@ interface Props<T> {
   toolbarRight?: React.ReactNode;
   onRowClick?: (row: T) => void;
   selectedKey?: string | null;
+  /** multi-select highlight */
+  selectedKeys?: Set<string> | string[];
+  /** extra class per row */
+  rowClassName?: (row: T) => string | undefined;
 }
 
 type SortDir = 'asc' | 'desc' | null;
@@ -66,14 +71,24 @@ export function DataTable<T>({
   rows,
   rowKey,
   storageKey,
-  searchPlaceholder = 'Gözle...',
+  searchPlaceholder,
   pageSizeOptions = [10, 25, 50],
-  emptyMessage = 'Maglumat ýok',
+  emptyMessage,
   toolbarLeft,
   toolbarRight,
   onRowClick,
   selectedKey,
+  selectedKeys,
+  rowClassName,
 }: Props<T>) {
+  const { t } = useLocale();
+  const resolvedSearchPlaceholder = searchPlaceholder ?? t('search');
+  const resolvedEmptyMessage = emptyMessage ?? t('noData');
+  const selectedSet = (() => {
+    if (selectedKeys instanceof Set) return selectedKeys;
+    if (Array.isArray(selectedKeys)) return new Set(selectedKeys);
+    return null;
+  })();
   // SSR-safe defaults only — localStorage applied after mount (avoids hydration mismatch)
   const [search, setSearch] = useState('');
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -235,7 +250,7 @@ export function DataTable<T>({
                 setSearch(e.target.value);
                 setPage(0);
               }}
-              placeholder={searchPlaceholder}
+              placeholder={resolvedSearchPlaceholder}
               className="w-full h-9 pl-8 pr-8 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/40"
             />
             {search && (
@@ -257,7 +272,7 @@ export function DataTable<T>({
                 ? 'border-indigo-500/50 bg-indigo-500/15 text-indigo-300'
                 : 'border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200'
             }`}
-            title="Sütün filterleri"
+            title={t('columnFilters')}
           >
             <Filter className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Filter</span>
@@ -268,7 +283,7 @@ export function DataTable<T>({
               type="button"
               onClick={() => setColsOpen((v) => !v)}
               className="h-9 w-9 sm:w-auto sm:px-3 rounded-xl border border-slate-700 bg-slate-900/80 text-xs text-slate-300 inline-flex items-center justify-center gap-1.5"
-              title="Sütünler"
+              title={t('columns')}
             >
               <Columns3 className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Sütünler</span>
@@ -365,7 +380,7 @@ export function DataTable<T>({
             {pageRows.length === 0 ? (
               <tr>
                 <td colSpan={Math.max(visibleCols.length, 1)} className="px-4 py-12 text-center text-slate-500">
-                  {emptyMessage}
+                  {resolvedEmptyMessage}
                 </td>
               </tr>
             ) : (
@@ -376,9 +391,11 @@ export function DataTable<T>({
                     key={key}
                     onClick={() => onRowClick?.(row)}
                     className={cn(
-                      'border-b border-slate-800/60',
+                      'border-b border-slate-800/60 transition-colors',
                       onRowClick && 'cursor-pointer hover:bg-slate-900/50',
-                      selectedKey === key && 'bg-indigo-500/10'
+                      (selectedKey === key || selectedSet?.has(key)) &&
+                        'bg-indigo-500/20 ring-1 ring-inset ring-indigo-500/30',
+                      rowClassName?.(row)
                     )}
                   >
                     {visibleCols.map((c) => (
@@ -398,7 +415,7 @@ export function DataTable<T>({
       <div className="md:hidden grid grid-cols-1 xs:grid-cols-2 gap-3">
         {pageRows.length === 0 ? (
           <div className="col-span-full rounded-2xl border border-dashed border-slate-700 px-4 py-10 text-center text-slate-500 text-sm">
-            {emptyMessage}
+            {resolvedEmptyMessage}
           </div>
         ) : (
           pageRows.map((row) => {
@@ -413,7 +430,9 @@ export function DataTable<T>({
                 className={cn(
                   'rounded-xl border border-slate-700/80 bg-slate-900/70 px-3 py-3 space-y-2 shadow-sm',
                   onRowClick && 'active:scale-[0.99] cursor-pointer',
-                  selectedKey === key && 'border-indigo-500/50 ring-1 ring-indigo-500/20'
+                  (selectedKey === key || selectedSet?.has(key)) &&
+                    'border-indigo-500/50 ring-1 ring-indigo-500/30 bg-indigo-500/10',
+                  rowClassName?.(row)
                 )}
               >
                 {primary && (

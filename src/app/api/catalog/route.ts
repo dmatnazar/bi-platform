@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, isSuperAdmin, actorTenantSlugs } from '@/lib/auth';
 import { fetchCatalog } from '@/lib/gateway';
+import { mergeTestDefaultsIntoEndpoints } from '@/lib/api-test-defaults';
 
 export async function GET(req: NextRequest) {
   const user = await getSession();
@@ -12,7 +13,10 @@ export async function GET(req: NextRequest) {
   const catalog = await fetchCatalog(force);
 
   if (isSuperAdmin(user)) {
-    return NextResponse.json(catalog);
+    return NextResponse.json({
+      ...catalog,
+      endpoints: mergeTestDefaultsIntoEndpoints(catalog.endpoints || []),
+    });
   }
 
   const mine = new Set(actorTenantSlugs(user));
@@ -34,7 +38,9 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     tenants: (catalog.tenants || []).filter((t) => inScope(t.slug)),
-    endpoints: (catalog.endpoints || []).filter((e) => inScope(e.tenantSlug)),
+    endpoints: mergeTestDefaultsIntoEndpoints(
+      (catalog.endpoints || []).filter((e) => inScope(e.tenantSlug))
+    ),
     staff: (catalog.staff || []).filter(staffInScope),
     connections: Array.isArray((catalog as any).connections)
       ? (catalog as any).connections.filter((c: any) => inScope(c.tenantSlug))

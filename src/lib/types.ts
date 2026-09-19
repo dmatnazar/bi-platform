@@ -229,6 +229,8 @@ export interface DashboardWidget {
   id: string;
   type: WidgetType;
   title: string;
+  /** Russian title (optional) */
+  titleRu?: string;
   /** Haýsy tab-da görkezilýär (boş = ähli tablar / default) */
   tabId?: string | null;
   /** Optional shorter title on small screens */

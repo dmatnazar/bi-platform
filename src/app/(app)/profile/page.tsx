@@ -16,10 +16,13 @@ import {
 import { toastSuccess, toastError } from '@/components/ui/Toast';
 import { BalanceBadge } from '@/components/billing/BalanceBadge';
 import { cn } from '@/lib/utils';
+import { useLocale } from '@/components/LocaleProvider';
 
 type PresetAvatar = { id: string; url: string; name: string };
 
 export default function ProfilePage() {
+  const { t } = useLocale();
+
   const [user, setUser] = useState<any>(null);
   const [fullName, setFullName] = useState('');
   const [login, setLogin] = useState('');
@@ -80,10 +83,10 @@ export default function ProfilePage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toastError('Saklamak şowsuz', data.error);
+        toastError(t('saveFailedLong'), data.error);
         return;
       }
-      toastSuccess('Profil täzelendi');
+      toastSuccess(t('profileUpdated'));
       await load();
     } finally {
       setSaving(false);
@@ -115,7 +118,7 @@ export default function ProfilePage() {
           })
         );
       } catch { /* */ }
-      toastSuccess('Avatar saýlandy');
+      toastSuccess(t('avatarSelected'));
     } finally {
       setSavingAvatar(false);
     }
@@ -129,7 +132,7 @@ export default function ProfilePage() {
       try {
         window.dispatchEvent(new CustomEvent('bi-avatar-changed', { detail: { avatarId: null, avatarUrl: null } }));
       } catch { /* */ }
-      toastSuccess('Avatar aýryldy');
+      toastSuccess(t('avatarRemoved'));
     } finally {
       setSavingAvatar(false);
     }
@@ -137,9 +140,7 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
-        Ýüklenýär...
-      </div>
+      <div className="flex items-center justify-center py-12 text-sm text-slate-500">{t('loading')}</div>
     );
   }
 
@@ -280,7 +281,7 @@ export default function ProfilePage() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
                 className="w-full h-10 px-3 pr-9 rounded-xl bg-slate-900/80 border border-slate-700 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                placeholder="Täze parol (min 6)"
+                placeholder={t('newPasswordMin6')}
               />
               <button
                 type="button"
