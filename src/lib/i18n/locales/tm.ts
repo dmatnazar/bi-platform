@@ -893,6 +893,14 @@ export const tm = {
   selected: 'saýlanan',
   noTariffSet: 'Tarif bellenmedik — admin bilen habarlaşyň',
   nextLabel: 'Indiki',
+  editName: 'Üýtget (ady)',
+  duplicateSameFirm: 'Nusga al (şol firma)',
+  copyToFirm: 'Firma-a nusga',
+  exportJson: 'Export (.json)',
+  linkUsers: 'Ulanyjy bagla',
+  editDashboard: 'Dashboard üýtget',
+  statusTrashed: 'Pozulan',
+  ticketWord: 'ticket',
 } as const;
 
 export type TmKey = keyof typeof tm;

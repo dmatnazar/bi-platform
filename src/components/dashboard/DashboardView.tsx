@@ -63,7 +63,7 @@ function defaultFilterValues(defs: GlobalFilterDef[]): GlobalFilterValues {
 }
 
 export function DashboardView({ initial, editable, companyName, companySlug }: Props) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
 
   const router = useRouter();
   const [dashboard, setDashboard] = useState(initial);
@@ -71,6 +71,9 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   const [editOpening, setEditOpening] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState(initial.name);
+  const [nameRu, setNameRu] = useState(initial.nameRu || '');
+  const [description, setDescription] = useState(initial.description || '');
+  const [descriptionRu, setDescriptionRu] = useState(initial.descriptionRu || '');
   const [dirty, setDirty] = useState(false);
   const [configId, setConfigId] = useState<string | null>(null);
   // Floating widget-settings modal (draggable; remembers last place across widgets)
@@ -269,15 +272,21 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
   const dirtyRef = useRef(dirty);
   const editModeRef = useRef(editMode);
   const nameRef = useRef(name);
+  const nameRuRef = useRef(nameRu);
+  const descriptionRef = useRef(description);
+  const descriptionRuRef = useRef(descriptionRu);
   const dashboardRef = useRef(dashboard);
   const initialRef = useRef(initial);
   useEffect(() => {
     dirtyRef.current = dirty;
     editModeRef.current = editMode;
     nameRef.current = name;
+    nameRuRef.current = nameRu;
+    descriptionRef.current = description;
+    descriptionRuRef.current = descriptionRu;
     dashboardRef.current = dashboard;
     initialRef.current = initial;
-  }, [dirty, editMode, name, dashboard, initial]);
+  }, [dirty, editMode, name, nameRu, description, descriptionRu, dashboard, initial]);
 
   // Task 11: Set hydration flag on mount (client-side only)
   useEffect(() => {
@@ -372,6 +381,9 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: nameRef.current,
+          nameRu: nameRuRef.current || undefined,
+          description: descriptionRef.current || undefined,
+          descriptionRu: descriptionRuRef.current || undefined,
           widgets: dashboardRef.current.widgets,
           globalFilters: dashboardRef.current.globalFilters || [],
           tabs: dashboardRef.current.tabs || [],
@@ -417,6 +429,9 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
     if (action === 'discard') {
       setDashboard(initialRef.current);
       setName(initialRef.current.name);
+      setNameRu(initialRef.current.nameRu || '');
+      setDescription(initialRef.current.description || '');
+      setDescriptionRu(initialRef.current.descriptionRu || '');
       setDirty(false);
       setEditMode(false);
       setConfigId(null);
@@ -535,6 +550,9 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
     if (action === 'discard') {
       setDashboard(initial);
       setName(initial.name);
+      setNameRu(initial.nameRu || '');
+      setDescription(initial.description || '');
+      setDescriptionRu(initial.descriptionRu || '');
       setDirty(false);
       setEditMode(false);
       setConfigId(null);
@@ -573,45 +591,78 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
             <ArrowLeft className="h-5 w-5" />
           </button>
           {editMode ? (
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-1.5">
               <Input
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
                   setDirty(true);
                 }}
-                className="max-w-md h-10"
+                className="max-w-md h-9"
+                placeholder={`${t('name')} (TM)`}
+              />
+              <Input
+                value={nameRu}
+                onChange={(e) => {
+                  setNameRu(e.target.value);
+                  setDirty(true);
+                }}
+                className="max-w-md h-9"
+                placeholder={`${t('name')} (RU)`}
+              />
+              <textarea
+                value={description}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  setDirty(true);
+                }}
+                rows={2}
+                className="max-w-md w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-1.5 text-xs text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                placeholder={`${t('description')} (TM)`}
+              />
+              <textarea
+                value={descriptionRu}
+                onChange={(e) => {
+                  setDescriptionRu(e.target.value);
+                  setDirty(true);
+                }}
+                rows={2}
+                className="max-w-md w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-1.5 text-xs text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                placeholder={`${t('description')} (RU)`}
               />
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
                 {(companyName || companySlug) && (
                   <span className="text-indigo-300/90">
-                    <span className="text-slate-500">Firma:</span>{' '}
+                    <span className="text-slate-500">{t('company')}:</span>{' '}
                     {companyName || companySlug}
                     {companySlug && companyName ? (
                       <span className="text-slate-600 font-mono"> ({companySlug})</span>
                     ) : null}
                   </span>
                 )}
-                {dashboard.description ? (
-                  <span className="text-slate-400 truncate max-w-md">{dashboard.description}</span>
-                ) : null}
               </div>
             </div>
           ) : (
             <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-bold text-white truncate">{dashboard.name}</h1>
+              <h1 className="text-base sm:text-xl font-bold text-white truncate">
+                {locale === 'ru' && dashboard.nameRu ? dashboard.nameRu : dashboard.name}
+              </h1>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                 {(companyName || companySlug) && (
                   <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300/90">
-                    <span className="text-slate-500">Firma:</span>
+                    <span className="text-slate-500">{t('company')}:</span>
                     <span className="font-medium">{companyName || companySlug}</span>
                     {companySlug && companyName ? (
                       <span className="text-slate-600 font-mono">({companySlug})</span>
                     ) : null}
                   </span>
                 )}
-                {dashboard.description && (
-                  <span className="text-sm text-slate-400 truncate hidden sm:inline">{dashboard.description}</span>
+                {((locale === 'ru' && dashboard.descriptionRu) || dashboard.description) && (
+                  <span className="text-sm text-slate-400 truncate hidden sm:inline">
+                    {locale === 'ru' && dashboard.descriptionRu
+                      ? dashboard.descriptionRu
+                      : dashboard.description}
+                  </span>
                 )}
               </div>
             </div>
@@ -630,7 +681,13 @@ export function DashboardView({ initial, editable, companyName, companySlug }: P
                 size="sm"
                 onClick={() => void save()}
                 loading={saving}
-                disabled={!dirty && name === initial.name}
+                disabled={
+                  !dirty &&
+                  name === initial.name &&
+                  (nameRu || '') === (initial.nameRu || '') &&
+                  (description || '') === (initial.description || '') &&
+                  (descriptionRu || '') === (initial.descriptionRu || '')
+                }
               >
                 <Save className="h-4 w-4" />
                 <span className="hidden sm:inline">Ýatda sakla</span>

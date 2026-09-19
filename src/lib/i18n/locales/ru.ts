@@ -893,4 +893,12 @@ export const ru = {
   selected: 'выбран',
   noTariffSet: 'Тариф не назначен — свяжитесь с админом',
   nextLabel: 'Следующий',
+  editName: 'Изменить (название)',
+  duplicateSameFirm: 'Копировать (эта компания)',
+  copyToFirm: 'Копировать в компанию',
+  exportJson: 'Экспорт (.json)',
+  linkUsers: 'Привязать пользователей',
+  editDashboard: 'Изменить дашборд',
+  statusTrashed: 'Удалённые',
+  ticketWord: 'тикет',
 } as const;

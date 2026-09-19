@@ -230,7 +230,11 @@ export interface Dashboard {
   id: string;
   companyId: string;
   name: string;
+  /** Russian localized name (shown when UI locale is ru) */
+  nameRu?: string;
   description?: string;
+  /** Russian localized description */
+  descriptionRu?: string;
   /** owner staff id */
   ownerId: string;
   /** staff ids who can view (empty = all company members with viewer+) */

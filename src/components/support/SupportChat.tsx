@@ -709,20 +709,32 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                         key={c.id}
                         type="button"
                         onClick={() => setFirmFilter(c.id)}
-                        className="w-full text-left px-3 py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 flex items-center gap-2"
+                        className="w-full text-left px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 flex flex-col gap-1"
                       >
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm text-slate-100 truncate">{c.name}</span>
-                          <span className="block text-[10px] text-slate-500 truncate">{c.slug}</span>
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {cnt} ticket{groupCount ? ' · +umumy' : ''}
-                        </span>
-                        {gUnread > 0 && (
-                          <span className="min-w-[1.1rem] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">
-                            {gUnread}
+                        <div className="flex items-start gap-2 min-w-0 w-full">
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[13px] sm:text-sm font-medium text-slate-100 leading-snug line-clamp-2 break-words">
+                              {c.name}
+                            </span>
                           </span>
-                        )}
+                          {gUnread > 0 && (
+                            <span className="shrink-0 min-w-[1.15rem] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">
+                              {gUnread}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400 leading-tight">
+                          <span className="font-mono text-slate-500 truncate max-w-[40%]">{c.slug}</span>
+                          <span className="text-slate-600">·</span>
+                          <span className="tabular-nums text-slate-300">
+                            {cnt} {tr('ticketWord') || 'ticket'}
+                          </span>
+                          {groupCount > 0 && (
+                            <span className="inline-flex items-center rounded-md bg-emerald-500/15 text-emerald-300 px-1.5 py-0.5 text-[9px] font-medium">
+                              +{tr('groupChat') || 'umumy'}
+                            </span>
+                          )}
+                        </div>
                       </button>
                     );
                   })

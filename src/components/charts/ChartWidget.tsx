@@ -1152,7 +1152,7 @@ function TableWidgetBody({
                   {visibleCols.map((c) => (
                     <td
                       key={c}
-                      className="py-1.5 pr-2 whitespace-nowrap max-w-[220px] truncate border-b border-slate-800/60"
+                      className="py-1.5 pr-2 whitespace-nowrap max-w-[220px] truncate border-b border-slate-800/60 font-semibold text-slate-100 tabular-nums"
                     >
                       {cellWithSuffix(c, row[c], fieldSuffixes)}
                     </td>
@@ -1211,7 +1211,7 @@ function TableWidgetBody({
                     {secondary.map((c) => (
                       <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
                         <span className="text-slate-500">{c}: </span>
-                        <span className="text-slate-300">{cellWithSuffix(c, row[c], fieldSuffixes)}</span>
+                        <span className="font-semibold text-slate-100">{cellWithSuffix(c, row[c], fieldSuffixes)}</span>
                       </div>
                     ))}
                   </div>
@@ -1619,10 +1619,10 @@ function TableWidgetBody({
                       </thead>
                       <tbody>
                         {drillFilteredRows.map((r, idx) => (
-                          <tr key={idx} className="border-b border-slate-800/60 text-slate-200">
+                          <tr key={idx} className="border-b border-slate-800/60 text-slate-100 hover:bg-slate-800/40">
                             {drillColKeys.map((k) => (
-                              <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate" title={String(r[k] ?? '')}>
-                                {formatCellValue(r[k])}
+                              <td key={k} className="py-1.5 pr-3 whitespace-nowrap max-w-[200px] truncate font-semibold tabular-nums" title={String(r[k] ?? '')}>
+                                {cellWithSuffix(k, r[k], fieldSuffixes)}
                               </td>
                             ))}
                           </tr>
@@ -1657,7 +1657,7 @@ function TableWidgetBody({
                               {secondary.map((c) => (
                                 <div key={c} className="min-w-0 text-[10px] leading-snug break-words">
                                   <span className="text-slate-500">{c}: </span>
-                                  <span className="text-slate-300">{cellWithSuffix(c, r[c], fieldSuffixes)}</span>
+                                  <span className="font-semibold text-slate-100">{cellWithSuffix(c, r[c], fieldSuffixes)}</span>
                                 </div>
                               ))}
                             </div>

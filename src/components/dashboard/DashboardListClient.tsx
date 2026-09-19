@@ -79,7 +79,7 @@ export function DashboardListClient({
   companyIdBySlug = {},
   userTenantSlugs = [],
 }: Props) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
 
   const showAnyAction = canEdit || canCreate || canDelete || canExport || canManageAccess;
   const router = useRouter();
@@ -136,6 +136,8 @@ export function DashboardListClient({
   const [selectedShare, setSelectedShare] = useState<string[]>([]);
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
+  const [editNameRu, setEditNameRu] = useState('');
+  const [editDescRu, setEditDescRu] = useState('');
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   /** Copy/move dashboard to another company */
@@ -887,6 +889,8 @@ export function DashboardListClient({
     setEditTarget(d);
     setEditName(d.name);
     setEditDesc(d.description || '');
+    setEditNameRu(d.nameRu || '');
+    setEditDescRu(d.descriptionRu || '');
     setMenuId(null);
   }
 
@@ -895,6 +899,8 @@ export function DashboardListClient({
     const updated = await persistUpdate(editTarget.id, {
       name: editName.trim(),
       description: editDesc.trim(),
+      nameRu: editNameRu.trim() || undefined,
+      descriptionRu: editDescRu.trim() || undefined,
     });
     if (updated) setEditTarget(null);
   }
@@ -1102,10 +1108,12 @@ export function DashboardListClient({
                   </div>
                   <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-white group-hover:text-indigo-200 transition-colors">
-                  {d.name}
+                  {locale === 'ru' && d.nameRu ? d.nameRu : d.name}
                 </h3>
-                {d.description && (
-                  <p className="mt-1 text-sm text-slate-400 line-clamp-2">{d.description}</p>
+                {((locale === 'ru' && d.descriptionRu) || d.description) && (
+                  <p className="mt-1 text-sm text-slate-400 line-clamp-2">
+                    {locale === 'ru' && d.descriptionRu ? d.descriptionRu : d.description}
+                  </p>
                 )}
                 <div className="mt-3 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">
@@ -1148,7 +1156,7 @@ export function DashboardListClient({
                           onClick={() => openEdit(d)}
                         >
                           <Pencil className="h-3.5 w-3.5 text-slate-400" />
-                          Üýtget (ady)
+                          {t('editName') || 'Üýtget (ady)'}
                         </button>
                         )}
                         {canCreate && (
@@ -1159,7 +1167,7 @@ export function DashboardListClient({
                           disabled={busy}
                         >
                           <Copy className="h-3.5 w-3.5 text-slate-400" />
-                          Nusga al (şol firma)
+                          {t('duplicateSameFirm') || 'Nusga al (şol firma)'}
                         </button>
                         )}
                         {canCreate && isSuperAdmin && companies.length > 1 && (
@@ -1171,7 +1179,7 @@ export function DashboardListClient({
                               disabled={busy}
                             >
                               <Copy className="h-3.5 w-3.5 text-indigo-400" />
-                              Firma-a nusga
+                              {t('copyToFirm') || 'Firma-a nusga'}
                             </button>
                             <button
                               type="button"
@@ -1180,7 +1188,7 @@ export function DashboardListClient({
                               disabled={busy}
                             >
                               <Building2 className="h-3.5 w-3.5 text-amber-400" />
-                              Firma-a göçür
+                              {t('moveToFirm') || 'Firma-a göçür'}
                             </button>
                           </>
                         )}
@@ -1191,7 +1199,7 @@ export function DashboardListClient({
                           onClick={() => exportDash(d)}
                         >
                           <Download className="h-3.5 w-3.5 text-slate-400" />
-                          Export (.json)
+                          {t('exportJson') || 'Export (.json)'}
                         </button>
                         )}
                         {canManageAccess && (
@@ -1201,7 +1209,7 @@ export function DashboardListClient({
                           onClick={() => openAccess(d)}
                         >
                           <Users className="h-3.5 w-3.5 text-slate-400" />
-                          Ulanyjy bagla
+                          {t('linkUsers') || 'Ulanyjy bagla'}
                         </button>
                         )}
                         {canDelete && (
@@ -1483,26 +1491,42 @@ export function DashboardListClient({
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditTarget(null)} />
           <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-4 sm:p-5 shadow-2xl space-y-4 max-h-[min(90dvh,640px)] overflow-y-auto">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-white">Dashboard üýtget</h3>
+              <h3 className="text-base font-semibold text-white">{t('editDashboard') || 'Dashboard üýtget'}</h3>
               <button type="button" onClick={() => setEditTarget(null)} className="text-slate-500 hover:text-white">
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <Input label={t('name')} value={editName} onChange={(e) => setEditName(e.target.value)} />
+            <Input label={`${t('name')} (TM)`} value={editName} onChange={(e) => setEditName(e.target.value)} />
             <div>
-              <label className="mb-1 block text-xs font-medium text-slate-400">Goşmaça at / düşündiriş</label>
+              <label className="mb-1 block text-xs font-medium text-slate-400">{t('description')} (TM)</label>
               <textarea
                 value={editDesc}
                 onChange={(e) => setEditDesc(e.target.value)}
-                rows={3}
+                rows={2}
                 className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
                 placeholder={t('shortDescDots')}
+              />
+            </div>
+            <Input
+              label={`${t('name')} (RU)`}
+              value={editNameRu}
+              onChange={(e) => setEditNameRu(e.target.value)}
+              placeholder="Название на русском"
+            />
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-400">{t('description')} (RU)</label>
+              <textarea
+                value={editDescRu}
+                onChange={(e) => setEditDescRu(e.target.value)}
+                rows={2}
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500/40"
+                placeholder="Описание на русском"
               />
             </div>
             <div className="flex gap-2 justify-end pt-1">
               <Button variant="ghost" size="sm" onClick={() => setEditTarget(null)}>{t('cancel')}</Button>
               <Button size="sm" loading={busy} onClick={saveEdit} disabled={!editName.trim()}>
-                Ýatda sakla
+                {t('save')}
               </Button>
             </div>
           </div>

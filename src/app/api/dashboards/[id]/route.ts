@@ -37,7 +37,9 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
+  nameRu: z.string().optional(),
   description: z.string().optional(),
+  descriptionRu: z.string().optional(),
   widgets: z.array(z.any()).optional(),
   globalFilters: z.array(z.any()).optional(),
   tabs: z.array(z.any()).optional(),
