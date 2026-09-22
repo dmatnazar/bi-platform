@@ -281,15 +281,25 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
 
   const visibleTickets = useMemo(() => {
     let list = scopedTickets;
+    if (mode !== 'admin') {
+      // viewer / editor: pozulanlar hiç wagt
+      list = list.filter((t) => t.status !== 'trashed');
+    }
     if (statusFilter === 'all') {
-      // ähli (trash däl) + umumy
+      // ähli (trash däl) + umumy chat
       list = list.filter((t) => t.isGroupChat || t.status !== 'trashed');
+    } else if (statusFilter === 'trashed') {
+      if (mode !== 'admin') return [];
+      list = list.filter((t) => !t.isGroupChat && t.status === 'trashed');
     } else {
       // diňe şol status; umumy chat diňe all-da
       list = list.filter((t) => !t.isGroupChat && t.status === statusFilter);
     }
-    return list;
-  }, [scopedTickets, statusFilter]);
+    // Soňky ýazylan iň ýokarda
+    return [...list].sort((a, b) =>
+      (b.lastMessageAt || b.updatedAt || '').localeCompare(a.lastMessageAt || a.updatedAt || '')
+    );
+  }, [scopedTickets, statusFilter, mode]);
 
   const loadTicket = useCallback(async (id: string) => {
     const res = await fetch(`/api/support/tickets/${id}`);
@@ -622,14 +632,14 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
             <>
               <div className="fixed inset-0 z-10" onClick={() => setStatusMenuOpen(false)} />
               <div className="absolute left-2 right-2 top-full mt-1 z-20 rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1 max-h-56 overflow-y-auto">
-                {statusTabs.filter((tab) => mode === 'admin' || tab.key !== 'trashed' || true).map((tab) => {
-                  // user: hide trashed optional — show all for consistency
+                {statusTabs.map((tab) => {
+                  // viewer / editor: pozulanlar tab-y ýok
+                  if (mode !== 'admin' && tab.key === 'trashed') return null;
                   const count =
                     tab.key === 'all'
                       ? statusCounts.all
                       : statusCounts[tab.key] || 0;
                   const active = statusFilter === tab.key;
-                  if (mode === 'user' && tab.key === 'trashed') return null;
                   return (
                     <button
                       key={tab.key}
@@ -692,30 +702,34 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                     const firmTs = tickets.filter((t) => ticketMatchesFirm(t, c));
                     const hasGroup = firmTs.some((t) => t.isGroupChat);
                     const nonGroup = firmTs.filter((t) => !t.isGroupChat);
+                    // Ählisi: pozulan däl ähli ticket + umumy chat
                     const matching =
                       statusFilter === 'all'
                         ? nonGroup.filter((t) => t.status !== 'trashed')
                         : nonGroup.filter((t) => (t.status || 'open') === statusFilter);
-                    const groupCount = hasGroup && statusFilter === 'all' ? 1 : 0;
+                    const groupCount = hasGroup && (statusFilter === 'all' || statusFilter === 'open') ? 1 : 0;
                     const cnt = matching.length + groupCount;
-                    if (statusFilter !== 'all' && matching.length === 0) return null;
+                    if (statusFilter !== 'all' && matching.length === 0 && groupCount === 0) return null;
                     const gUnread = firmTs.reduce(
                       (s, t) =>
                         s + (mode === 'admin' ? t.unreadForAdmin || 0 : t.unreadForUser || 0),
                       0
                     );
-                    return (
+                    const lastAt = firmTs.reduce((max, t) => {
+                      const v = t.lastMessageAt || t.updatedAt || '';
+                      return v > max ? v : max;
+                    }, '');
+                    return {
+                      el: (
                       <button
                         key={c.id}
                         type="button"
                         onClick={() => setFirmFilter(c.id)}
-                        className="w-full text-left px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 flex flex-col gap-1"
+                        className="w-full text-left px-2.5 py-2 sm:px-3 sm:py-2.5 rounded-xl border border-slate-800 hover:bg-slate-800/60 active:bg-slate-800 flex flex-col gap-1"
                       >
                         <div className="flex items-start gap-2 min-w-0 w-full">
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-[13px] sm:text-sm font-medium text-slate-100 leading-snug line-clamp-2 break-words">
-                              {c.name}
-                            </span>
+                          <span className="flex-1 min-w-0 text-[13px] sm:text-sm font-medium text-slate-100 leading-snug line-clamp-2 break-words">
+                            {c.name}
                           </span>
                           {gUnread > 0 && (
                             <span className="shrink-0 min-w-[1.15rem] h-5 px-1 rounded-full bg-rose-500 text-[10px] font-bold text-white flex items-center justify-center">
@@ -724,8 +738,6 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                           )}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-slate-400 leading-tight">
-                          <span className="font-mono text-slate-500 truncate max-w-[40%]">{c.slug}</span>
-                          <span className="text-slate-600">·</span>
                           <span className="tabular-nums text-slate-300">
                             {cnt} {tr('ticketWord') || 'ticket'}
                           </span>
@@ -736,9 +748,13 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                           )}
                         </div>
                       </button>
-                    );
+                      ),
+                      lastAt,
+                    };
                   })
-                  .filter(Boolean);
+                  .filter(Boolean)
+                  .sort((a, b) => (b!.lastAt || '').localeCompare(a!.lastAt || ''))
+                  .map((x) => x!.el);
                 // Firmalar boş bolsa, status boýunça ticketleri göni görkez
                 if (firmButtons.length === 0 && statusFilter !== 'all') {
                   const flat = tickets.filter(
@@ -809,14 +825,22 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                     <p className="text-sm font-medium text-slate-100 truncate">
                       {t.isGroupChat ? (
                         <span className="text-emerald-300">
-                          {(t.companyName || t.companySlug || tr('company')) + ' — ' + tr('groupChat')}
+                          {(t.companyName ||
+                            companies.find((c) => c.id === t.companyId)?.name ||
+                            tr('company')) +
+                            ' — ' +
+                            (tr('groupChat') || 'Umumy chat')}
                         </span>
                       ) : (
                         t.subject
                       )}
                     </p>
-                    {(t.companyName || t.companySlug) && !firmFilter && (
-                      <p className="text-[10px] text-slate-500 truncate">{t.companyName || t.companySlug}</p>
+                    {!t.isGroupChat && (
+                      <p className="text-[10px] text-indigo-300/80 truncate">
+                        {t.companyName ||
+                          companies.find((c) => c.id === t.companyId || c.slug === t.companySlug)?.name ||
+                          ''}
+                      </p>
                     )}
                     {unread(t) > 0 && (
                       <span className="shrink-0 h-5 min-w-5 px-1 rounded-full bg-indigo-500 text-[10px] font-bold text-white flex items-center justify-center">
@@ -972,12 +996,16 @@ export function SupportChat({ mode, embedded = false, listOpen: listOpenProp, on
                 <ArrowLeft className="h-4 w-4" />
               </button>
               <div className="min-w-0 flex-1">
+                {(active.companyName ||
+                  companies.find((c) => c.id === active.companyId || c.slug === active.companySlug)?.name) && (
+                  <p className="text-[11px] font-medium text-indigo-300/95 truncate mb-0.5">
+                    {active.companyName ||
+                      companies.find((c) => c.id === active.companyId || c.slug === active.companySlug)?.name}
+                  </p>
+                )}
                 <h3 className="text-sm font-semibold text-white truncate">{active.subject}</h3>
-              {(active.companyName || active.companySlug) && (
-                <p className="text-[10px] text-indigo-300/90 truncate">{active.companyName || active.companySlug}</p>
-              )}
                 <p className="text-[11px] text-slate-500 truncate">
-                  {mode === 'admin' && `${active.userName} · `}
+                  {mode === 'admin' && !active.isGroupChat && `${active.userName} · `}
                   {categories.find((c) => c.value === active.category)?.label}
                 </p>
               </div>

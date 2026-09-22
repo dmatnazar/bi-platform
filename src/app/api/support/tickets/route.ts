@@ -8,6 +8,7 @@ import {
   getCompanyById,
   getCompanyBySlug,
 } from '@/lib/db';
+import { fetchCatalog } from '@/lib/gateway';
 import type { SupportCategory, SupportTicket, SupportMessage } from '@/lib/types';
 import { z } from 'zod';
 
@@ -85,27 +86,71 @@ export async function GET(req: NextRequest) {
   const companyFilter = req.nextUrl.searchParams.get('companyId') || undefined;
   const admin = isSupportStaff(user);
 
-  // User firms (tenant slugs + primary company)
+  // Firmalar — dashboard bilen birmeňzeş: gateway catalog tenants
   const mySlugs = actorTenantSlugs(user);
-  const companies = dedupeCompanies(await listCompanies());
   const mySlugsSet = new Set(mySlugs);
-  const myCompanies = companies.filter((c) => {
-    const id = String(c.id || '');
-    const slug = String(c.slug || '');
-    return (
-      id === user.companyId ||
-      slug === user.companySlug ||
-      mySlugsSet.has(slug) ||
-      (Array.isArray(user.tenantSlugs) && user.tenantSlugs.includes(slug))
-    );
-  });
+  let catalogFirms: { id: string; slug: string; name: string }[] = [];
+  try {
+    const catalog = await fetchCatalog(false);
+    const tenants = catalog.tenants || [];
+    if (isSuperAdmin(user) || user.role === 'admin' || user.role === 'super_admin') {
+      catalogFirms = tenants.map((t: any) => ({
+        id: String(t.id || t.slug),
+        slug: String(t.slug || ''),
+        name: String(t.name || t.slug || t.id),
+      }));
+    } else {
+      catalogFirms = tenants
+        .filter((t: any) => {
+          const slug = String(t.slug || '');
+          return (
+            mySlugsSet.has(slug) ||
+            slug === user.companySlug ||
+            String(t.id) === String(user.companyId)
+          );
+        })
+        .map((t: any) => ({
+          id: String(t.id || t.slug),
+          slug: String(t.slug || ''),
+          name: String(t.name || t.slug || t.id),
+        }));
+    }
+  } catch {
+    // fallback: DB companies
+    const dbCompanies = dedupeCompanies(await listCompanies());
+    catalogFirms = dbCompanies
+      .filter((c: any) => {
+        if (isSuperAdmin(user) || user.role === 'admin') return true;
+        const id = String(c.id || '');
+        const slug = String(c.slug || '');
+        return (
+          id === user.companyId ||
+          slug === user.companySlug ||
+          mySlugsSet.has(slug)
+        );
+      })
+      .map((c: any) => ({
+        id: String(c.id),
+        slug: String(c.slug || ''),
+        name: String(c.name || c.slug || c.id),
+      }));
+  }
 
-  // Ensure group chats — her slug üçin bir
-  const groups: SupportTicket[] = [];
-  const groupScope = dedupeCompanies(
-    admin ? (isSuperAdmin(user) ? companies : myCompanies) : myCompanies
+  const firmSource = dedupeCompanies(catalogFirms);
+  const allowedIds = new Set(firmSource.map((c) => String(c.id)));
+  const allowedSlugs = new Set(
+    firmSource.map((c) => String(c.slug || '').toLowerCase()).filter(Boolean)
   );
-  for (const c of groupScope) {
+
+  function inFirmScope(t: SupportTicket): boolean {
+    const cid = String(t.companyId || '');
+    const cslug = String(t.companySlug || '').toLowerCase();
+    return allowedIds.has(cid) || (cslug ? allowedSlugs.has(cslug) : false);
+  }
+
+  // Umumy chat — diňe scope-daky firmalar
+  const groups: SupportTicket[] = [];
+  for (const c of firmSource) {
     const g = await ensureGroupChat(String(c.id), c.slug, c.name);
     if (!groups.find((x) => x.id === g.id || x.companyId === g.companyId)) {
       groups.push(g);
@@ -114,26 +159,36 @@ export async function GET(req: NextRequest) {
 
   let tickets: SupportTicket[];
   if (admin) {
+    // Ähli ticketler (ýa-da saýlanan firma), soň scope bilen süz
     tickets = await listSupportTickets({
-      companyId: companyFilter || (isSuperAdmin(user) ? undefined : user.companyId),
+      companyId: companyFilter || undefined,
       status,
     });
+    if (!companyFilter) {
+      tickets = tickets.filter((t) => inFirmScope(t));
+    }
   } else {
     tickets = await listSupportTickets({ userId: user.id, status });
+  }
+
+  // Viewer/editor (non-admin): trashed hiç wagt görünmesin
+  if (!admin) {
+    tickets = tickets.filter((t) => t.status !== 'trashed');
   }
 
   // Köne / goşmaça umumy chat-lary aýyr (diňe group-{companyId} galdyr)
   const canonicalGroupIds = new Set(groups.map((g) => g.id));
   tickets = tickets.filter((t) => {
     if (!t.isGroupChat) return true;
-    // diňe kanonik umumy chat
     return canonicalGroupIds.has(t.id);
   });
 
-  // Her firma üçin bir umumy chat (myCompanies / admin scope)
+  // Her firma üçin bir umumy chat
   const haveGroup = new Set(tickets.filter((t) => t.isGroupChat).map((t) => t.companyId));
   for (const g of groups) {
-    if (companyFilter && g.companyId !== companyFilter) continue;
+    if (companyFilter && g.companyId !== companyFilter && g.companySlug !== companyFilter) {
+      continue;
+    }
     if (!haveGroup.has(g.companyId)) {
       tickets.push(g);
       haveGroup.add(g.companyId);
@@ -141,28 +196,23 @@ export async function GET(req: NextRequest) {
   }
 
   if (companyFilter) {
-    tickets = tickets.filter((t) => t.companyId === companyFilter);
-  }
-
-  // User: ähli bagly firmalaryň umumy chat-y + öz ticketleri
-  if (!admin) {
     tickets = tickets.filter(
       (t) =>
-        t.isGroupChat ||
-        t.userId === user.id
+        t.companyId === companyFilter ||
+        t.companySlug === companyFilter ||
+        String(t.companyId) === String(companyFilter)
     );
   }
 
-  tickets = tickets.sort((a, b) => {
-    if (a.isGroupChat && !b.isGroupChat) return -1;
-    if (!a.isGroupChat && b.isGroupChat) return 1;
-    if (a.isGroupChat && b.isGroupChat) {
-      return String(a.companyName || a.companySlug || '').localeCompare(
-        String(b.companyName || b.companySlug || '')
-      );
-    }
-    return (b.lastMessageAt || '').localeCompare(a.lastMessageAt || '');
-  });
+  // User: bagly firmalaryň umumy chat-y + öz ticketleri
+  if (!admin) {
+    tickets = tickets.filter((t) => t.isGroupChat || t.userId === user.id);
+  }
+
+  // Soňky ýazylan chat iň ýokarda
+  tickets = tickets.sort((a, b) =>
+    (b.lastMessageAt || b.updatedAt || '').localeCompare(a.lastMessageAt || a.updatedAt || '')
+  );
 
   const slim = tickets.map((t) => ({
     ...t,
@@ -170,10 +220,9 @@ export async function GET(req: NextRequest) {
     messageCount: (t.messages || []).length,
   }));
 
-  const firmSource = dedupeCompanies(
-    admin ? (isSuperAdmin(user) ? companies : myCompanies) : myCompanies
-  );
-  const firmList = firmSource.map((c: any) => ({
+  // Firm list: diňe catalog scope; boş (ticket ýok) firmalary gizle — diňe umumy chat bar bolsa hem görkez
+  // (umumy chat hemişe bar, şonuň üçin ähli scope firmalar galýar — bu dashboard bilen gabat gelýär)
+  const firmList = firmSource.map((c) => ({
     id: String(c.id),
     slug: String(c.slug || ''),
     name: String(c.name || c.slug || c.id),

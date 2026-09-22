@@ -73,7 +73,8 @@ export function SupportFab() {
   function panelSize() {
     if (typeof window === 'undefined') return { w: 420, h: 560 };
     if (isMobile) {
-      return { w: window.innerWidth, h: Math.min(window.innerHeight * 0.88, 720) };
+      // Mobile: almost full sheet — more room for list + thread
+      return { w: window.innerWidth, h: Math.min(window.innerHeight * 0.94, window.innerHeight - 8) };
     }
     const w = listOpen
       ? Math.min(760, window.innerWidth - 24)
@@ -247,7 +248,7 @@ export function SupportFab() {
               className={cn(
                 'pointer-events-auto absolute flex flex-col overflow-hidden',
                 'bg-slate-950 border border-slate-700/80 shadow-2xl shadow-black/50',
-                isMobile ? 'rounded-t-2xl' : 'rounded-2xl',
+                isMobile ? 'rounded-t-2xl shadow-[0_-8px_40px_rgba(0,0,0,0.45)]' : 'rounded-2xl',
                 'transition-[width] duration-200'
               )}
               style={
@@ -258,6 +259,7 @@ export function SupportFab() {
                       bottom: 0,
                       width: '100%',
                       height: panelH,
+                      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
                     }
                   : {
                       left: resolvedPanel.x,
@@ -270,7 +272,7 @@ export function SupportFab() {
               {/* Drag handle header */}
               <div
                 className={cn(
-                  'shrink-0 flex items-center gap-2 px-3 py-2.5 border-b border-slate-800 bg-slate-900/95',
+                  'shrink-0 flex flex-col border-b border-slate-800 bg-slate-900/95',
                   !isMobile && 'cursor-grab active:cursor-grabbing select-none'
                 )}
                 onPointerDown={onPanelHeaderDown}
@@ -278,39 +280,49 @@ export function SupportFab() {
                 onPointerUp={onPanelHeaderUp}
                 onPointerCancel={onPanelHeaderUp}
               >
-                {!isMobile && <GripHorizontal className="h-4 w-4 text-slate-500 shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-white truncate">Goldaw</p>
-                  <p className="text-[10px] text-slate-500 truncate">
-                    {isAdmin ? 'Admin ticketler' : t('techSupport')}
-                    {!isMobile && t('draggableHint')}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
-                  title={listOpen ? t('collapseList') : t('expandList')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setListOpen((v) => !v);
-                  }}
-                >
-                  {listOpen ? (
-                    <PanelLeftClose className="h-4 w-4" />
-                  ) : (
-                    <PanelLeftOpen className="h-4 w-4" />
+                {isMobile && (
+                  <div className="flex justify-center pt-2 pb-0.5" aria-hidden>
+                    <span className="h-1 w-10 rounded-full bg-slate-600" />
+                  </div>
+                )}
+                <div className="flex items-center gap-2 px-3 py-2 sm:py-2.5">
+                  {!isMobile && <GripHorizontal className="h-4 w-4 text-slate-500 shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{t('support') || 'Goldaw'}</p>
+                    <p className="text-[10px] text-slate-500 truncate">
+                      {isAdmin ? (t('adminTickets') || 'Admin ticketler') : t('techSupport')}
+                      {!isMobile && t('draggableHint')}
+                    </p>
+                  </div>
+                  {!isMobile && (
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800"
+                      title={listOpen ? t('collapseList') : t('expandList')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setListOpen((v) => !v);
+                      }}
+                    >
+                      {listOpen ? (
+                        <PanelLeftClose className="h-4 w-4" />
+                      ) : (
+                        <PanelLeftOpen className="h-4 w-4" />
+                      )}
+                    </button>
                   )}
-                </button>
-                <button
-                  type="button"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-                  onClick={() => setOpen(false)}
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                  <button
+                    type="button"
+                    className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 touch-manipulation"
+                    onClick={() => setOpen(false)}
+                    aria-label={t('close')}
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex-1 min-h-0 p-2 sm:p-2.5 overflow-hidden">
+              <div className="flex-1 min-h-0 p-1.5 sm:p-2.5 overflow-hidden">
                 <SupportChat
                   mode={isAdmin ? 'admin' : 'user'}
                   embedded
