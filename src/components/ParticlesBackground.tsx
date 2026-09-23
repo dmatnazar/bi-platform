@@ -121,25 +121,25 @@ function optionsFor(theme: Theme, mode: 'dark' | 'light') {
     return {
       ...base,
       particles: {
-        number: { value: 35, density: { enable: true, area: 1000 } },
+        number: { value: light ? 48 : 35, density: { enable: true, area: 900 } },
         color: {
           value: light
             ? ['#4f46e5', '#0891b2', '#7c3aed', '#db2777', '#16a34a']
             : ['#818cf8', '#22d3ee', '#c084fc', '#f472b6', '#4ade80'],
         },
         shape: { type: ['circle', 'edge'] },
-        opacity: { value: { min: light ? 0.12 : 0.08, max: light ? 0.4 : 0.35 } },
-        size: { value: { min: 1, max: 3 } },
+        opacity: { value: { min: light ? 0.28 : 0.08, max: light ? 0.65 : 0.35 } },
+        size: { value: { min: light ? 1.5 : 1, max: light ? 3.5 : 3 } },
         links: {
           enable: true,
           distance: 120,
-          color: light ? '#94a3b8' : '#475569',
-          opacity: light ? 0.22 : 0.15,
+          color: light ? '#6366f1' : '#475569',
+          opacity: light ? 0.35 : 0.15,
           width: 1,
         },
         move: {
           enable: true,
-          speed: 0.6,
+          speed: light ? 0.75 : 0.6,
           direction: 'none',
           random: true,
           outModes: { default: 'out' },
@@ -156,29 +156,29 @@ function optionsFor(theme: Theme, mode: 'dark' | 'light') {
     };
   }
 
-  // subtle (app shell)
+  // subtle (app shell) — light: more visible particles
   return {
     ...base,
     particles: {
-      number: { value: light ? 28 : 22, density: { enable: true, area: 1100 } },
+      number: { value: light ? 42 : 22, density: { enable: true, area: light ? 900 : 1100 } },
       color: {
         value: light
-          ? ['#6366f1', '#06b6d4', '#a855f7', '#f43f5e', '#22c55e']
+          ? ['#4f46e5', '#0891b2', '#7c3aed', '#db2777', '#16a34a', '#ea580c']
           : ['#818cf8', '#22d3ee', '#c084fc', '#fb7185', '#4ade80'],
       },
       shape: { type: 'circle' },
-      opacity: { value: { min: light ? 0.2 : 0.12, max: light ? 0.5 : 0.35 } },
-      size: { value: { min: 1, max: 2.5 } },
+      opacity: { value: { min: light ? 0.35 : 0.12, max: light ? 0.7 : 0.35 } },
+      size: { value: { min: light ? 1.5 : 1, max: light ? 3.5 : 2.5 } },
       links: {
         enable: true,
-        distance: 110,
+        distance: light ? 130 : 110,
         color: light ? '#6366f1' : '#64748b',
-        opacity: light ? 0.28 : 0.18,
-        width: 1,
+        opacity: light ? 0.4 : 0.18,
+        width: light ? 1.2 : 1,
       },
       move: {
         enable: true,
-        speed: 0.4,
+        speed: light ? 0.55 : 0.4,
         outModes: { default: 'out' },
       },
     },

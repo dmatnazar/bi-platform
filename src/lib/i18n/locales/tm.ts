@@ -901,6 +901,11 @@ export const tm = {
   editDashboard: 'Dashboard üýtget',
   statusTrashed: 'Pozulan',
   ticketWord: 'ticket',
+  demoHint: 'Platformanyň mümkinçilikleri · dashboard · Hasabym Group',
+  navDemoPage: 'Demo Page',
+  partners: 'Hyzmatdaşlar',
+  capabilities: 'Mümkinçilikler',
+  texts: 'Tekstler',
 } as const;
 
 export type TmKey = keyof typeof tm;

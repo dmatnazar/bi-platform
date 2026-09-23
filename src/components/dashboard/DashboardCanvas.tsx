@@ -1106,9 +1106,9 @@ export function DashboardCanvas({
         typeof document !== 'undefined' &&
         createPortal(
           <div className="fixed inset-0 z-[2147481500] flex items-stretch justify-center p-0">
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
+            <div className="bi-widget-fullscreen-overlay absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setExpandedId(null)} />
             {/* Edge-to-edge fullscreen — no side gaps / no max-width cap */}
-            <div className="relative w-full h-[100dvh] max-w-none rounded-none border-0 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
+            <div className="bi-widget-fullscreen-panel relative w-full h-[100dvh] max-w-none rounded-none border-0 bg-slate-950 shadow-2xl flex flex-col overflow-hidden z-10">
               <div className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 border-b border-slate-800 shrink-0 relative">
                 <h3 className="text-sm sm:text-base font-semibold text-white flex-1 truncate min-w-0">
                   {expandedWidget.title}

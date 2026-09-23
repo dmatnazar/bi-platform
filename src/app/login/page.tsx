@@ -3,7 +3,7 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X, Headphones } from 'lucide-react';
+import { BarChart3, Eye, EyeOff, AlertTriangle, Bell, CheckCircle2, X, Headphones, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { ParticlesBackground } from '@/components/ParticlesBackground';
 import { Input } from '@/components/ui/Input';
@@ -393,6 +393,18 @@ export default function LoginPage() {
           <Button type="submit" className="w-full" loading={loading} size="lg">
             {loading ? t('wait') : t('signInAlt')}
           </Button>
+
+          <Link
+            href="/demo"
+            className="flex w-full items-center justify-center gap-2 h-11 rounded-xl border border-violet-400/40 bg-gradient-to-r from-violet-600/25 to-indigo-600/20 hover:from-violet-600/35 hover:to-indigo-600/30 text-sm font-semibold text-violet-100 shadow-lg shadow-violet-900/20 transition-all"
+          >
+            <Sparkles className="h-4 w-4 text-violet-300" />
+            Demo
+          </Link>
+          <p className="text-center text-[11px] text-slate-500 -mt-2 leading-snug">
+            {t('demoHint') ||
+              'Platformanyň mümkinçilikleri · dashboard · Hasabym Group'}
+          </p>
 
           {registrationEnabled && (
             <p className="text-center text-xs sm:text-sm text-slate-400 leading-relaxed">

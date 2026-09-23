@@ -40,7 +40,8 @@ export type PermissionKey =
   | 'edit_news'
   | 'delete_news'
   | 'handle_support'
-  | 'manage_support_contacts';
+  | 'manage_support_contacts'
+  | 'manage_demo_page';
 
 export type RolePermissionMatrix = Record<StaffRole, Partial<Record<PermissionKey, boolean>>>;
 
@@ -89,6 +90,7 @@ export const PERMISSION_DEFS: PermissionDef[] = [
   { key: 'delete_news', label: 'Habar pozmak', description: 'Habary doly pozmak', group: 'Mazmun' },
   { key: 'handle_support', label: 'Tehniki goldaw', description: 'Ticket gormek we jogap', group: 'Mazmun' },
   { key: 'manage_support_contacts', label: 'Goldaw kontaktlary', description: 'Login goldaw kontaktlary', group: 'Mazmun', superOnly: true },
+  { key: 'manage_demo_page', label: 'Demo Page', description: 'Info/Demo sahypa tekstleri, banner, firmalar', group: 'Mazmun' },
 ];
 
 export const ALL_PERMISSION_KEYS: PermissionKey[] = PERMISSION_DEFS.map((d) => d.key);
@@ -114,6 +116,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMatrix = {
     manage_apis: true, manage_connections: true, manage_apps: false, manage_settings: false,
     manage_mail_settings: false, manage_permissions: false,
     edit_news: true, delete_news: true, handle_support: true, manage_support_contacts: false,
+    manage_demo_page: true,
   },
   editor: {
     ...allFalse(),
@@ -127,6 +130,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionMatrix = {
     manage_apis: false, manage_connections: false, manage_apps: false, manage_settings: false,
     manage_mail_settings: false, manage_permissions: false,
     edit_news: true, delete_news: true, handle_support: true, manage_support_contacts: false,
+    manage_demo_page: false,
   },
   viewer: { ...allFalse(), view_dashboards: true },
 };

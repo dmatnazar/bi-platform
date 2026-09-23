@@ -901,4 +901,9 @@ export const ru = {
   editDashboard: 'Изменить дашборд',
   statusTrashed: 'Удалённые',
   ticketWord: 'тикет',
+  demoHint: 'Возможности платформы · дашборд · Hasabym Group',
+  navDemoPage: 'Demo Page',
+  partners: 'Партнёры',
+  capabilities: 'Возможности',
+  texts: 'Тексты',
 } as const;

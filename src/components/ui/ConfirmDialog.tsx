@@ -85,8 +85,7 @@ export function confirmDialog(opts: {
   stayLabel?: string;
   danger?: boolean;
 }) {
-  const { t } = useLocale();
-
+  // Must NOT call React hooks here — this is a plain async helper used from event handlers.
   return useConfirmStore.getState().show(opts);
 }
 

@@ -22,6 +22,7 @@ import {
   Newspaper,
   Headphones,
   Shield,
+  Sparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ProfilePanel } from '@/components/profile/ProfilePanel';
@@ -178,6 +179,7 @@ export function Sidebar({ user }: Props) {
   const appsOk = p('manage_apps', canManageApps(user));
   const settingsOk = p('manage_settings', canManageSettings(user));
   const permissionsOk = p('manage_permissions', superA);
+  const demoPageOk = p('manage_demo_page', superA || isAdmin(user));
 
   const nav: {
     href: string;
@@ -232,6 +234,9 @@ export function Sidebar({ user }: Props) {
       : []),
     ...(appsOk ? [{ href: '/admin/apps', label: t('navApps'), icon: AppWindow }] : []),
     ...(settingsOk ? [{ href: '/admin/settings', label: t('navSettings'), icon: Settings }] : []),
+    ...(demoPageOk
+      ? [{ href: '/admin/demo-page', label: t('navDemoPage') || 'Demo Page', icon: Sparkles }]
+      : []),
     // Rugsatlar — diňe super admin (matrix + hard lock)
     ...(permissionsOk || superA
       ? [{ href: '/admin/permissions', label: t('navPermissions'), icon: Shield }]

@@ -389,9 +389,45 @@ export default function DevicesPage() {
     }
   }
 
+  /** Firma eýýäm başga enjama baglymy? (bir firma = bir enjam) */
+  function firmsTakenByOtherDevice(slugs: string[], currentDeviceId: string) {
+    const taken: { slug: string; deviceName: string }[] = [];
+    for (const slug of slugs) {
+      const other = devices.find((d) => {
+        const did = String(d.id || d.deviceId || '');
+        if (did === currentDeviceId) return false;
+        const dSlugs = [
+          ...(d.companySlugs || []),
+          d.tenantSlug || '',
+        ]
+          .map((s) => String(s).trim())
+          .filter(Boolean);
+        return dSlugs.includes(slug) && (d.status === 'approved' || d.status === 'pending');
+      });
+      if (other) {
+        taken.push({
+          slug,
+          deviceName: other.hostname || other.name || other.id || other.deviceId || '?',
+        });
+      }
+    }
+    return taken;
+  }
+
   async function submitApprove() {
     if (!approveId || selectedSlugs.length === 0) {
       toastError(t('selectFirm'), t('selectAtLeastOneCompany'));
+      return;
+    }
+    const conflicts = firmsTakenByOtherDevice(selectedSlugs, approveId);
+    if (conflicts.length > 0) {
+      const msg = conflicts
+        .map((c) => `«${c.slug}» → ${c.deviceName}`)
+        .join('\n');
+      toastWarning(
+        t('firmAlreadyHasDevice') || 'Firma eýýäm enjama bagly',
+        (t('firmOneDeviceOnly') || 'Bir firmada diňe bir enjam bolup bilýär:') + '\n' + msg
+      );
       return;
     }
     setActing(approveId);
@@ -435,27 +471,34 @@ export default function DevicesPage() {
   }
 
   async function removeDevice(d: Device) {
+    const deviceKey = String(d.id || d.deviceId || '').trim();
+    if (!deviceKey) {
+      toastError(t('deleteDevice') || 'Poz', 'Device id ýok');
+      return;
+    }
     const ok = await confirmDialog({
-      title: t('deleteDevice'),
-      message: `«${d.hostname || d.id}» enjamy pozulsynmy? Tunnel we baglanyşyk ýitýär.`,
-      confirmLabel: t('delete'),
+      title: t('deleteDevice') || 'Enjamy poz',
+      message: `«${d.hostname || d.name || deviceKey}» enjamy pozulsynmy? Tunnel we baglanyşyk ýitýär.`,
+      confirmLabel: t('delete') || 'Poz',
       danger: true,
     });
     if (!ok) return;
-    setActing(d.id);
+    setActing(deviceKey);
     try {
       const res = await fetch('/api/devices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', id: d.id }),
+        body: JSON.stringify({ action: 'delete', id: deviceKey }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toastError(t('confirmDeleteTitle'), data?.error || t('failed'));
+        toastError(t('confirmDeleteTitle') || 'Pozup bolmady', data?.error || t('failed') || 'Şowsuz');
         return;
       }
-      toastSuccess(t('deleted'), d.hostname || d.id);
+      toastSuccess(t('deleted') || 'Pozuldy', d.hostname || d.name || deviceKey);
       await load();
+    } catch (e) {
+      toastError(t('failed') || 'Ýalňyşlyk', String(e));
     } finally {
       setActing(null);
     }

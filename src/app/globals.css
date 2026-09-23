@@ -307,22 +307,22 @@ html.light .border-slate-600 {
 }
 
 html.light .text-white {
-  color: #0f172a !important;
+  color: #020617 !important;
 }
 html.light .text-slate-100 {
-  color: #1e293b !important;
+  color: #0f172a !important;
 }
 html.light .text-slate-200 {
-  color: #334155 !important;
+  color: #1e293b !important;
 }
 html.light .text-slate-300 {
-  color: #475569 !important;
+  color: #334155 !important;
 }
 html.light .text-slate-400 {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 html.light .text-slate-500 {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 html.light .hover\:text-white:hover,
 html.light .hover\:text-slate-200:hover,
@@ -372,7 +372,7 @@ html.light .font-mono {
 
 /* ── Extra light-theme contrast fixes (dark unchanged) ── */
 html.light .text-slate-600 {
-  color: #94a3b8 !important;
+  color: #64748b !important;
 }
 html.light .text-indigo-300,
 html.light .text-indigo-300\/90 {
@@ -494,7 +494,7 @@ html.light .ring-slate-800 {
 
 /* Disabled-looking slate-600 on light should stay muted but readable */
 html.light .text-slate-600 {
-  color: #94a3b8 !important;
+  color: #64748b !important;
 }
 
 /* Hover indigo on light */
@@ -612,7 +612,7 @@ html.light .text-slate-400 {
   color: #475569 !important; /* darker for module names */
 }
 html.light .text-slate-500 {
-  color: #64748b !important;
+  color: #475569 !important;
 }
 html.light .text-slate-300 {
   color: #334155 !important;
@@ -1615,4 +1615,377 @@ html.light .bi-table-tool-btn {
 }
 html.light button:has(.bi-table-tool-icon) span {
   color: #0f172a !important;
+}
+
+
+/* ── Light v16: stronger body / muted contrast ── */
+html.light {
+  --foreground: #020617;
+  --muted-foreground: #334155;
+}
+html.light body {
+  color: #020617;
+}
+html.light .text-slate-400\/90,
+html.light .text-slate-500\/90 {
+  color: #475569 !important;
+}
+
+/* ── Scroll reveal (Dribbble-like) ── */
+@keyframes bi-reveal-up {
+  from { opacity: 0; transform: translateY(28px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes bi-reveal-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.bi-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.bi-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.bi-reveal-delay-1 { transition-delay: 0.08s; }
+.bi-reveal-delay-2 { transition-delay: 0.16s; }
+.bi-reveal-delay-3 { transition-delay: 0.24s; }
+.bi-reveal-delay-4 { transition-delay: 0.32s; }
+.bi-reveal-delay-5 { transition-delay: 0.4s; }
+@media (prefers-reduced-motion: reduce) {
+  .bi-reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* Seamless infinite partner marquee */
+@keyframes bi-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.bi-marquee-track {
+  display: flex;
+  width: max-content;
+  gap: 1.5rem;
+  animation: bi-marquee 32s linear infinite;
+}
+.bi-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* Light: widget cards / charts more contrast */
+html.light .bi-widget-card,
+html.light .react-grid-item > div {
+  border-color: #cbd5e1 !important;
+}
+html.light .echarts-for-react canvas {
+  filter: none;
+}
+
+/* ── Light v17: fullscreen widget overlay readable ── */
+html.light .bi-widget-fullscreen-overlay {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+html.light .bi-widget-fullscreen-panel {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+/* Chart axis labels on light (echarts often sets light colors) */
+html.light .bi-widget-card .text-slate-400,
+html.light .bi-widget-card .text-slate-500 {
+  color: #334155 !important;
+}
+
+/* ── Demo page / dashboard light contrast for fields & values ── */
+html.light .bi-demo-card .text-slate-400,
+html.light .bi-demo-card .text-slate-500 {
+  color: #334155 !important;
+}
+html.light .bi-demo-card th {
+  color: #1e293b !important;
+}
+html.light .bi-demo-card td {
+  color: #0f172a !important;
+}
+html.light select option {
+  color: #0f172a;
+  background: #fff;
+}
+
+/* Soft hover glow on cards */
+.bi-demo-card {
+  backdrop-filter: blur(8px);
+}
+html.light .bi-demo-card {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Demo page light — optimal contrast */
+html.light .bi-demo-widget {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+html.light .bi-demo-widget h3,
+html.light .bi-demo-widget th,
+html.light .bi-demo-widget td,
+html.light .bi-demo-widget p,
+html.light .bi-demo-widget span {
+  /* keep utility classes; reinforce body */
+}
+html.light body {
+  background-color: #f1f5f9;
+}
+
+
+/* ════════════════════════════════════════════════════════
+   DEMO PAGE — Enhanced animations & mobile UX (v2)
+   ════════════════════════════════════════════════════════ */
+
+/* Smooth anchor scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove tap highlight on mobile, add active feedback */
+@media (max-width: 640px) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ── Enhanced scroll reveal with scale ── */
+.bi-reveal {
+  opacity: 0;
+  transform: translateY(32px) scale(0.98);
+  transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.bi-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.bi-reveal-delay-1 { transition-delay: 0.1s; }
+.bi-reveal-delay-2 { transition-delay: 0.18s; }
+.bi-reveal-delay-3 { transition-delay: 0.26s; }
+.bi-reveal-delay-4 { transition-delay: 0.34s; }
+.bi-reveal-delay-5 { transition-delay: 0.42s; }
+
+/* ── KPI stagger entrance ── */
+@keyframes bi-kpi-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.bi-kpi-card {
+  opacity: 0;
+  animation: bi-kpi-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.bi-kpi-card:nth-child(1) { animation-delay: 0.05s; }
+.bi-kpi-card:nth-child(2) { animation-delay: 0.1s; }
+.bi-kpi-card:nth-child(3) { animation-delay: 0.15s; }
+.bi-kpi-card:nth-child(4) { animation-delay: 0.2s; }
+.bi-kpi-card:nth-child(5) { animation-delay: 0.25s; }
+.bi-kpi-card:nth-child(6) { animation-delay: 0.3s; }
+
+/* ── Count-up number pulse on change ── */
+@keyframes bi-num-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.bi-num-pop {
+  animation: bi-num-pop 0.4s ease-out;
+}
+
+/* ── Banner slide transition ── */
+@keyframes bi-banner-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes bi-banner-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+}
+.bi-banner-active {
+  animation: bi-banner-slide-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.bi-banner-inactive {
+  animation: bi-banner-slide-out 0.5s ease-in forwards;
+}
+
+/* ── Floating hero badge ── */
+@keyframes bi-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.bi-float {
+  animation: bi-float 3s ease-in-out infinite;
+}
+
+/* ── Animated hero gradient shimmer ── */
+@keyframes bi-hero-shimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.bi-hero-glow {
+  background-size: 200% 200%;
+  animation: bi-hero-shimmer 8s ease infinite;
+}
+
+/* ── Chart fade-in on render ── */
+@keyframes bi-chart-fade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.bi-chart-in {
+  animation: bi-chart-fade 0.5s ease-out;
+}
+
+/* ── Capability card hover lift ── */
+.bi-cap-card {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.35s ease,
+              box-shadow 0.35s ease;
+}
+.bi-cap-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px -12px rgba(99, 102, 241, 0.35);
+}
+
+/* ── Button active/tap feedback ── */
+.bi-tap {
+  transition: transform 0.12s ease, background-color 0.2s ease, opacity 0.2s ease;
+}
+.bi-tap:active {
+  transform: scale(0.96);
+}
+
+/* ── Mobile: KPI horizontal scroll snap ── */
+@media (max-width: 640px) {
+  .bi-kpi-scroll {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.6rem;
+    padding-bottom: 0.5rem;
+    scrollbar-width: none;
+  }
+  .bi-kpi-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .bi-kpi-scroll > * {
+    scroll-snap-align: start;
+    flex: 0 0 44%;
+    min-width: 44%;
+  }
+}
+
+/* ── Mobile: filter bar sticky ── */
+@media (max-width: 640px) {
+  .bi-filter-bar {
+    position: sticky;
+    top: 3.25rem;
+    z-index: 25;
+    border-radius: 0;
+    margin: 0 -0.75rem;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+/* ── Mobile: reduce chart heights ── */
+@media (max-width: 640px) {
+  .bi-chart-mobile {
+    height: 240px !important;
+  }
+}
+
+/* ── Mobile: table scroll hint ── */
+.bi-table-wrap {
+  position: relative;
+}
+.bi-table-wrap::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  background: linear-gradient(to right, transparent, var(--card, #0f172a));
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+.bi-table-wrap.bi-scroll-right::after {
+  opacity: 0.6;
+}
+@media (min-width: 640px) {
+  .bi-table-wrap::after { display: none; }
+}
+
+/* ── Mobile: better select touch target ── */
+@media (max-width: 640px) {
+  .bi-demo-widget select {
+    min-height: 40px;
+    font-size: 13px;
+  }
+}
+
+/* ── Partner card hover ── */
+.bi-partner-card {
+  transition: transform 0.3s ease, border-color 0.3s ease;
+}
+.bi-partner-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(99, 102, 241, 0.5) !important;
+}
+
+/* ── Respect reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .bi-kpi-card,
+  .bi-banner-active,
+  .bi-banner-inactive,
+  .bi-float,
+  .bi-hero-glow,
+  .bi-chart-in,
+  .bi-num-pop {
+    animation: none !important;
+  }
+  .bi-reveal {
+    transform: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }

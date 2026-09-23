@@ -11,6 +11,7 @@ import {
   canManageApps,
   canHandleSupport,
   canManageStaff as canManageStaffUser,
+  canManageDemoPage,
 } from '@/lib/rbac';
 import { headers } from 'next/headers';
 
@@ -48,6 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     { prefix: '/admin/apps', ok: superA || canManageApps(user) },
     { prefix: '/admin/support', ok: superA || canHandleSupport(user) },
     { prefix: '/admin/staff', ok: superA || canManageStaffUser(user) },
+    { prefix: '/admin/demo-page', ok: superA || canManageDemoPage(user) },
     { prefix: '/admin/sessions', ok: superA || canManageSettings(user) },
     { prefix: '/admin/registrations', ok: superA || canManageStaffUser(user) },
   ];

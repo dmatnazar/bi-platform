@@ -207,6 +207,10 @@ export function canEditNews(user: SessionUser): boolean {
   return userHasPermission(user, 'edit_news');
 }
 
+export function canManageDemoPage(user: SessionUser): boolean {
+  return userHasPermission(user, 'manage_demo_page');
+}
+
 export function canConfirmStaffRegistration(user: SessionUser): boolean {
   return userHasPermission(user, 'confirm_registration');
 }

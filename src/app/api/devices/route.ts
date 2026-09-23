@@ -92,12 +92,6 @@ export async function POST(req: NextRequest) {
     if (!canApproveDevices(user)) {
       return NextResponse.json({ error: 'Rugsat ýok' }, { status: 403 });
     }
-    if (!canApproveDevices(user)) {
-      return NextResponse.json(
-        { error: 'Enjam tassyklamak diňe super admin üçin' },
-        { status: 403 }
-      );
-    }
     const tenantSlugs: string[] = Array.isArray(body.tenantSlugs)
       ? body.tenantSlugs.filter(Boolean)
       : body.tenantSlug
@@ -105,6 +99,42 @@ export async function POST(req: NextRequest) {
         : [];
     if (tenantSlugs.length === 0) {
       return NextResponse.json({ error: 'Iň az bir firma (tenantSlug) saýlaň' }, { status: 400 });
+    }
+    // Bir firma — diňe bir enjam (beýleki enjamda şol slug bar bolsa gadagan)
+    {
+      const listed = await listDevicesOnGateway();
+      if (listed.ok) {
+        const all = listed.data?.devices || [];
+        const conflicts: string[] = [];
+        for (const slug of tenantSlugs) {
+          const other = all.find((d: any) => {
+            const did = String(d.id || d.deviceId || '');
+            if (did === id) return false;
+            const dSlugs = [
+              d.tenantSlug,
+              ...(Array.isArray(d.tenantSlugs) ? d.tenantSlugs : []),
+              ...(Array.isArray(d.companySlugs) ? d.companySlugs : []),
+            ]
+              .map((s: any) => String(s || '').trim())
+              .filter(Boolean);
+            return dSlugs.includes(slug) && d.status !== 'blocked';
+          });
+          if (other) {
+            conflicts.push(
+              `«${slug}» eýýäm «${other.hostname || other.name || other.id}» enjamyna bagly`
+            );
+          }
+        }
+        if (conflicts.length) {
+          return NextResponse.json(
+            {
+              error:
+                'Bir firmada diňe bir enjam bolup bilýär. ' + conflicts.join('; '),
+            },
+            { status: 409 }
+          );
+        }
+      }
     }
     const res = await approveDeviceOnGateway(id, {
       tenantSlugs,
