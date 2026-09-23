@@ -224,14 +224,14 @@ export function DashboardListClient({
       list.push(c);
     };
     const out: { id: string; name: string; slug: string; count: number }[] = [];
-    // Admin/super: all companies (deduped), even empty
-    if (isSuperAdmin || userRole === 'admin' || userRole === 'super_admin') {
+    // Super admin: ähli firmalar (+ dashboard-da bar bolan goşmaça).
+    // Admin: diňe serverden gelen bagly firmalar (companies prop) — başga firma görünmez.
+    if (isSuperAdmin || userRole === 'super_admin') {
       if (companies.length) {
         for (const c of companies) {
           pushUnique(out, { id: c.id, name: c.name, slug: c.slug, count: counts.get(c.id) || 0 });
         }
       }
-      // Include companyIds from dashboards not in companies list
       for (const [id, count] of counts.entries()) {
         pushUnique(out, {
           id,
@@ -239,6 +239,12 @@ export function DashboardListClient({
           slug: companyMap.get(id)?.slug || id,
           count,
         });
+      }
+      return out.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    if (userRole === 'admin') {
+      for (const c of companies) {
+        pushUnique(out, { id: c.id, name: c.name, slug: c.slug, count: counts.get(c.id) || 0 });
       }
       return out.sort((a, b) => a.name.localeCompare(b.name));
     }

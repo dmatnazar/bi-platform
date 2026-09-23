@@ -440,11 +440,17 @@ export default function ConnectionsPage() {
     try {
       const res = await fetch('/api/catalog?refresh=1');
       const data = await res.json();
-      const key = dbKey || 'primary';
-      return (data.endpoints || []).filter(
-        (e: { tenantSlug?: string; dbKey?: string }) =>
-          e.tenantSlug === tenantSlug && (e.dbKey || 'primary') === key
-      ) as LinkedEp[];
+      const key = (dbKey || 'primary').trim() || 'primary';
+      const all = (data.endpoints || []) as LinkedEp[];
+      // 1) Şol tenant + dbKey
+      let matched = all.filter(
+        (e) => e.tenantSlug === tenantSlug && (e.dbKey || 'primary') === key
+      );
+      // 2) Hiç zat tapylmasa — şol tenant-yň ähli API-lary
+      if (matched.length === 0) {
+        matched = all.filter((e) => e.tenantSlug === tenantSlug);
+      }
+      return matched;
     } catch {
       return [];
     }
@@ -643,24 +649,23 @@ export default function ConnectionsPage() {
 
     const oldDb = (editing?.database || '').trim();
     const newDb = form.database.trim();
-    const dbKey = editing?.dbKey || 'primary';
-    const dbChanged = Boolean(editing && oldDb && newDb && oldDb !== newDb);
+    const dbKey = (editing?.dbKey || 'primary').trim() || 'primary';
+    // Database üýtgedildimi (özüne deň däl) — boş → bir zat hem üýtgeşik hasaplanýar
+    const dbChanged = Boolean(editing && newDb && oldDb !== newDb);
 
-    // Database üýtgedilse → bagly API-lary saýlamak üçin modal (awtomat update ýok)
+    // Database üýtgedilse → hemişe API saýlaw modal (awtomat update ýok)
     if (dbChanged) {
       const linked = await fetchLinkedApis(form.tenantSlug, dbKey);
-      if (linked.length > 0) {
-        setApiPickList(linked);
-        setApiPickSelected(new Set(linked.map((e) => e.id))); // default: hemmesi saýlanan
-        setApiPickOldDb(oldDb);
-        setApiPickNewDb(newDb);
-        setApiPickDbKey(dbKey);
-        setApiPickOpen(true);
-        return; // saklamak modal tassyklansoň
-      }
+      setApiPickList(linked);
+      setApiPickSelected(new Set(linked.map((e) => e.id))); // default: hemmesi
+      setApiPickOldDb(oldDb || '—');
+      setApiPickNewDb(newDb);
+      setApiPickDbKey(dbKey);
+      setApiPickOpen(true);
+      return; // saklamak modal tassyklansoň
     }
 
-    // Database üýtgemedi ýa-da bagly API ýok → göni sakla
+    // Database üýtgemedi → göni sakla
     await performSave({
       updateApis: false,
       selectedIds: new Set(),
@@ -1265,32 +1270,38 @@ export default function ConnectionsPage() {
                 </span>
               </div>
               <div className="max-h-[50vh] overflow-y-auto px-2 py-2 space-y-0.5">
-                {apiPickList.map((ep) => (
-                  <label
-                    key={ep.id}
-                    className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-slate-800/60 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      className="mt-1 rounded border-slate-600"
-                      checked={apiPickSelected.has(ep.id)}
-                      onChange={(e) => {
-                        setApiPickSelected((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(ep.id);
-                          else next.delete(ep.id);
-                          return next;
-                        });
-                      }}
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm text-white truncate">{ep.name}</span>
-                      <span className="block text-[11px] text-slate-500 font-mono truncate">
-                        {ep.method} {ep.pathTemplate}
+                {apiPickList.length === 0 ? (
+                  <p className="text-xs text-slate-500 px-2 py-4 text-center">
+                    Bu baglanyşyga bagly API ýok. Diňe baglanyşygy saklap bilersiňiz.
+                  </p>
+                ) : (
+                  apiPickList.map((ep) => (
+                    <label
+                      key={ep.id}
+                      className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-slate-800/60 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        className="mt-1 rounded border-slate-600"
+                        checked={apiPickSelected.has(ep.id)}
+                        onChange={(e) => {
+                          setApiPickSelected((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(ep.id);
+                            else next.delete(ep.id);
+                            return next;
+                          });
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm text-white truncate">{ep.name}</span>
+                        <span className="block text-[11px] text-slate-500 font-mono truncate">
+                          {ep.method} {ep.pathTemplate}
+                        </span>
                       </span>
-                    </span>
-                  </label>
-                ))}
+                    </label>
+                  ))
+                )}
               </div>
               <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-slate-800 bg-slate-950/50">
                 <Button

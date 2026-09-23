@@ -191,16 +191,19 @@ export async function listDashboardsVisibleTo(user: {
     user.role === 'super_admin' ||
     user.role === 'admin' ||
     user.role === 'editor';
+
+  // Diňe super_admin ähli dashboard-lary görýär.
+  // admin / editor — diňe bagly firmalar (companyId + tenantSlugs + tenantIds).
   if (user.isSuperAdmin || user.role === 'super_admin') {
-    // all
+    // all companies
   } else {
-    const allowed = new Set([
-      user.companyId,
-      ...(user.tenantSlugs || []),
-      ...(user.tenantIds || []),
-    ].filter(Boolean));
+    const allowed = new Set(
+      [user.companyId, ...(user.tenantSlugs || []), ...(user.tenantIds || [])].filter(Boolean)
+    );
     list = list.filter((d) => allowed.has(d.companyId));
   }
+
+  // viewer we beýlekiler — diňe public / öz / shared
   if (!isBoss) {
     list = list.filter(
       (d) =>

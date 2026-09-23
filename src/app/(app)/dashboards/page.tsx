@@ -24,16 +24,31 @@ export default async function DashboardsPage() {
       ),
     ]);
     const tenants = catalog.tenants || [];
-    if (isSuperAdmin(user) || user.role === 'admin' || user.role === 'super_admin') {
+    // Diňe super_admin ähli firmalary görýär.
+    // admin / editor / viewer — diňe bagly firmalar.
+    if (isSuperAdmin(user) || user.role === 'super_admin') {
       companies = tenants.map((t: any) => ({
         id: String(t.id || t.slug),
         name: String(t.name || t.slug),
         slug: String(t.slug),
       }));
     } else {
-      const allowedSlugs = new Set([user.companySlug, ...(user.tenantSlugs || [])].filter(Boolean));
+      const allowedSlugs = new Set(
+        [user.companySlug, ...(user.tenantSlugs || [])].filter(Boolean) as string[]
+      );
       companies = tenants
-        .filter((t: any) => allowedSlugs.size === 0 || allowedSlugs.has(t.slug))
+        .filter((t: any) => {
+          if (allowedSlugs.size === 0) {
+            return (
+              String(t.id) === String(user.companyId) ||
+              String(t.slug) === String(user.companyId)
+            );
+          }
+          return (
+            allowedSlugs.has(String(t.slug)) ||
+            String(t.id) === String(user.companyId)
+          );
+        })
         .map((t: any) => ({
           id: String(t.id || t.slug),
           name: String(t.name || t.slug),
@@ -44,12 +59,18 @@ export default async function DashboardsPage() {
     companies = [];
   }
 
-  const catalogTenantIds = companies.map((c) => c.id);
+  // Admin/editor üçin görünýän firmalaryň id + slug — dashboard filter üçin
+  const allowedTenantIds = companies.map((c) => c.id);
+  const allowedTenantSlugs = companies.map((c) => c.slug);
   const dashboards = await listDashboardsVisibleTo({
     ...user,
-    tenantSlugs: user.tenantSlugs || [],
-    tenantIds: catalogTenantIds.filter((id) =>
-      (user.tenantSlugs || []).some((slug) => companies.find((c) => c.id === id)?.slug === slug)
+    tenantSlugs: Array.from(
+      new Set([...(user.tenantSlugs || []), ...allowedTenantSlugs].filter(Boolean))
+    ),
+    tenantIds: Array.from(
+      new Set(
+        [user.companyId, ...(user.tenantIds || []), ...allowedTenantIds].filter(Boolean) as string[]
+      )
     ),
   });
 
@@ -65,7 +86,7 @@ export default async function DashboardsPage() {
       canManageAccess={canManageDashboardAccess(user)}
       companies={companies}
       userRole={user.role}
-      isSuperAdmin={Boolean(user.isSuperAdmin || user.role === 'super_admin' || user.role === 'admin')}
+      isSuperAdmin={Boolean(user.isSuperAdmin || user.role === 'super_admin')}
       userCompanyId={user.companyId}
       companyIdBySlug={Object.fromEntries(idBySlug)}
       userTenantSlugs={user.tenantSlugs || []}

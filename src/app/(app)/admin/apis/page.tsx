@@ -1998,25 +1998,44 @@ function ApisPageInner() {
         </div>
       ) : (
         <div className="space-y-2">
-          {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">{selectedIds.size} saýlandy</span>
-              <Button
-                size="sm"
-                variant="danger"
-                onClick={async () => {
-                  if (!confirm(`${selectedIds.size} API pozulsynmy?`)) return;
-                  for (const id of selectedIds) {
-                    const ep = endpoints.find((e) => e.id === id);
-                    if (ep) await deleteEp(ep, { skipConfirm: true });
-                  }
-                  setSelectedIds(new Set());
-                }}
-              >
-                Saýlananlary poz
-              </Button>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                setSelectedIds(new Set(visibleEndpoints.map((e) => e.id)))
+              }
+            >
+              {t('selectAll')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selectedIds.size === 0}
+              onClick={() => setSelectedIds(new Set())}
+            >
+              {t('deselectAll')}
+            </Button>
+            {selectedIds.size > 0 && (
+              <>
+                <span className="text-xs text-slate-400">{selectedIds.size} saýlandy</span>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={async () => {
+                    if (!confirm(`${selectedIds.size} API pozulsynmy?`)) return;
+                    for (const id of selectedIds) {
+                      const ep = endpoints.find((e) => e.id === id);
+                      if (ep) await deleteEp(ep, { skipConfirm: true });
+                    }
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  Saýlananlary poz
+                </Button>
+              </>
+            )}
+          </div>
           <DataTable
             columns={columns}
             rows={visibleEndpoints}
