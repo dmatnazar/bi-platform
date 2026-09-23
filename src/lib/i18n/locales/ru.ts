@@ -213,6 +213,7 @@ export const ru = {
   dbChangedSelectApisHint: 'Отметьте API, которые нужно обновить. После этого виджеты тоже перейдут на новую БД.',
   widgetsUpdatedForDb: '{n} виджетов привязаны к новой БД',
   selectAll: 'Выбрать все',
+  deselectAll: 'Снять все',
   companySettingsSaved: 'Настройки компании сохранены',
   newsAdded: 'Новость добавлена',
   newsUpdated: 'Новость изменена',

@@ -213,6 +213,7 @@ export const tm = {
   dbChangedSelectApisHint: 'Update etmek isleýän API-laryňyzy belläň. Soň widget-ler hem täze DB-e geçýär.',
   widgetsUpdatedForDb: '{n} widget täze DB-e baglandy',
   selectAll: 'Hemmesini saýla',
+  deselectAll: 'Ählisini aýyr',
   companySettingsSaved: 'Firma sazlamalary saklandy',
   newsAdded: 'Habar goşuldy',
   newsUpdated: 'Habar üýtgedildi',

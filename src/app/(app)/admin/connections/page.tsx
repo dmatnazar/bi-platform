@@ -1239,25 +1239,32 @@ export default function ConnectionsPage() {
                   {t('dbChangedSelectApisHint')}
                 </p>
               </div>
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-800/80">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs h-7"
+                  onClick={() =>
+                    setApiPickSelected(new Set(apiPickList.map((x) => x.id)))
+                  }
+                >
+                  {t('selectAll')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs h-7"
+                  onClick={() => setApiPickSelected(new Set())}
+                >
+                  {t('deselectAll')}
+                </Button>
+                <span className="ml-auto text-[11px] text-slate-500">
+                  {apiPickSelected.size}/{apiPickList.length}
+                </span>
+              </div>
               <div className="max-h-[50vh] overflow-y-auto px-2 py-2 space-y-0.5">
-                <label className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-400 cursor-pointer hover:bg-slate-800/60 rounded-lg">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-600"
-                    checked={
-                      apiPickList.length > 0 &&
-                      apiPickSelected.size === apiPickList.length
-                    }
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setApiPickSelected(new Set(apiPickList.map((x) => x.id)));
-                      } else {
-                        setApiPickSelected(new Set());
-                      }
-                    }}
-                  />
-                  {t('selectAll')} ({apiPickSelected.size}/{apiPickList.length})
-                </label>
                 {apiPickList.map((ep) => (
                   <label
                     key={ep.id}
