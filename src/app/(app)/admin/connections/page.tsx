@@ -98,6 +98,28 @@ export default function ConnectionsPage() {
       size?: number;
     }>
   >([]);
+
+  // Database üýtgedilende API saýlaw modal
+  type LinkedEp = {
+    id: string;
+    tenantSlug: string;
+    name: string;
+    method: string;
+    pathTemplate: string;
+    dbKey?: string;
+    sqlQuery?: string;
+    paramsSchema?: unknown;
+    cacheTtlSec?: number;
+    maxRows?: number;
+    authRequired?: boolean;
+  };
+  const [apiPickOpen, setApiPickOpen] = useState(false);
+  const [apiPickList, setApiPickList] = useState<LinkedEp[]>([]);
+  const [apiPickSelected, setApiPickSelected] = useState<Set<string>>(new Set());
+  const [apiPickOldDb, setApiPickOldDb] = useState('');
+  const [apiPickNewDb, setApiPickNewDb] = useState('');
+  const [apiPickDbKey, setApiPickDbKey] = useState('primary');
+
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
 
@@ -414,70 +436,130 @@ export default function ConnectionsPage() {
   }
 
   /** Fetch catalog endpoints linked to a tenant + dbKey */
-  async function fetchLinkedApis(tenantSlug: string, dbKey: string) {
+  async function fetchLinkedApis(tenantSlug: string, dbKey: string): Promise<LinkedEp[]> {
     try {
       const res = await fetch('/api/catalog?refresh=1');
       const data = await res.json();
       const key = dbKey || 'primary';
-      const eps = (data.endpoints || []).filter(
+      return (data.endpoints || []).filter(
         (e: { tenantSlug?: string; dbKey?: string }) =>
           e.tenantSlug === tenantSlug && (e.dbKey || 'primary') === key
-      );
-      return eps as Array<{
-        id: string;
-        tenantSlug: string;
-        name: string;
-        method: string;
-        pathTemplate: string;
-        dbKey?: string;
-        sqlQuery?: string;
-        paramsSchema?: unknown;
-        cacheTtlSec?: number;
-        maxRows?: number;
-        authRequired?: boolean;
-      }>;
+      ) as LinkedEp[];
     } catch {
       return [];
     }
   }
 
-  async function save() {
-    if (!form.tenantSlug || !form.host.trim()) {
-      toastError('Zerur', form.dbType === 'excel' ? t('needCompanyExcel') : t('needCompanyHost'));
-      return;
-    }
-    if (!form.database.trim()) {
-      toastError('Zerur', form.dbType === 'excel' ? t('enterSheetName') : t('selectOrTypeDatabase'));
-      return;
-    }
-    if (form.dbType !== 'excel' && !form.username.trim()) {
-      toastError('Zerur', 'Username gerek');
-      return;
-    }
-
-    // Database üýtgedilse — bagly API-lar barada warning
-    let shouldUpdateApis = false;
-    let linkedApis: Awaited<ReturnType<typeof fetchLinkedApis>> = [];
-    const oldDb = editing?.database?.trim() || '';
-    const newDb = form.database.trim();
-    const dbChanged = Boolean(editing && oldDb && newDb && oldDb !== newDb);
-
-    if (dbChanged) {
-      linkedApis = await fetchLinkedApis(form.tenantSlug, editing!.dbKey || 'primary');
-      if (linkedApis.length > 0) {
-        const choice = await confirmDialog({
-          title: t('dbChangedUpdateApisTitle'),
-          message: t('dbChangedUpdateApisMsg')
-            .replace('{oldDb}', oldDb)
-            .replace('{newDb}', newDb)
-            .replace('{n}', String(linkedApis.length)),
-          confirmLabel: t('dbChangedUpdateApisYes'),
-          cancelLabel: t('dbChangedUpdateApisNo'),
+  /** Saýlanan API-lary täze databaseName bilen update et */
+  async function updateSelectedApis(
+    apis: LinkedEp[],
+    selectedIds: Set<string>,
+    newDb: string,
+    dbKey: string
+  ): Promise<number> {
+    let okCount = 0;
+    for (const ep of apis) {
+      if (!selectedIds.has(ep.id)) continue;
+      try {
+        const ures = await fetch('/api/endpoints', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: ep.id,
+            tenantSlug: ep.tenantSlug,
+            name: ep.name,
+            pathTemplate: ep.pathTemplate,
+            method: ep.method,
+            dbKey: ep.dbKey || dbKey || 'primary',
+            sqlQuery: ep.sqlQuery,
+            paramsSchema: ep.paramsSchema,
+            cacheTtlSec: ep.cacheTtlSec,
+            maxRows: ep.maxRows,
+            authRequired: ep.authRequired,
+            databaseName: newDb,
+          }),
         });
-        shouldUpdateApis = Boolean(choice);
+        if (ures.ok) okCount += 1;
+      } catch {
+        /* continue */
       }
     }
+    return okCount;
+  }
 
+  /**
+   * Saýlanan API-lara bagly widget-leriň dataSource.dbKey-ini täze DB baglanyşygyna
+   * gabat getir we dashboard-lary sakla (sonky üýtgedilen DB ulanylsyn).
+   */
+  async function updateWidgetsForApis(
+    selectedIds: Set<string>,
+    dbKey: string,
+    tenantSlug: string
+  ): Promise<number> {
+    if (selectedIds.size === 0) return 0;
+    let widgetCount = 0;
+    try {
+      const res = await fetch('/api/dashboards');
+      const data = await res.json();
+      const dashboards = (data.dashboards || data || []) as Array<{
+        id: string;
+        widgets?: any[];
+        [k: string]: unknown;
+      }>;
+      for (const dash of dashboards) {
+        if (!Array.isArray(dash.widgets) || dash.widgets.length === 0) continue;
+        let changed = false;
+        const nextWidgets = dash.widgets.map((w: any) => {
+          let wChanged = false;
+          let next = w;
+          const ds = w?.dataSource;
+          if (ds?.endpointId && selectedIds.has(ds.endpointId)) {
+            // Widget-i şu baglanyşygyň dbKey-ine bagla → täze database ulanylýar
+            next = {
+              ...next,
+              dataSource: { ...ds, dbKey, tenantSlug: ds.tenantSlug || tenantSlug },
+            };
+            wChanged = true;
+            widgetCount += 1;
+          }
+          // drillDown API hem saýlanan bolsa
+          const dd = next?.dataSource?.drillDown;
+          if (dd?.endpointId && selectedIds.has(dd.endpointId)) {
+            next = {
+              ...next,
+              dataSource: {
+                ...next.dataSource,
+                drillDown: { ...dd, dbKey },
+              },
+            };
+            wChanged = true;
+            widgetCount += 1;
+          }
+          if (wChanged) changed = true;
+          return next;
+        });
+        if (changed) {
+          await fetch(`/api/dashboards/${dash.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ widgets: nextWidgets }),
+          });
+        }
+      }
+    } catch {
+      /* ignore widget sync errors */
+    }
+    return widgetCount;
+  }
+
+  /** Connection-y sakla + islege görä API/widget update */
+  async function performSave(opts: {
+    updateApis: boolean;
+    selectedIds: Set<string>;
+    linkedApis: LinkedEp[];
+    newDb: string;
+    dbKey: string;
+  }) {
     setSaving(true);
     try {
       const res = await fetch('/api/connections', {
@@ -504,58 +586,88 @@ export default function ConnectionsPage() {
         return;
       }
 
-      // Hawa bolsa — bagly API-laryň databaseName-ini täze DB-e update et
-      if (shouldUpdateApis && linkedApis.length > 0) {
-        let okCount = 0;
-        for (const ep of linkedApis) {
-          try {
-            const ures = await fetch('/api/endpoints', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: ep.id,
-                tenantSlug: ep.tenantSlug,
-                name: ep.name,
-                pathTemplate: ep.pathTemplate,
-                method: ep.method,
-                dbKey: ep.dbKey || editing?.dbKey || 'primary',
-                sqlQuery: ep.sqlQuery,
-                paramsSchema: ep.paramsSchema,
-                cacheTtlSec: ep.cacheTtlSec,
-                maxRows: ep.maxRows,
-                authRequired: ep.authRequired,
-                databaseName: newDb,
-              }),
-            });
-            if (ures.ok) okCount += 1;
-          } catch {
-            /* continue */
-          }
-        }
-        if (okCount === linkedApis.length) {
-          toastSuccess(
-            t('connectionSaved'),
-            t('apisUpdatedToNewDb').replace('{n}', String(okCount))
-          );
-        } else if (okCount > 0) {
-          toastInfo(
-            t('connectionSaved'),
-            `${t('apisUpdatedToNewDb').replace('{n}', String(okCount))} · ${t('apisUpdatePartialFail')}`
-          );
-        } else {
-          toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
-          toastError(t('apisUpdatePartialFail'));
-        }
+      let apiOk = 0;
+      let widgetOk = 0;
+      if (opts.updateApis && opts.selectedIds.size > 0) {
+        apiOk = await updateSelectedApis(
+          opts.linkedApis,
+          opts.selectedIds,
+          opts.newDb,
+          opts.dbKey
+        );
+        widgetOk = await updateWidgetsForApis(
+          opts.selectedIds,
+          opts.dbKey,
+          form.tenantSlug
+        );
+      }
+
+      if (apiOk > 0) {
+        const extra =
+          widgetOk > 0
+            ? ` · ${t('widgetsUpdatedForDb').replace('{n}', String(widgetOk))}`
+            : '';
+        toastSuccess(
+          t('connectionSaved'),
+          t('apisUpdatedToNewDb').replace('{n}', String(apiOk)) + extra
+        );
+      } else if (opts.updateApis && opts.selectedIds.size > 0) {
+        toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
+        toastError(t('apisUpdatePartialFail'));
       } else {
         toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
       }
 
+      setApiPickOpen(false);
       setModal(false);
       await load();
       if (form.tenantSlug) setSelectedFirm(form.tenantSlug);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function save() {
+    if (!form.tenantSlug || !form.host.trim()) {
+      toastError('Zerur', form.dbType === 'excel' ? t('needCompanyExcel') : t('needCompanyHost'));
+      return;
+    }
+    if (!form.database.trim()) {
+      toastError('Zerur', form.dbType === 'excel' ? t('enterSheetName') : t('selectOrTypeDatabase'));
+      return;
+    }
+    if (form.dbType !== 'excel' && !form.username.trim()) {
+      toastError('Zerur', 'Username gerek');
+      return;
+    }
+
+    const oldDb = (editing?.database || '').trim();
+    const newDb = form.database.trim();
+    const dbKey = editing?.dbKey || 'primary';
+    const dbChanged = Boolean(editing && oldDb && newDb && oldDb !== newDb);
+
+    // Database üýtgedilse → bagly API-lary saýlamak üçin modal (awtomat update ýok)
+    if (dbChanged) {
+      const linked = await fetchLinkedApis(form.tenantSlug, dbKey);
+      if (linked.length > 0) {
+        setApiPickList(linked);
+        setApiPickSelected(new Set(linked.map((e) => e.id))); // default: hemmesi saýlanan
+        setApiPickOldDb(oldDb);
+        setApiPickNewDb(newDb);
+        setApiPickDbKey(dbKey);
+        setApiPickOpen(true);
+        return; // saklamak modal tassyklansoň
+      }
+    }
+
+    // Database üýtgemedi ýa-da bagly API ýok → göni sakla
+    await performSave({
+      updateApis: false,
+      selectedIds: new Set(),
+      linkedApis: [],
+      newDb,
+      dbKey,
+    });
   }
 
   async function remove(c: ConnRow) {
@@ -1102,6 +1214,118 @@ export default function ConnectionsPage() {
               </div>
               <div className="border-t border-slate-800 px-4 py-2 text-[10px] text-slate-500">
                 Diňe .xlsx / .xls / .csv. Papka üstüne basyp içine giriň.
+              </div>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {/* Database üýtgedilende — API saýlaw modal */}
+      {apiPickOpen && (
+        <ModalPortal open={apiPickOpen}>
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60">
+            <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800">
+                <h3 className="text-base font-semibold text-white">
+                  {t('dbChangedUpdateApisTitle')}
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  {t('dbChangedUpdateApisMsg')
+                    .replace('{oldDb}', apiPickOldDb)
+                    .replace('{newDb}', apiPickNewDb)
+                    .replace('{n}', String(apiPickList.length))}
+                </p>
+                <p className="text-[11px] text-amber-300/90 mt-1">
+                  {t('dbChangedSelectApisHint')}
+                </p>
+              </div>
+              <div className="max-h-[50vh] overflow-y-auto px-2 py-2 space-y-0.5">
+                <label className="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-400 cursor-pointer hover:bg-slate-800/60 rounded-lg">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-600"
+                    checked={
+                      apiPickList.length > 0 &&
+                      apiPickSelected.size === apiPickList.length
+                    }
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setApiPickSelected(new Set(apiPickList.map((x) => x.id)));
+                      } else {
+                        setApiPickSelected(new Set());
+                      }
+                    }}
+                  />
+                  {t('selectAll')} ({apiPickSelected.size}/{apiPickList.length})
+                </label>
+                {apiPickList.map((ep) => (
+                  <label
+                    key={ep.id}
+                    className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-slate-800/60 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 rounded border-slate-600"
+                      checked={apiPickSelected.has(ep.id)}
+                      onChange={(e) => {
+                        setApiPickSelected((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(ep.id);
+                          else next.delete(ep.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm text-white truncate">{ep.name}</span>
+                      <span className="block text-[11px] text-slate-500 font-mono truncate">
+                        {ep.method} {ep.pathTemplate}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-slate-800 bg-slate-950/50">
+                <Button
+                  className="flex-1"
+                  loading={saving}
+                  disabled={apiPickSelected.size === 0}
+                  onClick={() =>
+                    void performSave({
+                      updateApis: true,
+                      selectedIds: apiPickSelected,
+                      linkedApis: apiPickList,
+                      newDb: apiPickNewDb,
+                      dbKey: apiPickDbKey,
+                    })
+                  }
+                >
+                  {t('dbChangedUpdateApisYes')}
+                  {apiPickSelected.size > 0 ? ` (${apiPickSelected.size})` : ''}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  loading={saving}
+                  onClick={() =>
+                    void performSave({
+                      updateApis: false,
+                      selectedIds: new Set(),
+                      linkedApis: apiPickList,
+                      newDb: apiPickNewDb,
+                      dbKey: apiPickDbKey,
+                    })
+                  }
+                >
+                  {t('dbChangedUpdateApisNo')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={saving}
+                  onClick={() => setApiPickOpen(false)}
+                >
+                  {t('cancel')}
+                </Button>
               </div>
             </div>
           </div>
