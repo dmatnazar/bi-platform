@@ -36,6 +36,13 @@ async function fetchCatalog(): Promise<CatalogEndpoint[]> {
   return Array.isArray(data.endpoints) ? data.endpoints : [];
 }
 
+/** Force next getEndpointCatalog() to re-fetch (e.g. after connection/API DB change). */
+export function invalidateEndpointCatalog() {
+  cache = null;
+  lastFetchedAt = 0;
+  inflight = null;
+}
+
 /** Shared, lightly-cached endpoint catalog. */
 export async function getEndpointCatalog(force = false): Promise<CatalogEndpoint[]> {
   const stale = Date.now() - lastFetchedAt > TTL_MS;

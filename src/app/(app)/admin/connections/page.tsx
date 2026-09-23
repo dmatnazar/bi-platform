@@ -28,6 +28,7 @@ import { toastSuccess, toastError, toastInfo } from '@/components/ui/Toast';
 import { confirmDialog } from '@/components/ui/ConfirmDialog';
 import { cn } from '@/lib/utils';
 import { useLocale } from '@/components/LocaleProvider';
+import { invalidateEndpointCatalog } from '@/lib/endpoint-catalog-client';
 
 interface ConnRow {
   id: string;
@@ -494,16 +495,23 @@ export default function ConnectionsPage() {
   }
 
   /**
-   * Saýlanan API-lara bagly widget-leriň dataSource.dbKey-ini täze DB baglanyşygyna
-   * gabat getir we dashboard-lary sakla (sonky üýtgedilen DB ulanylsyn).
+   * Saýlanan API-lara / şol tenant+dbKey-e bagly widget-leri täze DB baglanyşygyna geçir.
+   * Widget query diňe dbKey bilen connection.database ulanýar — dbKey dogry bolmaly.
+   * Şeýle-de endpointId saýlanan bolsa path/method/dbKey snapshot-yny hem täzeleýäris.
    */
   async function updateWidgetsForApis(
     selectedIds: Set<string>,
+    linkedApis: LinkedEp[],
     dbKey: string,
     tenantSlug: string
   ): Promise<number> {
-    if (selectedIds.size === 0) return 0;
     let widgetCount = 0;
+    const epById = new Map(linkedApis.map((e) => [e.id, e]));
+    const selectedPaths = new Set(
+      linkedApis
+        .filter((e) => selectedIds.has(e.id))
+        .map((e) => `${e.method || 'GET'}::${e.pathTemplate || ''}`)
+    );
     try {
       const res = await fetch('/api/dashboards');
       const data = await res.json();
@@ -519,27 +527,56 @@ export default function ConnectionsPage() {
           let wChanged = false;
           let next = w;
           const ds = w?.dataSource;
-          if (ds?.endpointId && selectedIds.has(ds.endpointId)) {
-            // Widget-i şu baglanyşygyň dbKey-ine bagla → täze database ulanylýar
-            next = {
-              ...next,
-              dataSource: { ...ds, dbKey, tenantSlug: ds.tenantSlug || tenantSlug },
-            };
-            wChanged = true;
-            widgetCount += 1;
-          }
-          // drillDown API hem saýlanan bolsa
-          const dd = next?.dataSource?.drillDown;
-          if (dd?.endpointId && selectedIds.has(dd.endpointId)) {
+          if (!ds) return next;
+
+          const sameTenant = (ds.tenantSlug || '') === tenantSlug;
+          const sameDbKey = (ds.dbKey || 'primary') === dbKey;
+          const byEndpointId = ds.endpointId && selectedIds.has(ds.endpointId);
+          const byPath =
+            sameTenant &&
+            selectedPaths.has(`${ds.method || 'GET'}::${ds.path || ''}`);
+          // Şol connection-daky ähli widget (tenant+dbKey) — täze database ulanylsyn
+          const byConn = sameTenant && sameDbKey;
+
+          if (byEndpointId || byPath || byConn) {
+            const ep = ds.endpointId ? epById.get(ds.endpointId) : undefined;
             next = {
               ...next,
               dataSource: {
-                ...next.dataSource,
-                drillDown: { ...dd, dbKey },
+                ...ds,
+                dbKey,
+                tenantSlug: ds.tenantSlug || tenantSlug,
+                // Live catalog path bilen gabatlaşdyryş
+                ...(ep
+                  ? {
+                      path: ep.pathTemplate || ds.path,
+                      method: (ep.method || ds.method || 'GET') as 'GET' | 'POST',
+                      endpointId: ep.id,
+                    }
+                  : {}),
               },
             };
             wChanged = true;
             widgetCount += 1;
+          }
+
+          const dd = next?.dataSource?.drillDown;
+          if (dd) {
+            const ddMatch =
+              (dd.endpointId && selectedIds.has(dd.endpointId)) ||
+              ((dd.tenantSlug || tenantSlug) === tenantSlug &&
+                (dd.dbKey || 'primary') === dbKey);
+            if (ddMatch) {
+              next = {
+                ...next,
+                dataSource: {
+                  ...next.dataSource,
+                  drillDown: { ...dd, dbKey, tenantSlug: dd.tenantSlug || tenantSlug },
+                },
+              };
+              wChanged = true;
+              widgetCount += 1;
+            }
           }
           if (wChanged) changed = true;
           return next;
@@ -574,6 +611,8 @@ export default function ConnectionsPage() {
         body: JSON.stringify({
           id: editing?.id,
           tenantSlug: form.tenantSlug,
+          // dbKey hökman — VPS-de şol connection-yň database meýdany üýtgesin
+          dbKey: opts.dbKey || editing?.dbKey || 'primary',
           label: form.label,
           database: form.database,
           host: form.host.trim(),
@@ -601,8 +640,30 @@ export default function ConnectionsPage() {
           opts.newDb,
           opts.dbKey
         );
+        // Widget-ler: saýlanan API + şol tenant/dbKey-däki ähli widget
         widgetOk = await updateWidgetsForApis(
           opts.selectedIds,
+          opts.linkedApis,
+          opts.dbKey,
+          form.tenantSlug
+        );
+        // Catalog + widget query cache täzele
+        try {
+          await fetch('/api/catalog?refresh=1');
+        } catch {
+          /* */
+        }
+        invalidateEndpointCatalog();
+        try {
+          window.dispatchEvent(new CustomEvent('bi-dashboard-refresh-all'));
+        } catch {
+          /* */
+        }
+      } else if (opts.updateApis) {
+        // API saýlanmadyk ýöne connection DB üýtgedi — widget-leri dbKey bilen täzele
+        widgetOk = await updateWidgetsForApis(
+          new Set(),
+          opts.linkedApis,
           opts.dbKey,
           form.tenantSlug
         );
@@ -653,7 +714,7 @@ export default function ConnectionsPage() {
     // Database üýtgedildimi (özüne deň däl) — boş → bir zat hem üýtgeşik hasaplanýar
     const dbChanged = Boolean(editing && newDb && oldDb !== newDb);
 
-    // Database üýtgedilse → hemişe API saýlaw modal (awtomat update ýok)
+    // Database üýtgedilse → API saýlaw modal (connection modal-yň üstünde)
     if (dbChanged) {
       const linked = await fetchLinkedApis(form.tenantSlug, dbKey);
       setApiPickList(linked);
@@ -661,6 +722,8 @@ export default function ConnectionsPage() {
       setApiPickOldDb(oldDb || '—');
       setApiPickNewDb(newDb);
       setApiPickDbKey(dbKey);
+      // Connection edit modal-y ýap — API modal öňde görünsin (z-index)
+      setModal(false);
       setApiPickOpen(true);
       return; // saklamak modal tassyklansoň
     }
@@ -1228,7 +1291,8 @@ export default function ConnectionsPage() {
       {/* Database üýtgedilende — API saýlaw modal */}
       {apiPickOpen && (
         <ModalPortal open={apiPickOpen}>
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60">
+          {/* Connection modal z-[2147482500] — bu ondan ýokary bolmaly */}
+          <div className="fixed inset-0 z-[2147483600] flex items-center justify-center p-4 bg-black/70">
             <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-800">
                 <h3 className="text-base font-semibold text-white">
