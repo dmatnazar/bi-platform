@@ -413,6 +413,34 @@ export default function ConnectionsPage() {
     }
   }
 
+  /** Fetch catalog endpoints linked to a tenant + dbKey */
+  async function fetchLinkedApis(tenantSlug: string, dbKey: string) {
+    try {
+      const res = await fetch('/api/catalog?refresh=1');
+      const data = await res.json();
+      const key = dbKey || 'primary';
+      const eps = (data.endpoints || []).filter(
+        (e: { tenantSlug?: string; dbKey?: string }) =>
+          e.tenantSlug === tenantSlug && (e.dbKey || 'primary') === key
+      );
+      return eps as Array<{
+        id: string;
+        tenantSlug: string;
+        name: string;
+        method: string;
+        pathTemplate: string;
+        dbKey?: string;
+        sqlQuery?: string;
+        paramsSchema?: unknown;
+        cacheTtlSec?: number;
+        maxRows?: number;
+        authRequired?: boolean;
+      }>;
+    } catch {
+      return [];
+    }
+  }
+
   async function save() {
     if (!form.tenantSlug || !form.host.trim()) {
       toastError('Zerur', form.dbType === 'excel' ? t('needCompanyExcel') : t('needCompanyHost'));
@@ -426,6 +454,30 @@ export default function ConnectionsPage() {
       toastError('Zerur', 'Username gerek');
       return;
     }
+
+    // Database üýtgedilse — bagly API-lar barada warning
+    let shouldUpdateApis = false;
+    let linkedApis: Awaited<ReturnType<typeof fetchLinkedApis>> = [];
+    const oldDb = editing?.database?.trim() || '';
+    const newDb = form.database.trim();
+    const dbChanged = Boolean(editing && oldDb && newDb && oldDb !== newDb);
+
+    if (dbChanged) {
+      linkedApis = await fetchLinkedApis(form.tenantSlug, editing!.dbKey || 'primary');
+      if (linkedApis.length > 0) {
+        const choice = await confirmDialog({
+          title: t('dbChangedUpdateApisTitle'),
+          message: t('dbChangedUpdateApisMsg')
+            .replace('{oldDb}', oldDb)
+            .replace('{newDb}', newDb)
+            .replace('{n}', String(linkedApis.length)),
+          confirmLabel: t('dbChangedUpdateApisYes'),
+          cancelLabel: t('dbChangedUpdateApisNo'),
+        });
+        shouldUpdateApis = Boolean(choice);
+      }
+    }
+
     setSaving(true);
     try {
       const res = await fetch('/api/connections', {
@@ -451,7 +503,53 @@ export default function ConnectionsPage() {
         toastError(t('saveFailedLong'), data.error);
         return;
       }
-      toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
+
+      // Hawa bolsa — bagly API-laryň databaseName-ini täze DB-e update et
+      if (shouldUpdateApis && linkedApis.length > 0) {
+        let okCount = 0;
+        for (const ep of linkedApis) {
+          try {
+            const ures = await fetch('/api/endpoints', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: ep.id,
+                tenantSlug: ep.tenantSlug,
+                name: ep.name,
+                pathTemplate: ep.pathTemplate,
+                method: ep.method,
+                dbKey: ep.dbKey || editing?.dbKey || 'primary',
+                sqlQuery: ep.sqlQuery,
+                paramsSchema: ep.paramsSchema,
+                cacheTtlSec: ep.cacheTtlSec,
+                maxRows: ep.maxRows,
+                authRequired: ep.authRequired,
+                databaseName: newDb,
+              }),
+            });
+            if (ures.ok) okCount += 1;
+          } catch {
+            /* continue */
+          }
+        }
+        if (okCount === linkedApis.length) {
+          toastSuccess(
+            t('connectionSaved'),
+            t('apisUpdatedToNewDb').replace('{n}', String(okCount))
+          );
+        } else if (okCount > 0) {
+          toastInfo(
+            t('connectionSaved'),
+            `${t('apisUpdatedToNewDb').replace('{n}', String(okCount))} · ${t('apisUpdatePartialFail')}`
+          );
+        } else {
+          toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
+          toastError(t('apisUpdatePartialFail'));
+        }
+      } else {
+        toastSuccess(t('connectionSaved'), 'VPS + Electron sync');
+      }
+
       setModal(false);
       await load();
       if (form.tenantSlug) setSelectedFirm(form.tenantSlug);
@@ -461,6 +559,16 @@ export default function ConnectionsPage() {
   }
 
   async function remove(c: ConnRow) {
+    // Bagly API bar bolsa — pozup bolanok (dostup bar bolsa-da)
+    const linked = await fetchLinkedApis(c.tenantSlug, c.dbKey || 'primary');
+    if (linked.length > 0) {
+      toastError(
+        t('connectionHasLinkedApis'),
+        t('connectionHasLinkedApisDetail').replace('{n}', String(linked.length))
+      );
+      return;
+    }
+
     const ok = await confirmDialog({
       title: t('deleteConnection'),
       message: `«${c.label || c.dbKey}» (${c.tenantName}) pozmak isleýärsiňizmi?`,
