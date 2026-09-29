@@ -47,6 +47,8 @@ function WidgetShell({
   filterSlot?: React.ReactNode;
   className?: string;
 }) {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   return (
     <div
       className={cn(
@@ -57,12 +59,20 @@ function WidgetShell({
         className
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+      <div
+        className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b"
+        style={{ borderColor: isLight ? '#f1f5f9' : '#1e293b' }}
+      >
         <div className="flex items-center gap-2 min-w-0">
           <div className="h-8 w-8 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
-            <Icon className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+            <Icon className="h-4 w-4" style={{ color: isLight ? '#4f46e5' : '#818cf8' }} />
           </div>
-          <h3 className="text-sm sm:text-base font-semibold text-slate-900 dark:text-white truncate">{title}</h3>
+          <h3
+            className="text-sm sm:text-base font-semibold truncate"
+            style={{ color: isLight ? '#0f172a' : '#ffffff' }}
+          >
+            {title}
+          </h3>
         </div>
         {filterSlot}
       </div>
@@ -80,11 +90,18 @@ function LocalSelect({
   onChange: (v: string) => void;
   options: { id: string; label: string }[];
 }) {
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="bi-tap h-8 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-2 text-[11px] text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/40"
+      className="bi-tap h-8 rounded-lg border px-2 text-[11px] outline-none focus:ring-2 focus:ring-indigo-500/40"
+      style={{
+        color: isLight ? '#0f172a' : '#e2e8f0',
+        backgroundColor: isLight ? '#ffffff' : '#020617',
+        borderColor: isLight ? '#cbd5e1' : '#475569',
+      }}
     >
       {options.map((o) => (
         <option key={o.id} value={o.id}>
@@ -102,7 +119,7 @@ export function DemoDashboard() {
   const isLight = theme === 'light';
   const months = isRu ? MONTHS_RU : MONTHS_TM;
 
-  const [period, setPeriod] = useState<Period>('30d');
+  const [period, setPeriod] = useState<Period>('year');
   const [selectedFirms, setSelectedFirms] = useState<string[]>([]);
   const [category, setCategory] = useState<'all' | 'retail' | 'wholesale' | 'online'>('all');
   const [firmMenuOpen, setFirmMenuOpen] = useState(false);
@@ -236,7 +253,7 @@ export function DemoDashboard() {
   function lineOpt(data: { name: string; value: number; value2?: number }[], dual = false) {
     return {
       ...baseChart,
-      grid: { left: 48, right: 20, top: dual ? 40 : 28, bottom: 32 },
+      grid: { left: 48, right: 20, top: dual ? 48 : 36, bottom: 32 },
       legend: dual
         ? { data: [isRu ? 'Продажи' : 'Satuw', isRu ? 'Возврат' : 'Yzyna'], textStyle: { color: mutedLabel, fontSize: 11 } }
         : undefined,
@@ -253,8 +270,25 @@ export function DemoDashboard() {
       },
       series: dual
         ? [
-            { name: isRu ? 'Продажи' : 'Satuw', type: 'line', smooth: true, data: data.map((x) => x.value), lineStyle: { color: '#6366f1', width: 2.5 }, itemStyle: { color: '#6366f1' }, areaStyle: { color: isLight ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.15)' } },
-            { name: isRu ? 'Возврат' : 'Yzyna', type: 'line', smooth: true, data: data.map((x) => x.value2 || 0), lineStyle: { color: '#f43f5e', width: 2 }, itemStyle: { color: '#f43f5e' } },
+            {
+              name: isRu ? 'Продажи' : 'Satuw',
+              type: 'line',
+              smooth: true,
+              data: data.map((x) => x.value),
+              lineStyle: { color: '#6366f1', width: 2.5 },
+              itemStyle: { color: '#6366f1' },
+              areaStyle: { color: isLight ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.15)' },
+              label: { show: true, position: 'top', color: labelColor, fontSize: 10, fontWeight: 600 },
+            },
+            {
+              name: isRu ? 'Возврат' : 'Yzyna',
+              type: 'line',
+              smooth: true,
+              data: data.map((x) => x.value2 || 0),
+              lineStyle: { color: '#f43f5e', width: 2 },
+              itemStyle: { color: '#f43f5e' },
+              label: { show: true, position: 'bottom', color: mutedLabel, fontSize: 10, fontWeight: 600 },
+            },
           ]
         : [
             {
@@ -264,6 +298,7 @@ export function DemoDashboard() {
               areaStyle: { color: isLight ? 'rgba(79,70,229,0.12)' : 'rgba(99,102,241,0.18)' },
               lineStyle: { color: '#6366f1', width: 2.5 },
               itemStyle: { color: '#6366f1' },
+              label: { show: true, position: 'top', color: labelColor, fontSize: 10, fontWeight: 600 },
             },
           ],
     };
@@ -278,7 +313,12 @@ export function DemoDashboard() {
           type: 'pie',
           radius: ['40%', '68%'],
           center: ['50%', '52%'],
-          label: { color: labelColor, fontSize: 12, fontWeight: 600 },
+          label: {
+            color: labelColor,
+            fontSize: 12,
+            fontWeight: 600,
+            formatter: '{b}\n{c} ({d}%)',
+          },
           labelLine: { lineStyle: { color: axisColor } },
           data: categoryPie.map((x) => ({ name: x.name, value: x.v })),
           color: ['#6366f1', '#22d3ee', '#f59e0b'],
@@ -297,7 +337,12 @@ export function DemoDashboard() {
           type: 'pie',
           radius: ['48%', '72%'],
           center: ['50%', '52%'],
-          label: { color: labelColor, fontSize: 11, fontWeight: 600 },
+          label: {
+            color: labelColor,
+            fontSize: 11,
+            fontWeight: 600,
+            formatter: '{b}\n{c} ({d}%)',
+          },
           data: FIRMS.filter((f) => !selectedFirms.length || selectedFirms.includes(f.id)).map((f) => ({
             name: isRu ? f.ru : f.tm,
             value: Math.round(f.weight * 1000 * gPm * gCm),
@@ -319,7 +364,12 @@ export function DemoDashboard() {
           roseType: 'area',
           radius: ['18%', '70%'],
           center: ['50%', '52%'],
-          label: { color: labelColor, fontSize: 11, fontWeight: 600 },
+          label: {
+            color: labelColor,
+            fontSize: 11,
+            fontWeight: 600,
+            formatter: '{b}\n{c} ({d}%)',
+          },
           data: [
             { name: isRu ? 'Новые' : 'Täze', value: Math.round(40 * gPm * gFm) },
             { name: isRu ? 'Повтор' : 'Gaýtalanan', value: Math.round(28 * gPm * gFm) },
@@ -354,11 +404,11 @@ export function DemoDashboard() {
           data: regionBars.map((x) => x.value),
           itemStyle: { color: '#22d3ee', borderRadius: [8, 8, 0, 0] },
           barMaxWidth: 48,
-          label: { show: true, position: 'top', color: mutedLabel, fontSize: 11, fontWeight: 600 },
+          label: { show: true, position: 'top', color: labelColor, fontSize: 11, fontWeight: 600 },
         },
       ],
     }),
-    [regionBars, baseChart, axisColor, axisLine, splitColor, mutedLabel]
+    [regionBars, baseChart, axisColor, axisLine, splitColor, labelColor]
   );
 
   const barHorizOpt = useMemo(
@@ -382,11 +432,11 @@ export function DemoDashboard() {
           data: regionBars.map((x) => x.value),
           itemStyle: { color: '#a855f7', borderRadius: [0, 8, 8, 0] },
           barMaxWidth: 28,
-          label: { show: true, position: 'right', color: mutedLabel, fontSize: 11, fontWeight: 600 },
+          label: { show: true, position: 'right', color: labelColor, fontSize: 11, fontWeight: 600 },
         },
       ],
     }),
-    [regionBars, baseChart, axisColor, axisLine, splitColor, labelColor, mutedLabel]
+    [regionBars, baseChart, axisColor, axisLine, splitColor, labelColor]
   );
 
   const barStackOpt = useMemo(() => {
@@ -410,9 +460,30 @@ export function DemoDashboard() {
         splitLine: { lineStyle: { color: splitColor } },
       },
       series: [
-        { name: isRu ? 'Розница' : 'Bölek', type: 'bar', stack: 't', data: data.map((x) => Math.round(x.value * 0.45)), itemStyle: { color: '#6366f1' } },
-        { name: isRu ? 'Опт' : 'Topdan', type: 'bar', stack: 't', data: data.map((x) => Math.round(x.value * 0.35)), itemStyle: { color: '#22d3ee' } },
-        { name: isRu ? 'Онлайн' : 'Online', type: 'bar', stack: 't', data: data.map((x) => Math.round(x.value * 0.2)), itemStyle: { color: '#f59e0b' } },
+        {
+          name: isRu ? 'Розница' : 'Bölek',
+          type: 'bar',
+          stack: 't',
+          data: data.map((x) => Math.round(x.value * 0.45)),
+          itemStyle: { color: '#6366f1' },
+          label: { show: true, position: 'inside', color: '#fff', fontSize: 10, fontWeight: 600 },
+        },
+        {
+          name: isRu ? 'Опт' : 'Topdan',
+          type: 'bar',
+          stack: 't',
+          data: data.map((x) => Math.round(x.value * 0.35)),
+          itemStyle: { color: '#22d3ee' },
+          label: { show: true, position: 'inside', color: '#0f172a', fontSize: 10, fontWeight: 600 },
+        },
+        {
+          name: isRu ? 'Онлайн' : 'Online',
+          type: 'bar',
+          stack: 't',
+          data: data.map((x) => Math.round(x.value * 0.2)),
+          itemStyle: { color: '#f59e0b' },
+          label: { show: true, position: 'inside', color: '#0f172a', fontSize: 10, fontWeight: 600 },
+        },
       ],
     };
   }, [salesLine, baseChart, axisColor, axisLine, splitColor, mutedLabel, isRu]);
@@ -462,16 +533,30 @@ export function DemoDashboard() {
   return (
     <div className="space-y-4 sm:space-y-5">
       {/* Global filters */}
-      <div className="bi-filter-bar bi-demo-widget rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-white/95 dark:bg-slate-900/80 backdrop-blur p-3 sm:p-4 space-y-3 shadow-sm">
-        <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 text-sm font-semibold">
-          <Filter className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+      <div
+        className="bi-filter-bar bi-demo-widget rounded-2xl border p-3 sm:p-4 space-y-3 shadow-sm"
+        style={{
+          backgroundColor: isLight ? '#ffffff' : 'rgba(15, 23, 42, 0.9)',
+          borderColor: isLight ? '#e2e8f0' : 'rgba(51, 65, 85, 0.8)',
+        }}
+      >
+        <div
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: isLight ? '#0f172a' : '#e2e8f0' }}
+        >
+          <Filter className="h-4 w-4" style={{ color: isLight ? '#4f46e5' : '#818cf8' }} />
           {isRu ? 'Глобальные фильтры' : 'Global filtrler'}
         </div>
         <div className="flex flex-wrap gap-2 items-start">
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value as Period)}
-            className="bi-tap h-9 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-xs sm:text-sm text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/40"
+            className="bi-tap h-9 rounded-xl border px-3 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+            style={{
+              color: isLight ? '#0f172a' : '#e2e8f0',
+              backgroundColor: isLight ? '#ffffff' : '#020617',
+              borderColor: isLight ? '#cbd5e1' : '#475569',
+            }}
           >
             {periods.map((x) => (
               <option key={x.id} value={x.id}>
@@ -483,17 +568,29 @@ export function DemoDashboard() {
             <button
               type="button"
               onClick={() => setFirmMenuOpen((v) => !v)}
-              className="bi-tap h-9 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-xs sm:text-sm text-slate-800 dark:text-slate-200 min-w-[9rem] text-left"
+              className="bi-tap h-9 rounded-xl border px-3 text-xs sm:text-sm min-w-[9rem] text-left"
+              style={{
+                color: isLight ? '#0f172a' : '#e2e8f0',
+                backgroundColor: isLight ? '#ffffff' : '#020617',
+                borderColor: isLight ? '#cbd5e1' : '#475569',
+              }}
             >
               {firmLabel}
             </button>
             {firmMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setFirmMenuOpen(false)} />
-                <div className="absolute left-0 top-full mt-1 z-20 w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl py-1 max-h-64 overflow-y-auto">
+                <div
+                  className="absolute left-0 top-full mt-1 z-20 w-56 rounded-xl border shadow-xl py-1 max-h-64 overflow-y-auto"
+                  style={{
+                    backgroundColor: isLight ? '#ffffff' : '#0f172a',
+                    borderColor: isLight ? '#e2e8f0' : '#334155',
+                  }}
+                >
                   <button
                     type="button"
-                    className="bi-tap w-full text-left px-3 py-2.5 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                    className="bi-tap w-full text-left px-3 py-2.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+                    style={{ color: isLight ? '#334155' : '#cbd5e1' }}
                     onClick={() => {
                       setSelectedFirms([]);
                       setFirmMenuOpen(false);
@@ -504,7 +601,8 @@ export function DemoDashboard() {
                   {FIRMS.map((f) => (
                     <label
                       key={f.id}
-                      className="bi-tap flex items-center gap-2 px-3 py-2.5 text-xs text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      className="bi-tap flex items-center gap-2 px-3 py-2.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                      style={{ color: isLight ? '#0f172a' : '#e2e8f0' }}
                     >
                       <input type="checkbox" checked={selectedFirms.includes(f.id)} onChange={() => toggleFirm(f.id)} className="rounded border-slate-400" />
                       {isRu ? f.ru : f.tm}
@@ -518,7 +616,12 @@ export function DemoDashboard() {
             <button
               type="button"
               onClick={() => setSelectedFirms([])}
-              className="bi-tap h-9 px-2 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 text-xs inline-flex items-center gap-1"
+              className="bi-tap h-9 px-2 rounded-xl border text-xs inline-flex items-center gap-1"
+              style={{
+                color: isLight ? '#475569' : '#94a3b8',
+                backgroundColor: isLight ? '#ffffff' : '#020617',
+                borderColor: isLight ? '#cbd5e1' : '#334155',
+              }}
             >
               <X className="h-3.5 w-3.5" />
               {isRu ? 'Сбросить' : 'Arassala'}
@@ -527,7 +630,12 @@ export function DemoDashboard() {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as typeof category)}
-            className="h-9 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-3 text-xs sm:text-sm text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500/40"
+            className="h-9 rounded-xl border px-3 text-xs sm:text-sm outline-none focus:ring-2 focus:ring-indigo-500/40"
+            style={{
+              color: isLight ? '#0f172a' : '#e2e8f0',
+              backgroundColor: isLight ? '#ffffff' : '#020617',
+              borderColor: isLight ? '#cbd5e1' : '#475569',
+            }}
           >
             {categories.map((x) => (
               <option key={x.id} value={x.id}>
@@ -546,11 +654,11 @@ export function DemoDashboard() {
             className="bi-kpi-card bi-tap bi-demo-widget rounded-2xl border border-slate-200 dark:border-slate-700/70 bg-white dark:bg-slate-900/60 p-3 sm:p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-400/50"
           >
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] sm:text-xs font-semibold text-slate-600 dark:text-slate-400">{k.label}</span>
-              <k.icon className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <span className="text-[11px] sm:text-xs font-semibold" style={{ color: isLight ? '#475569' : '#94a3b8' }}>{k.label}</span>
+              <k.icon className="h-4 w-4" style={{ color: isLight ? '#4f46e5' : '#818cf8' }} />
             </div>
-            <p className="mt-1.5 text-lg sm:text-xl font-bold text-slate-900 dark:text-white tabular-nums">{k.value}</p>
-            <p className="text-[10px] sm:text-xs font-semibold text-emerald-700 dark:text-emerald-400 mt-0.5">{k.delta}</p>
+            <p className="mt-1.5 text-lg sm:text-xl font-bold tabular-nums" style={{ color: isLight ? '#0f172a' : '#ffffff' }}>{k.value}</p>
+            <p className="text-[10px] sm:text-xs font-semibold mt-0.5" style={{ color: isLight ? '#047857' : '#34d399' }}>{k.delta}</p>
           </div>
         ))}
       </div>
@@ -613,21 +721,21 @@ export function DemoDashboard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-slate-200 dark:border-slate-700">
-                <th className="py-2.5 pr-3 font-semibold text-slate-700 dark:text-slate-300">{isRu ? 'Компания' : 'Firma'}</th>
-                <th className="py-2.5 pr-3 font-semibold text-slate-700 dark:text-slate-300">{isRu ? 'Продажи' : 'Satuw'}</th>
-                <th className="py-2.5 pr-3 font-semibold text-slate-700 dark:text-slate-300">{isRu ? 'Заказы' : 'Sargyt'}</th>
-                <th className="py-2.5 pr-3 font-semibold text-slate-700 dark:text-slate-300">{isRu ? 'Ср. чек' : 'Ortaça'}</th>
-                <th className="py-2.5 font-semibold text-slate-700 dark:text-slate-300">%</th>
+                <th className="py-2.5 pr-3 font-semibold" style={{ color: isLight ? '#334155' : '#cbd5e1' }}>{isRu ? 'Компания' : 'Firma'}</th>
+                <th className="py-2.5 pr-3 font-semibold" style={{ color: isLight ? '#334155' : '#cbd5e1' }}>{isRu ? 'Продажи' : 'Satuw'}</th>
+                <th className="py-2.5 pr-3 font-semibold" style={{ color: isLight ? '#334155' : '#cbd5e1' }}>{isRu ? 'Заказы' : 'Sargyt'}</th>
+                <th className="py-2.5 pr-3 font-semibold" style={{ color: isLight ? '#334155' : '#cbd5e1' }}>{isRu ? 'Ср. чек' : 'Ortaça'}</th>
+                <th className="py-2.5 font-semibold" style={{ color: isLight ? '#334155' : '#cbd5e1' }}>%</th>
               </tr>
             </thead>
             <tbody>
               {tableRows.map((r) => (
                 <tr key={r.firm} className="border-b border-slate-100 dark:border-slate-800/80">
-                  <td className="py-2.5 pr-3 font-semibold text-slate-900 dark:text-slate-100">{r.firm}</td>
-                  <td className="py-2.5 pr-3 tabular-nums font-bold text-slate-900 dark:text-white">{fmt(r.sales)}</td>
-                  <td className="py-2.5 pr-3 tabular-nums font-semibold text-slate-800 dark:text-slate-200">{r.orders}</td>
-                  <td className="py-2.5 pr-3 tabular-nums font-semibold text-slate-800 dark:text-slate-200">{fmt(r.avg)}</td>
-                  <td className="py-2.5 tabular-nums font-semibold text-indigo-700 dark:text-indigo-300">{r.share}</td>
+                  <td className="py-2.5 pr-3 font-semibold" style={{ color: isLight ? '#0f172a' : '#f1f5f9' }}>{r.firm}</td>
+                  <td className="py-2.5 pr-3 tabular-nums font-bold" style={{ color: isLight ? '#0f172a' : '#ffffff' }}>{fmt(r.sales)}</td>
+                  <td className="py-2.5 pr-3 tabular-nums font-semibold" style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}>{r.orders}</td>
+                  <td className="py-2.5 pr-3 tabular-nums font-semibold" style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}>{fmt(r.avg)}</td>
+                  <td className="py-2.5 tabular-nums font-semibold" style={{ color: isLight ? '#4338ca' : '#a5b4fc' }}>{r.share}</td>
                 </tr>
               ))}
             </tbody>
@@ -645,8 +753,8 @@ export function DemoDashboard() {
                 r.level === 0 ? 'bg-indigo-50 dark:bg-indigo-500/10 font-semibold' : 'bg-slate-50 dark:bg-slate-800/40 ml-5'
               )}
             >
-              <span className="text-slate-900 dark:text-slate-100">{r.name}</span>
-              <span className="tabular-nums font-bold text-slate-900 dark:text-white">{fmt(r.value)}</span>
+              <span style={{ color: isLight ? '#0f172a' : '#f1f5f9' }}>{r.name}</span>
+              <span className="tabular-nums font-bold" style={{ color: isLight ? '#0f172a' : '#ffffff' }}>{fmt(r.value)}</span>
             </div>
           ))}
         </div>
@@ -660,9 +768,9 @@ export function DemoDashboard() {
               className="rounded-xl border border-slate-200 dark:border-slate-700/70 bg-slate-50 dark:bg-slate-950/40 px-3 py-2.5 flex items-center justify-between gap-2"
             >
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{r.firm}</p>
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  {isRu ? 'Ср. чек' : 'Ortaça'}: <span className="font-bold text-slate-800 dark:text-slate-200">{fmt(r.avg)}</span>
+                <p className="text-sm font-semibold truncate" style={{ color: isLight ? '#0f172a' : '#ffffff' }}>{r.firm}</p>
+                <p className="text-xs" style={{ color: isLight ? '#475569' : '#94a3b8' }}>
+                  {isRu ? 'Ср. чек' : 'Ortaça'}: <span className="font-bold" style={{ color: isLight ? '#1e293b' : '#e2e8f0' }}>{fmt(r.avg)}</span>
                 </p>
               </div>
               <span

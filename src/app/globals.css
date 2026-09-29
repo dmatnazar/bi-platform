@@ -1989,3 +1989,13 @@ html {
     scroll-behavior: auto;
   }
 }
+
+/* Force white text on dark surfaces (banner/hero) — survives html.light .text-white remap */
+html.light .bi-force-white,
+.bi-force-white {
+  color: #ffffff !important;
+}
+html.light .bi-force-white-muted,
+.bi-force-white-muted {
+  color: #cbd5e1 !important;
+}
