@@ -124,11 +124,11 @@ export default function DemoPage() {
 
       <main className="mx-auto max-w-6xl px-3 sm:px-4 py-5 sm:py-8 space-y-6 sm:space-y-10">
         {banners.length > 0 && (
-          <ScrollReveal
-            className="relative overflow-hidden rounded-3xl border min-h-[220px] sm:min-h-[300px]"
-            style={{ borderColor: isLight ? '#cbd5e1' : 'rgba(51, 65, 85, 0.8)' }}
-          >
-            <section className="relative min-h-[220px] sm:min-h-[300px] h-full">
+          <ScrollReveal className="relative overflow-hidden rounded-3xl min-h-[220px] sm:min-h-[300px]">
+            <section
+              className="relative min-h-[220px] sm:min-h-[300px] h-full rounded-3xl border overflow-hidden"
+              style={{ borderColor: isLight ? '#cbd5e1' : 'rgba(51, 65, 85, 0.8)' }}
+            >
             {banners.map((b, i) => (
               <div
                 key={b.id}
